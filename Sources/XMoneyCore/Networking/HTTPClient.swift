@@ -27,11 +27,11 @@ final class HTTPClient {
 
     private let session: URLSession
     /// Test seam. When set, used instead of `URLSession` (CI iOS 18 ignores `URLProtocol`).
-    private let execute: ((URLRequest) async throws -> (Data, URLResponse))?
+    private let execute: (@Sendable (URLRequest) async throws -> (Data, URLResponse))?
 
     init(
         session: URLSession = .shared,
-        execute: ((URLRequest) async throws -> (Data, URLResponse))? = nil
+        execute: (@Sendable (URLRequest) async throws -> (Data, URLResponse))? = nil
     ) {
         self.session = session
         self.execute = execute
