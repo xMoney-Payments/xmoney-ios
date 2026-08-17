@@ -1,6 +1,8 @@
 import Foundation
 import PassKit
+#if !COCOAPODS
 import XMoneyCore
+#endif
 
 package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerDelegate, DigitalWalletAuthorizing {
     private let engine: PaymentEngine

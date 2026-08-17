@@ -1,6 +1,8 @@
 import UIKit
+#if !COCOAPODS
 import XMoneyCore
 import XMoneyPaymentElement
+#endif
 
 package protocol PaymentSheetViewControllerDelegate: AnyObject {
     func sheetDidTapPayWithCard(_ input: CardInput)

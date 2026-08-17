@@ -1,6 +1,8 @@
 import UIKit
+#if !COCOAPODS
 import XMoneyCore
 import XMoneyPaymentElement
+#endif
 
 final class PaymentSheetLoadingViewController: UIViewController, PaymentSheetHeightProviding {
     private let config: PaymentConfig

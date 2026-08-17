@@ -1,5 +1,7 @@
 import PassKit
+#if !COCOAPODS
 import XMoneyCore
+#endif
 
 enum ApplePayBootstrap {
     static func install() {

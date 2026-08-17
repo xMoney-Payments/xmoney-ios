@@ -1,6 +1,8 @@
 import UIKit
 import PassKit
+#if !COCOAPODS
 import XMoneyCore
+#endif
 
 package final class PaymentFormView: UIView {
     package struct ContentInsets {

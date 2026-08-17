@@ -10,6 +10,11 @@ Pod::Spec.new do |s|
   s.swift_version    = '5.9'
   s.ios.deployment_target = '15.0'
   s.resource_bundles = { 'XMoneyPaymentSheet' => 'PrivacyInfo.xcprivacy' }
+  # CocoaPods is not SPM: `package` needs -package-name, and sibling modules
+  # are compiled into this one target (see `#if !COCOAPODS` imports).
+  s.pod_target_xcconfig = {
+    'OTHER_SWIFT_FLAGS' => '-D COCOAPODS -package-name XMoneyPaymentSheet'
+  }
 
   s.default_subspecs = 'PaymentSheet'
 
@@ -17,7 +22,7 @@ Pod::Spec.new do |s|
     core.source_files = 'Sources/XMoneyCore/**/*.swift'
     core.resources    = 'Resources/**/*', 'Sources/XMoneyCore/Resources/**/*'
     core.resource_bundles = { 'XMoneyCore' => 'PrivacyInfo.xcprivacy' }
-    core.frameworks   = 'WebKit'
+    core.frameworks   = 'UIKit', 'WebKit'
   end
 
   s.subspec 'ApplePay' do |apple|

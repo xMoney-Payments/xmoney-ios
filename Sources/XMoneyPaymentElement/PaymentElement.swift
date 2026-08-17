@@ -1,6 +1,8 @@
 import UIKit
 import SwiftUI
+#if !COCOAPODS
 import XMoneyCore
+#endif
 
 public final class PaymentElement: UIView {
     private let payment: EmbeddedPayment

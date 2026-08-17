@@ -1,5 +1,7 @@
 import UIKit
+#if !COCOAPODS
 import XMoneyCore
+#endif
 
 final class PaymentMethodContainerView: UIView {
     enum Selection: Equatable {

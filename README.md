@@ -40,7 +40,14 @@ Card-only Element does not link Apple Pay. For Apple Pay inside the Element, als
 pod 'XMoneyPaymentSheet', :subspecs => ['PaymentSheet']
 ```
 
-Subspecs: `Core`, `ApplePay`, `PaymentElement`, `PaymentSheet` (default).
+| Subspec | Use when |
+|---------|----------|
+| `Core` | Models and configuration |
+| `ApplePay` | Standalone Apple Pay button / present API |
+| `PaymentElement` | Merchant-hosted Payment Element in your layout |
+| `PaymentSheet` | Drop-in bottom sheet (default; hosts the Payment Element) |
+
+Always `import XMoneyPaymentSheet`. CocoaPods compiles every subspec into that one module — there is no `XMoneyApplePay` or `XMoneyPaymentElement` module. Samples below use SPM product names; on CocoaPods, use `import XMoneyPaymentSheet` instead.
 
 ## Quick start — Payment Sheet (UIKit)
 
@@ -92,9 +99,11 @@ struct CheckoutView: View {
 }
 ```
 
-If the app also imports Stripe’s PaymentSheet, use the module-qualified type `XMoneyPaymentSheet.PaymentSheet`. SwiftUI also exports StoreKit’s `Transaction`; qualify ours as `XMoneyCore.Transaction` when the type is written explicitly.
+If the app also imports Stripe’s PaymentSheet, use the module-qualified type `XMoneyPaymentSheet.PaymentSheet`. SwiftUI also exports StoreKit’s `Transaction`; qualify ours as `XMoneyCore.Transaction` (SPM) or `XMoneyPaymentSheet.Transaction` (CocoaPods) when the type is written explicitly.
 
 ## Standalone Apple Pay
+
+CocoaPods: `import XMoneyPaymentSheet` instead of `XMoneyApplePay`.
 
 ```swift
 import XMoneyApplePay
@@ -112,6 +121,8 @@ button.onTap = { applePay.present(from: self, intent: intent) }
 ## Embedded Payment Element
 
 Same methods as the sheet (Apple Pay, saved cards, new card), hosted in your layout:
+
+CocoaPods: `import XMoneyPaymentSheet` instead of `XMoneyPaymentElement` / `XMoneyApplePay`.
 
 ```swift
 import XMoneyPaymentElement
@@ -190,7 +201,7 @@ Open either folder in Xcode via **File → Open** and select `Package.swift`.
 ## Apple Pay setup
 
 1. Enable Apple Pay in configuration: `paymentMethods: .init(applePay: .init(enabled: true))`
-2. Link `XMoneyApplePay` (Payment Sheet already does). For Embedded, call `ApplePay.register()` before `prepare`.
+2. Link SPM product `XMoneyApplePay` or CocoaPods subspec `ApplePay` (Payment Sheet already does). For Embedded, call `ApplePay.register()` before `prepare`.
 3. Create a **Merchant ID** in [Apple Developer](https://developer.apple.com/account/resources/identifiers/list/merchant).
 4. In Xcode: app target → **Signing & Capabilities** → **Apple Pay** → add that Merchant ID.
 5. Merchant ID must match `merchantId` from `GET /api/v1/digital-wallet/applePay/params`.

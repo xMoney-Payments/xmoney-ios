@@ -1,5 +1,7 @@
 import UIKit
+#if !COCOAPODS
 import XMoneyCore
+#endif
 
 package final class CardFormView: UIView, UITextFieldDelegate {
     package struct Configuration {

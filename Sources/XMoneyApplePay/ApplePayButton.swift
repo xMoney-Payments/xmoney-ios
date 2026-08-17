@@ -1,7 +1,9 @@
 import PassKit
 import SwiftUI
 import UIKit
+#if !COCOAPODS
 import XMoneyCore
+#endif
 
 public final class ApplePayButton: UIView {
     public var onTap: (() -> Void)?

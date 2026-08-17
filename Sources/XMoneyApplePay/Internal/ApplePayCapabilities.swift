@@ -1,5 +1,7 @@
 import PassKit
+#if !COCOAPODS
 import XMoneyCore
+#endif
 
 enum ApplePayCapabilities {
     static func canMakePayments() -> Bool {

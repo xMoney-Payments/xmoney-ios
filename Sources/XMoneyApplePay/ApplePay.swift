@@ -1,5 +1,7 @@
 import UIKit
+#if !COCOAPODS
 @_exported import XMoneyCore
+#endif
 
 public final class ApplePay {
     private let configuration: PaymentConfig

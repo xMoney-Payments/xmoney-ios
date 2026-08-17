@@ -1,5 +1,7 @@
 import UIKit
+#if !COCOAPODS
 import XMoneyCore
+#endif
 
 package struct CheckoutTheme {
     package let primary: UIColor

@@ -1,5 +1,7 @@
 import SwiftUI
+#if !COCOAPODS
 import XMoneyCore
+#endif
 
 private struct PaymentSheetPresenter: UIViewControllerRepresentable {
     @Binding var isPresented: Bool

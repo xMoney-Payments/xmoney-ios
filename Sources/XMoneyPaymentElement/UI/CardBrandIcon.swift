@@ -1,5 +1,7 @@
 import UIKit
+#if !COCOAPODS
 import XMoneyCore
+#endif
 
 package enum CardBrandIconSize {
     case fieldTrailing

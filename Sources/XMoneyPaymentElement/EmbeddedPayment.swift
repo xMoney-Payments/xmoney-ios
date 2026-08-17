@@ -1,5 +1,7 @@
 import Foundation
+#if !COCOAPODS
 @_exported import XMoneyCore
+#endif
 
 @MainActor
 public final class EmbeddedPayment {

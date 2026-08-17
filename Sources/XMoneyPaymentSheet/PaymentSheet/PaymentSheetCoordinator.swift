@@ -1,7 +1,9 @@
 import UIKit
+#if !COCOAPODS
 import XMoneyCore
 import XMoneyPaymentElement
 import XMoneyApplePay
+#endif
 
 @MainActor
 package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControllerDelegate, ThreeDSPresenter {
