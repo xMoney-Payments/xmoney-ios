@@ -1,4 +1,5 @@
-# Manual publish. Actions → Publish → Run workflow → enter version (e.g. 0.0.1).
+# Manual publish for https://github.com/xMoney-Payments/xmoney-ios
+# Actions → Publish → Run workflow → enter version (e.g. 0.0.1).
 #
 # Requires the COCOAPODS_TRUNK_TOKEN repo secret (password from
 # `grep -A2 trunk.cocoapods.org ~/.netrc` after `pod trunk register`).
@@ -46,8 +47,10 @@ jobs:
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: xMoney-Payments/xmoney-ios
         run: |
           gh release create "${{ steps.version.outputs.version }}" \
+            --repo "$GH_REPO" \
             --title "${{ steps.version.outputs.version }}" \
             --notes-file CHANGELOG.md \
             --target "$GITHUB_SHA"

@@ -15,7 +15,7 @@ Types are unprefixed (`PaymentSheet`, `PaymentConfig`, `PaymentIntent`), matchin
 ### Swift Package Manager
 
 ```swift
-.package(url: "https://github.com/xmoney/xmoney-ios.git", from: "0.0.1")
+.package(url: "https://github.com/xMoney-Payments/xmoney-ios.git", from: "0.0.1")
 ```
 
 Link the product you need:
