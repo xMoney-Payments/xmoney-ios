@@ -66,4 +66,5 @@ xcrun simctl bootstatus "$UDID" -b
 echo "==> Testing $SCHEME on iOS Simulator id=$UDID"
 xcodebuild test \
   -scheme "$SCHEME" \
-  -destination "platform=iOS Simulator,id=$UDID"
+  -destination "platform=iOS Simulator,id=$UDID" \
+  -parallel-testing-enabled NO

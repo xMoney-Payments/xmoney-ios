@@ -3,16 +3,42 @@ import XCTest
 @testable import XMoneyCore
 
 private final class StubURLProtocol: URLProtocol {
-    static var handler: ((URLRequest) throws -> (Int, Data))?
-    static var requests: [URLRequest] = []
+    static let header = "X-XMoney-Stub-ID"
+
+    private static let lock = NSLock()
+    private static var handlers: [String: (URLRequest) throws -> (Int, Data)] = [:]
+
+    static func register(_ handler: @escaping (URLRequest) throws -> (Int, Data)) -> String {
+        let id = UUID().uuidString
+        lock.lock()
+        handlers[id] = handler
+        lock.unlock()
+        return id
+    }
+
+    static func unregister(_ id: String) {
+        lock.lock()
+        handlers[id] = nil
+        lock.unlock()
+    }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
+
+    /// iOS 18+ URLSession calls this instead of `canInit(with: URLRequest)`.
+    /// The default implementation returns `false`, so stubs never run on CI.
+    override class func canInit(with task: URLSessionTask) -> Bool { true }
+
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
-        Self.requests.append(request)
+        let request = self.request
+        let id = request.value(forHTTPHeaderField: Self.header)
+        Self.lock.lock()
+        let handler = id.flatMap { Self.handlers[$0] } ?? Self.handlers.values.first
+        Self.lock.unlock()
+
         do {
-            let (status, data) = try Self.handler?(request) ?? (404, Data())
+            let (status, data) = try handler?(request) ?? (404, Data())
             let response = HTTPURLResponse(
                 url: request.url ?? URL(string: "https://invalid.local")!,
                 statusCode: status,
@@ -54,83 +80,60 @@ private final class ImmediateWallet: DigitalWalletAuthorizing {
 
 @MainActor
 final class PaymentSessionTests: XCTestCase {
+    private var stubID: String?
+
     override func setUp() {
         super.setUp()
-        StubURLProtocol.handler = nil
-        StubURLProtocol.requests = []
         DigitalWalletFactory.canMakePayments = { false }
         DigitalWalletFactory.makeApplePay = nil
     }
 
     override func tearDown() {
+        if let stubID {
+            StubURLProtocol.unregister(stubID)
+        }
+        stubID = nil
         DigitalWalletFactory.canMakePayments = { false }
         DigitalWalletFactory.makeApplePay = nil
-        StubURLProtocol.handler = nil
-        StubURLProtocol.requests = []
         super.tearDown()
     }
 
     func testSameOrderBindDoesNotDropSessionToken() async throws {
-        var sessionTokenCalls = 0
-        StubURLProtocol.handler = { request in
-            self.jsonResponse(for: request, sessionTokenCalls: &sessionTokenCalls)
+        let sessionTokenCalls = TokenCallCounter()
+        let session = try makeSession(applePayEnabled: false) { request in
+            Self.jsonResponse(for: request, sessionTokenCalls: sessionTokenCalls)
         }
-        let session = try makeSession(applePayEnabled: false)
         let first = try await session.bind(intent: session.intent)
         XCTAssertEqual(first.sessionToken, "sess-1")
-        XCTAssertEqual(sessionTokenCalls, 1)
+        XCTAssertEqual(sessionTokenCalls.value, 1)
 
         let second = try await session.bind(intent: session.intent)
         XCTAssertEqual(second.sessionToken, "sess-1")
-        XCTAssertEqual(sessionTokenCalls, 1)
+        XCTAssertEqual(sessionTokenCalls.value, 1)
     }
 
     func testApplePayAvailableOnlyAfterSuccessfulParams() async throws {
         DigitalWalletFactory.canMakePayments = { true }
-        StubURLProtocol.handler = { request in
-            let path = request.url?.path ?? ""
-            if path.contains("session-token") {
-                return (200, Self.json(["token": "sess-1"]))
-            }
-            if path.contains("config") {
-                return (200, Self.json([:]))
-            }
-            if path.contains("digital-wallet") {
-                return (200, Self.json(["merchantId": ""]))
-            }
-            return (200, Self.json([:]))
+        let session = try makeSession(applePayEnabled: true) { request in
+            Self.okJSON(for: request, wallet: ["merchantId": ""])
         }
-        let session = try makeSession(applePayEnabled: true)
         let state = try await session.bind(intent: session.intent)
         XCTAssertFalse(state.applePayAvailable)
     }
 
     func testApplePayAvailableWhenParamsIncludeMerchantId() async throws {
         DigitalWalletFactory.canMakePayments = { true }
-        StubURLProtocol.handler = { request in
-            let path = request.url?.path ?? ""
-            if path.contains("session-token") {
-                return (200, Self.json(["token": "sess-1"]))
-            }
-            if path.contains("config") {
-                return (200, Self.json([:]))
-            }
-            if path.contains("digital-wallet") {
-                return (200, Self.json(["merchantId": "merchant.com.xmoney"]))
-            }
-            return (200, Self.json([:]))
+        let session = try makeSession(applePayEnabled: true) { request in
+            Self.okJSON(for: request, wallet: ["merchantId": "merchant.com.xmoney"])
         }
-        let session = try makeSession(applePayEnabled: true)
         let state = try await session.bind(intent: session.intent)
         XCTAssertTrue(state.applePayAvailable)
     }
 
     func testPreAuthorizeCancelDoesNotConsume() async throws {
-        StubURLProtocol.handler = { request in
-            var calls = 0
-            return self.jsonResponse(for: request, sessionTokenCalls: &calls)
+        let session = try makeSession(applePayEnabled: false) { request in
+            Self.jsonResponse(for: request, sessionTokenCalls: TokenCallCounter())
         }
-        let session = try makeSession(applePayEnabled: false)
         _ = try await session.bind(intent: session.intent)
         let result = await session.startWallet(ImmediateWallet(didAuthorize: false, status: .canceled))
         XCTAssertEqual(result.status, .canceled)
@@ -139,11 +142,9 @@ final class PaymentSessionTests: XCTestCase {
     }
 
     func testPostSubmitCancelConsumes() async throws {
-        StubURLProtocol.handler = { request in
-            var calls = 0
-            return self.jsonResponse(for: request, sessionTokenCalls: &calls)
+        let session = try makeSession(applePayEnabled: false) { request in
+            Self.jsonResponse(for: request, sessionTokenCalls: TokenCallCounter())
         }
-        let session = try makeSession(applePayEnabled: false)
         _ = try await session.bind(intent: session.intent)
         _ = await session.startWallet(ImmediateWallet(didAuthorize: true, status: .canceled))
         XCTAssertTrue(session.isOrderConsumed)
@@ -151,21 +152,18 @@ final class PaymentSessionTests: XCTestCase {
     }
 
     func testCompleteConsumes() async throws {
-        StubURLProtocol.handler = { request in
-            var calls = 0
-            return self.jsonResponse(for: request, sessionTokenCalls: &calls)
+        let session = try makeSession(applePayEnabled: false) { request in
+            Self.jsonResponse(for: request, sessionTokenCalls: TokenCallCounter())
         }
-        let session = try makeSession(applePayEnabled: false)
         _ = try await session.bind(intent: session.intent)
         _ = await session.startWallet(ImmediateWallet(didAuthorize: true, status: .complete))
         XCTAssertTrue(session.isOrderConsumed)
     }
 
     func testLoadFailureDoesNotConsume() async throws {
-        StubURLProtocol.handler = { _ in
+        let session = try makeSession(applePayEnabled: false) { _ in
             throw URLError(.notConnectedToInternet)
         }
-        let session = try makeSession(applePayEnabled: false)
         do {
             _ = try await session.bind(intent: session.intent)
             XCTFail("expected bind to throw")
@@ -175,11 +173,9 @@ final class PaymentSessionTests: XCTestCase {
     }
 
     func testSubmitWhileProcessingIsNoOp() async throws {
-        StubURLProtocol.handler = { request in
-            var calls = 0
-            return self.jsonResponse(for: request, sessionTokenCalls: &calls)
+        let session = try makeSession(applePayEnabled: false) { request in
+            Self.jsonResponse(for: request, sessionTokenCalls: TokenCallCounter())
         }
-        let session = try makeSession(applePayEnabled: false)
         _ = try await session.bind(intent: session.intent)
 
         async let first = session.startWallet(SlowWallet())
@@ -192,12 +188,12 @@ final class PaymentSessionTests: XCTestCase {
     }
 
     func testFailedBindDoesNotCommitPreviousState() async throws {
-        var sessionTokenCalls = 0
-        StubURLProtocol.handler = { request in
+        let sessionTokenCalls = TokenCallCounter()
+        let session = try makeSession(applePayEnabled: false) { request in
             let path = request.url?.path ?? ""
             if path.contains("session-token") {
-                sessionTokenCalls += 1
-                if sessionTokenCalls == 1 {
+                let count = sessionTokenCalls.increment()
+                if count == 1 {
                     return (200, Self.json(["token": "sess-1"]))
                 }
                 return (500, Self.json(["error": "fail"]))
@@ -210,7 +206,6 @@ final class PaymentSessionTests: XCTestCase {
             }
             return (200, Self.json([:]))
         }
-        let session = try makeSession(applePayEnabled: false)
         let first = try await session.bind(intent: session.intent)
         XCTAssertEqual(first.sessionToken, "sess-1")
 
@@ -225,22 +220,20 @@ final class PaymentSessionTests: XCTestCase {
             XCTAssertEqual(session.state?.sessionToken, "sess-1")
         }
 
-        let callsBeforeRetry = sessionTokenCalls
+        let callsBeforeRetry = sessionTokenCalls.value
         do {
             _ = try await session.bind(intent: intentB)
             XCTFail("expected retry of order B to hit the network")
         } catch {
-            XCTAssertGreaterThan(sessionTokenCalls, callsBeforeRetry)
+            XCTAssertGreaterThan(sessionTokenCalls.value, callsBeforeRetry)
             XCTAssertEqual(session.state?.sessionToken, "sess-1")
         }
     }
 
     func testCanDismissIsFalseWhileProcessing() async throws {
-        StubURLProtocol.handler = { request in
-            var calls = 0
-            return self.jsonResponse(for: request, sessionTokenCalls: &calls)
+        let session = try makeSession(applePayEnabled: false) { request in
+            Self.jsonResponse(for: request, sessionTokenCalls: TokenCallCounter())
         }
-        let session = try makeSession(applePayEnabled: false)
         _ = try await session.bind(intent: session.intent)
         XCTAssertTrue(session.canDismiss)
 
@@ -252,7 +245,7 @@ final class PaymentSessionTests: XCTestCase {
     }
 
     func testCancelledBindDoesNotCommit() async throws {
-        StubURLProtocol.handler = { request in
+        let session = try makeSession(applePayEnabled: false) { request in
             let path = request.url?.path ?? ""
             if path.contains("session-token") {
                 Thread.sleep(forTimeInterval: 0.4)
@@ -260,7 +253,6 @@ final class PaymentSessionTests: XCTestCase {
             }
             return (200, Self.json([:]))
         }
-        let session = try makeSession(applePayEnabled: false)
         let task = Task {
             try await session.bind(intent: session.intent)
         }
@@ -279,7 +271,7 @@ final class PaymentSessionTests: XCTestCase {
 
     func testApplePayParamsWaitWithoutTimeout() async throws {
         DigitalWalletFactory.canMakePayments = { true }
-        StubURLProtocol.handler = { request in
+        let session = try makeSession(applePayEnabled: true) { request in
             let path = request.url?.path ?? ""
             if path.contains("session-token") {
                 return (200, Self.json(["token": "sess-1"]))
@@ -293,13 +285,12 @@ final class PaymentSessionTests: XCTestCase {
             }
             return (200, Self.json([:]))
         }
-        let session = try makeSession(applePayEnabled: true)
         let state = try await session.bind(intent: session.intent)
         XCTAssertTrue(state.applePayAvailable)
     }
 
     func testDeleteSavedCardNon2xxThrows() async throws {
-        StubURLProtocol.handler = { request in
+        let session = try makeSession(applePayEnabled: false) { request in
             let path = request.url?.path ?? ""
             if path.contains("session-token") {
                 return (200, Self.json(["token": "sess-1"]))
@@ -309,7 +300,6 @@ final class PaymentSessionTests: XCTestCase {
             }
             return (200, Self.json([:]))
         }
-        let session = try makeSession(applePayEnabled: false)
         _ = try await session.bind(intent: session.intent)
         do {
             _ = try await session.deleteSavedCard(cardId: "card-1")
@@ -321,7 +311,7 @@ final class PaymentSessionTests: XCTestCase {
     }
 
     func testDeleteSavedCardRefreshesRemaining() async throws {
-        StubURLProtocol.handler = { request in
+        let session = try makeSession(applePayEnabled: false, savedCardsEnabled: true) { request in
             let path = request.url?.path ?? ""
             if path.contains("session-token") {
                 return (200, Self.json(["token": "sess-1"]))
@@ -341,15 +331,25 @@ final class PaymentSessionTests: XCTestCase {
             }
             return (200, Self.json([:]))
         }
-        let session = try makeSession(applePayEnabled: false, savedCardsEnabled: true)
         _ = try await session.bind(intent: session.intent)
         let updated = try await session.deleteSavedCard(cardId: "card-1")
         XCTAssertEqual(updated.savedCards.map(\.id), ["card-2"])
         XCTAssertEqual(session.state?.savedCards.map(\.id), ["card-2"])
     }
 
-    private func makeSession(applePayEnabled: Bool, savedCardsEnabled: Bool = false) throws -> PaymentSession {
+    private func makeSession(
+        applePayEnabled: Bool,
+        savedCardsEnabled: Bool = false,
+        handler: @escaping (URLRequest) throws -> (Int, Data)
+    ) throws -> PaymentSession {
+        if let stubID {
+            StubURLProtocol.unregister(stubID)
+        }
+        let id = StubURLProtocol.register(handler)
+        stubID = id
+
         let config = URLSessionConfiguration.ephemeral
+        config.httpAdditionalHeaders = [StubURLProtocol.header: id]
         config.protocolClasses = [StubURLProtocol.self]
         let urlSession = URLSession(configuration: config)
         let http = HTTPClient(session: urlSession)
@@ -363,25 +363,58 @@ final class PaymentSessionTests: XCTestCase {
         return try PaymentSession(configuration: paymentConfig, intent: intent, http: http)
     }
 
-    private func jsonResponse(
+    private static func okJSON(for request: URLRequest, wallet: [String: Any]) -> (Int, Data) {
+        let path = request.url?.path ?? ""
+        if path.contains("session-token") {
+            return (200, json(["token": "sess-1"]))
+        }
+        if path.contains("config") {
+            return (200, json([:]))
+        }
+        if path.contains("digital-wallet") {
+            return (200, json(wallet))
+        }
+        return (200, json([:]))
+    }
+
+    private static func jsonResponse(
         for request: URLRequest,
-        sessionTokenCalls: inout Int
+        sessionTokenCalls: TokenCallCounter
     ) -> (Int, Data) {
         let path = request.url?.path ?? ""
         if path.contains("session-token") {
-            sessionTokenCalls += 1
-            return (200, Self.json(["token": "sess-\(sessionTokenCalls)"]))
+            let count = sessionTokenCalls.increment()
+            return (200, json(["token": "sess-\(count)"]))
         }
         if path.contains("config") {
-            return (200, Self.json([:]))
+            return (200, json([:]))
         }
         if path.contains("cards") {
-            return (200, Self.json(["data": []]))
+            return (200, json(["data": []]))
         }
-        return (200, Self.json([:]))
+        return (200, json([:]))
     }
 
     private static func json(_ object: [String: Any]) -> Data {
         (try? JSONSerialization.data(withJSONObject: object)) ?? Data("{}".utf8)
+    }
+}
+
+private final class TokenCallCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value = 0
+
+    var value: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _value
+    }
+
+    @discardableResult
+    func increment() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        _value += 1
+        return _value
     }
 }
