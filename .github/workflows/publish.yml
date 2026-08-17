@@ -74,13 +74,25 @@ jobs:
           fi
 
       - name: GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: ${{ steps.version.outputs.version }}
-          body_path: CHANGELOG.md
-          target_commitish: ${{ github.sha }}
-          token: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          attempt() {
+            if gh release view "$VERSION" >/dev/null 2>&1; then
+              gh release edit "$VERSION" --title "$VERSION" --notes-file CHANGELOG.md
+            else
+              gh release create "$VERSION" --title "$VERSION" --notes-file CHANGELOG.md
+            fi
+          }
+          for i in 1 2 3 4 5; do
+            if attempt; then
+              exit 0
+            fi
+            echo "GitHub release failed (attempt $i), retrying..."
+            sleep $((i * 5))
+          done
+          exit 1
 
       - name: Publish CocoaPods
         env:
