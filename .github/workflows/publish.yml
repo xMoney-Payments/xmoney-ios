@@ -29,6 +29,9 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
 
       - name: Resolve version
         id: version
@@ -54,8 +57,21 @@ jobs:
       - name: Lint podspec
         run: |
           gem install cocoapods
-          # lib lint uses the checkout; spec lint (inside trunk push) uses the git tag.
+          # lib lint uses the checkout; trunk push lints the git tag from s.source.
           pod lib lint XMoneyPaymentSheet.podspec --allow-warnings
+
+      # pod trunk push clones s.source's tag, not this checkout. A leftover 0.0.1
+      # from a failed publish would keep validating the old sources.
+      - name: Point version tag at this commit
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git tag -f "$VERSION" "${{ github.sha }}"
+          git push -f origin "refs/tags/$VERSION"
+          REMOTE_SHA=$(git ls-remote origin "refs/tags/$VERSION" | awk '{print $1}')
+          if [ "$REMOTE_SHA" != "${{ github.sha }}" ]; then
+            echo "Tag $VERSION is $REMOTE_SHA, expected ${{ github.sha }}"
+            exit 1
+          fi
 
       - name: GitHub Release
         uses: softprops/action-gh-release@v3
