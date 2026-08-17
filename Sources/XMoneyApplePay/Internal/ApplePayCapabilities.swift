@@ -1,5 +1,5 @@
 import PassKit
-#if !COCOAPODS
+#if canImport(XMoneyCore)
 import XMoneyCore
 #endif
 

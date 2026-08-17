@@ -1,5 +1,5 @@
 import UIKit
-#if !COCOAPODS
+#if canImport(XMoneyCore)
 import XMoneyCore
 import XMoneyPaymentElement
 #endif

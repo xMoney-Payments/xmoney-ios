@@ -1,5 +1,5 @@
 import UIKit
-#if !COCOAPODS
+#if canImport(XMoneyCore)
 @_exported import XMoneyCore
 #endif
 

@@ -10,11 +10,13 @@ Pod::Spec.new do |s|
   s.swift_version    = '5.9'
   s.ios.deployment_target = '15.0'
   s.resource_bundles = { 'XMoneyPaymentSheet' => 'PrivacyInfo.xcprivacy' }
-  # CocoaPods is not SPM: `package` needs -package-name, and sibling modules
-  # are compiled into this one target (see `#if !COCOAPODS` imports).
-  s.pod_target_xcconfig = {
-    'OTHER_SWIFT_FLAGS' => '-D COCOAPODS -package-name XMoneyPaymentSheet'
+  # CocoaPods is not SPM: `package` needs -package-name. Sibling SPM modules
+  # compile into this one target — sources use `#if canImport(XMoneyCore)`.
+  # Keep $(inherited) so CocoaPods' own OTHER_SWIFT_FLAGS (-D COCOAPODS) survive.
+  pod_swift_xcconfig = {
+    'OTHER_SWIFT_FLAGS' => '$(inherited) -package-name XMoneyPaymentSheet'
   }
+  s.pod_target_xcconfig = pod_swift_xcconfig
 
   s.default_subspecs = 'PaymentSheet'
 
@@ -23,12 +25,14 @@ Pod::Spec.new do |s|
     core.resources    = 'Resources/**/*', 'Sources/XMoneyCore/Resources/**/*'
     core.resource_bundles = { 'XMoneyCore' => 'PrivacyInfo.xcprivacy' }
     core.frameworks   = 'UIKit', 'WebKit'
+    core.pod_target_xcconfig = pod_swift_xcconfig
   end
 
   s.subspec 'ApplePay' do |apple|
     apple.source_files = 'Sources/XMoneyApplePay/**/*.swift', 'Sources/XMoneyApplePayObjC/**/*.{h,m}'
     apple.dependency 'XMoneyPaymentSheet/Core'
     apple.frameworks   = 'PassKit', 'WebKit'
+    apple.pod_target_xcconfig = pod_swift_xcconfig
   end
 
   s.subspec 'PaymentElement' do |emb|
@@ -39,6 +43,7 @@ Pod::Spec.new do |s|
       'Sources/XMoneyPaymentElement/Resources/Fonts/*',
     ]
     emb.frameworks   = 'PassKit', 'WebKit'
+    emb.pod_target_xcconfig = pod_swift_xcconfig
   end
 
   s.subspec 'PaymentSheet' do |sheet|
@@ -47,5 +52,6 @@ Pod::Spec.new do |s|
     sheet.dependency 'XMoneyPaymentSheet/PaymentElement'
     sheet.dependency 'XMoneyPaymentSheet/ApplePay'
     sheet.frameworks   = 'PassKit', 'WebKit'
+    sheet.pod_target_xcconfig = pod_swift_xcconfig
   end
 end

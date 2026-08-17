@@ -51,6 +51,12 @@ jobs:
           chmod +x scripts/xcode-ios-test.sh
           scripts/xcode-ios-test.sh
 
+      - name: Lint podspec
+        run: |
+          gem install cocoapods
+          # lib lint uses the checkout; spec lint (inside trunk push) uses the git tag.
+          pod lib lint XMoneyPaymentSheet.podspec --allow-warnings
+
       - name: GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -64,6 +70,4 @@ jobs:
         env:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
         run: |
-          gem install cocoapods
-          pod spec lint XMoneyPaymentSheet.podspec --allow-warnings
           pod trunk push XMoneyPaymentSheet.podspec --allow-warnings

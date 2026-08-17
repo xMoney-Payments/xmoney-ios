@@ -1,7 +1,7 @@
 import PassKit
 import SwiftUI
 import UIKit
-#if !COCOAPODS
+#if canImport(XMoneyCore)
 import XMoneyCore
 #endif
 
