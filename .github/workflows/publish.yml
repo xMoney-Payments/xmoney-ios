@@ -16,7 +16,7 @@ on:
 
 jobs:
   publish:
-    runs-on: macos-14
+    runs-on: macos-15
     permissions:
       contents: write
     steps:
@@ -40,10 +40,8 @@ jobs:
 
       - name: Test
         run: |
-          xcodebuild test \
-            -scheme XMoneyPaymentSheet-Package \
-            -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
-            -quiet
+          chmod +x scripts/xcode-ios-test.sh
+          scripts/xcode-ios-test.sh
 
       - name: GitHub Release
         env:

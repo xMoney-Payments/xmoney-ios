@@ -200,7 +200,7 @@ Open either folder in Xcode via **File → Open** and select `Package.swift`.
 ## Testing
 
 ```bash
-xcodebuild -scheme XMoneyPaymentSheet-Package -destination 'platform=iOS Simulator,name=iPhone 17' test
+scripts/xcode-ios-test.sh
 ```
 
 Contract tests consume `Tests/XMoneyCoreTests/test-vectors.json`, shared with the Android SDK.

@@ -23,6 +23,7 @@ let package = Package(
                 .copy("../../PrivacyInfo.xcprivacy"),
             ],
             linkerSettings: [
+                .linkedFramework("UIKit"),
                 .linkedFramework("WebKit"),
             ]
         ),
