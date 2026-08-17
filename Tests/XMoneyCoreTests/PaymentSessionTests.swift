@@ -2,60 +2,6 @@ import Foundation
 import XCTest
 @testable import XMoneyCore
 
-private final class StubURLProtocol: URLProtocol {
-    static let header = "X-XMoney-Stub-ID"
-
-    private static let lock = NSLock()
-    private static var handlers: [String: (URLRequest) throws -> (Int, Data)] = [:]
-
-    static func register(_ handler: @escaping (URLRequest) throws -> (Int, Data)) -> String {
-        let id = UUID().uuidString
-        lock.lock()
-        handlers[id] = handler
-        lock.unlock()
-        return id
-    }
-
-    static func unregister(_ id: String) {
-        lock.lock()
-        handlers[id] = nil
-        lock.unlock()
-    }
-
-    override class func canInit(with request: URLRequest) -> Bool { true }
-
-    /// iOS 18+ URLSession calls this instead of `canInit(with: URLRequest)`.
-    /// The default implementation returns `false`, so stubs never run on CI.
-    override class func canInit(with task: URLSessionTask) -> Bool { true }
-
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-    override func startLoading() {
-        let request = self.request
-        let id = request.value(forHTTPHeaderField: Self.header)
-        Self.lock.lock()
-        let handler = id.flatMap { Self.handlers[$0] } ?? Self.handlers.values.first
-        Self.lock.unlock()
-
-        do {
-            let (status, data) = try handler?(request) ?? (404, Data())
-            let response = HTTPURLResponse(
-                url: request.url ?? URL(string: "https://invalid.local")!,
-                statusCode: status,
-                httpVersion: nil,
-                headerFields: ["Content-Type": "application/json"]
-            )!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: data)
-            client?.urlProtocolDidFinishLoading(self)
-        } catch {
-            client?.urlProtocol(self, didFailWithError: error)
-        }
-    }
-
-    override func stopLoading() {}
-}
-
 private final class SlowWallet: DigitalWalletAuthorizing {
     var didAuthorizePayment = false
     func start() async -> EngineResult {
@@ -80,8 +26,6 @@ private final class ImmediateWallet: DigitalWalletAuthorizing {
 
 @MainActor
 final class PaymentSessionTests: XCTestCase {
-    private var stubID: String?
-
     override func setUp() {
         super.setUp()
         DigitalWalletFactory.canMakePayments = { false }
@@ -89,10 +33,6 @@ final class PaymentSessionTests: XCTestCase {
     }
 
     override func tearDown() {
-        if let stubID {
-            StubURLProtocol.unregister(stubID)
-        }
-        stubID = nil
         DigitalWalletFactory.canMakePayments = { false }
         DigitalWalletFactory.makeApplePay = nil
         super.tearDown()
@@ -248,7 +188,7 @@ final class PaymentSessionTests: XCTestCase {
         let session = try makeSession(applePayEnabled: false) { request in
             let path = request.url?.path ?? ""
             if path.contains("session-token") {
-                Thread.sleep(forTimeInterval: 0.4)
+                try await Task.sleep(nanoseconds: 400_000_000)
                 return (200, Self.json(["token": "sess-1"]))
             }
             return (200, Self.json([:]))
@@ -280,7 +220,7 @@ final class PaymentSessionTests: XCTestCase {
                 return (200, Self.json([:]))
             }
             if path.contains("digital-wallet") {
-                Thread.sleep(forTimeInterval: 0.2)
+                try await Task.sleep(nanoseconds: 200_000_000)
                 return (200, Self.json(["merchantId": "merchant.com.xmoney"]))
             }
             return (200, Self.json([:]))
@@ -340,19 +280,18 @@ final class PaymentSessionTests: XCTestCase {
     private func makeSession(
         applePayEnabled: Bool,
         savedCardsEnabled: Bool = false,
-        handler: @escaping (URLRequest) throws -> (Int, Data)
+        handler: @escaping (URLRequest) async throws -> (Int, Data)
     ) throws -> PaymentSession {
-        if let stubID {
-            StubURLProtocol.unregister(stubID)
-        }
-        let id = StubURLProtocol.register(handler)
-        stubID = id
-
-        let config = URLSessionConfiguration.ephemeral
-        config.httpAdditionalHeaders = [StubURLProtocol.header: id]
-        config.protocolClasses = [StubURLProtocol.self]
-        let urlSession = URLSession(configuration: config)
-        let http = HTTPClient(session: urlSession)
+        let http = HTTPClient(execute: { request in
+            let (status, data) = try await handler(request)
+            let response = HTTPURLResponse(
+                url: request.url ?? URL(string: "https://invalid.local")!,
+                statusCode: status,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (data, response)
+        })
         var paymentConfig = PaymentConfig(publicKey: "pk_test_stub")
         paymentConfig.paymentMethods.applePay.enabled = applePayEnabled
         paymentConfig.card.savedCards.enabled = savedCardsEnabled
