@@ -1,0 +1,63 @@
+# Manual publish. Actions → Publish → Run workflow → enter version (e.g. 0.0.1).
+#
+# Requires the COCOAPODS_TRUNK_TOKEN repo secret (password from
+# `grep -A2 trunk.cocoapods.org ~/.netrc` after `pod trunk register`).
+# SPM needs no extra secret: `gh release create` tags the run SHA.
+
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g. 0.0.1)'
+        required: true
+        default: '0.0.1'
+
+jobs:
+  publish:
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          VERSION="${{ inputs.version }}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version '$VERSION' is not X.Y.Z"
+            exit 1
+          fi
+          POD_VERSION=$(ruby -e "puts File.read('XMoneyPaymentSheet.podspec')[/s\\.version\\s*=\\s*'([^']+)'/, 1]")
+          if [ "$VERSION" != "$POD_VERSION" ]; then
+            echo "Input $VERSION does not match podspec $POD_VERSION — bump the podspec on main first"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing version $VERSION"
+
+      - name: Test
+        run: |
+          xcodebuild test \
+            -scheme XMoneyPaymentSheet-Package \
+            -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
+            -quiet
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.version }}" \
+            --title "${{ steps.version.outputs.version }}" \
+            --notes-file CHANGELOG.md \
+            --target "$GITHUB_SHA"
+
+      - name: Publish CocoaPods
+        env:
+          COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
+        run: |
+          gem install cocoapods
+          pod spec lint XMoneyPaymentSheet.podspec --allow-warnings
+          pod trunk push XMoneyPaymentSheet.podspec --allow-warnings

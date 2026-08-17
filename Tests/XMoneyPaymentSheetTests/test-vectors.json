@@ -1,0 +1,143 @@
+{
+  "defaultColors": {
+    "light": {
+      "primary": "#7c4dff",
+      "background": "#ffffff",
+      "error": "#ff6b6b"
+    },
+    "dark": {
+      "primary": "#7c4dff",
+      "background": "#16141a",
+      "error": "#ff6b6b"
+    }
+  },
+  "validation": [
+    {
+      "field": "cardNumber",
+      "input": "",
+      "expectedKey": "errors.cardNumberRequired"
+    },
+    {
+      "field": "cardNumber",
+      "input": "4111111111111111",
+      "expectedKey": null
+    },
+    {
+      "field": "cardNumber",
+      "input": "123",
+      "expectedKey": "errors.cardNumberTooShort"
+    },
+    {
+      "field": "expiry",
+      "input": { "month": "", "year": "" },
+      "expectedKey": "errors.expDateRequired"
+    },
+    {
+      "field": "cvv",
+      "input": "",
+      "expectedKey": "errors.cvvRequired"
+    },
+    {
+      "field": "cvv",
+      "input": "12",
+      "expectedKey": "errors.cvvInvalid"
+    },
+    {
+      "field": "holderName",
+      "input": "",
+      "expectedKey": "errors.cardHolderNameRequired"
+    },
+    {
+      "field": "holderName",
+      "input": "John123",
+      "expectedKey": "errors.cardHolderNameNoDigits"
+    }
+  ],
+  "buttonTypes": [
+    { "type": "pay", "key": "button.pay" },
+    { "type": "book", "key": "button.book" },
+    { "type": "buy", "key": "button.buy" },
+    { "type": "checkout", "key": "button.checkout" },
+    { "type": "donate", "key": "button.donate" },
+    { "type": "order", "key": "button.order" },
+    { "type": "subscribe", "key": "button.subscribe" },
+    { "type": "topUp", "key": "button.topUp" },
+    { "type": "deposit", "key": "button.deposit" }
+  ],
+  "themeResolution": [
+    {
+      "isDark": false,
+      "appearance": {
+        "colorsLight": { "primary": "#ff0000" },
+        "colors": { "primary": "#00ff00" }
+      },
+      "expected": { "primary": "#ff0000", "background": "#ffffff" }
+    },
+    {
+      "isDark": true,
+      "appearance": {
+        "colorsDark": { "background": "#111111" },
+        "colors": { "background": "#222222" }
+      },
+      "expected": { "primary": "#7c4dff", "background": "#111111" }
+    },
+    {
+      "isDark": false,
+      "appearance": {
+        "colors": { "error": "#123456" }
+      },
+      "expected": { "primary": "#7c4dff", "error": "#123456" }
+    }
+  ],
+  "orderPayload": [
+    {
+      "payload": "eyJvcmRlciI6IHsiYW1vdW50IjogNDIuNSwgImN1cnJlbmN5IjogIkVVUiIsICJvcmRlcklkIjogIm9yZGVyX3Rlc3RfMSIsICJ0eXBlIjogIm9uZVRpbWUifSwgImNhcmRUcmFuc2FjdGlvbk1vZGUiOiAicGF5In0=",
+      "expected": {
+        "amount": 42.5,
+        "currency": "EUR",
+        "externalOrderId": "order_test_1",
+        "isRecurring": false,
+        "isVerifyCard": false,
+        "cardTransactionMode": "pay"
+      }
+    },
+    {
+      "payload": "eyJvcmRlciI6IHsiYW1vdW50IjogMCwgImN1cnJlbmN5IjogIkVVUiIsICJvcmRlcklkIjogInYxIiwgInR5cGUiOiAib25lVGltZSJ9LCAiY2FyZFRyYW5zYWN0aW9uTW9kZSI6ICJ2ZXJpZnlDYXJkIn0=",
+      "expected": {
+        "amount": 0,
+        "currency": "EUR",
+        "externalOrderId": "v1",
+        "isRecurring": false,
+        "isVerifyCard": true,
+        "cardTransactionMode": "verifyCard"
+      }
+    },
+    {
+      "payload": "eyJvcmRlciI6IHsiYW1vdW50IjogOS45OSwgImN1cnJlbmN5IjogIlVTRCIsICJvcmRlcklkIjogInN1Yl8xIiwgInR5cGUiOiAicmVjdXJyaW5nIn0sICJjYXJkVHJhbnNhY3Rpb25Nb2RlIjogInBheSJ9",
+      "expected": {
+        "amount": 9.99,
+        "currency": "USD",
+        "externalOrderId": "sub_1",
+        "isRecurring": true,
+        "isVerifyCard": false,
+        "cardTransactionMode": "pay"
+      }
+    }
+  ],
+  "errorCodes": [
+    { "code": "NETWORK_ERROR", "message": "Network failed" },
+    { "code": "SESSION_ERROR", "message": "Missing session" },
+    { "code": "PAYMENT_ERROR", "message": "Declined" },
+    { "code": "THREE_DS_ERROR", "message": "3DS failed" },
+    { "code": "POLL_TIMEOUT", "message": "Timed out" },
+    { "code": "INVALID_PUBLIC_KEY", "message": "Bad key" },
+    { "code": "GOOGLE_PAY", "message": "Wallet error" },
+    { "code": "LOAD_ERROR", "message": "Load failed" },
+    { "code": "CANCELED", "message": "Payment canceled" },
+    { "code": "CUSTOM_CODE", "message": "Custom error" }
+  ],
+  "locales": [
+    { "locale": "el-GR", "key": "sheet.title", "contains": "Πληρωμή" },
+    { "locale": "ro-RO", "key": "sheet.title", "contains": "Plată" }
+  ]
+}
