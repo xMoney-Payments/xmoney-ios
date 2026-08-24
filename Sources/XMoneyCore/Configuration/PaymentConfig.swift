@@ -35,7 +35,7 @@ public extension PaymentConfig {
             savedCards: SavedCardsConfig = .init(),
             cardHolderVerification: CardHolderVerification? = nil,
             inputs: CardInputsConfig = .init(),
-            validationMode: ValidationMode = .onChange,
+            validationMode: ValidationMode = .onTouched,
             submitButton: SubmitButtonConfig = .init()
         ) {
             self.savedCards = savedCards
@@ -72,6 +72,7 @@ public extension PaymentConfig {
     }
 
     struct SubmitButtonConfig: Equatable, Sendable {
+        /// Embedded only. Payment Sheet always shows the SDK Pay button.
         public var visible: Bool
         public var type: SubmitButtonType
 
@@ -107,17 +108,6 @@ public extension PaymentConfig {
         public init(enabled: Bool = false, appearance: WalletAppearance = .init()) {
             self.enabled = enabled
             self.appearance = appearance
-        }
-    }
-
-    enum WalletButtonStyle: String, Equatable, Sendable {
-        case `default` = "default"
-
-        public static func from(_ raw: String?) -> WalletButtonStyle? {
-            guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                return nil
-            }
-            return WalletButtonStyle(rawValue: raw.lowercased())
         }
     }
 
@@ -159,18 +149,15 @@ public extension PaymentConfig {
     }
 
     struct WalletAppearance: Equatable, Sendable {
-        public var style: WalletButtonStyle?
         public var color: WalletButtonColor?
         public var radius: Double?
         public var type: WalletButtonType?
 
         public init(
-            style: WalletButtonStyle? = nil,
             color: WalletButtonColor? = nil,
             radius: Double? = nil,
             type: WalletButtonType? = nil
         ) {
-            self.style = style
             self.color = color
             self.radius = radius
             self.type = type

@@ -17,7 +17,7 @@
 "elements.saveCard" = "Salvează cardul pentru utilizări viitoare";
 "placeholder.cardNumber" = "0000 - 0000 - 0000 - 0000";
 "placeholder.expDate" = "LL / AA";
-"placeholder.cvv" = "000";
+"placeholder.cvv" = "cvv";
 "placeholder.cardholderName" = "Numele complet de pe card";
 "errors.cardNumberRequired" = "Numărul cardului este obligatoriu.";
 "errors.cardNumberUnsupported" = "Tipul de card nu este acceptat.";

@@ -7,7 +7,7 @@
     },
     "dark": {
       "primary": "#7c4dff",
-      "background": "#16141a",
+            "background": "#18181b",
       "error": "#ff6b6b"
     }
   },
@@ -138,6 +138,10 @@
   ],
   "locales": [
     { "locale": "el-GR", "key": "sheet.title", "contains": "Πληρωμή" },
-    { "locale": "ro-RO", "key": "sheet.title", "contains": "Plată" }
+    { "locale": "ro-RO", "key": "sheet.title", "contains": "Plată" },
+    { "locale": "bg-BG", "key": "sheet.title", "contains": "Плащане" },
+    { "locale": "hu-HU", "key": "sheet.title", "contains": "Fizetés" },
+    { "locale": "pl-PL", "key": "sheet.title", "contains": "Płatność" },
+    { "locale": "pl", "key": "sheet.title", "contains": "Płatność" }
   ]
 }

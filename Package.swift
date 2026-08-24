@@ -64,7 +64,7 @@ let package = Package(
         ),
         .testTarget(
             name: "XMoneyPaymentSheetTests",
-            dependencies: ["XMoneyPaymentSheet", "XMoneyCore", "XMoneyPaymentElement"],
+            dependencies: ["XMoneyPaymentSheet", "XMoneyCore", "XMoneyPaymentElement", "XMoneyApplePay"],
             path: "Tests/XMoneyPaymentSheetTests",
             resources: [
                 .copy("test-vectors.json"),

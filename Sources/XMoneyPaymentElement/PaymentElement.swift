@@ -13,6 +13,9 @@ public final class PaymentElement: UIView {
     /// Bumps on each ``prepare(intent:)`` so overlapping async prepares discard stale results.
     private var prepareGeneration = 0
 
+    /// Fired when the form’s measured height changes (saved-card expand, errors, locale).
+    public var onContentSizeChange: (() -> Void)?
+
     public init(
         payment: EmbeddedPayment,
         onEvent: @escaping (EmbeddedEvent) -> Void = { _ in }
@@ -29,6 +32,10 @@ public final class PaymentElement: UIView {
 
     @MainActor
     public func prepare(intent: PaymentIntent) async throws {
+        if formView != nil {
+            try await updateOrder(intent: intent)
+            return
+        }
         prepareGeneration += 1
         let generation = prepareGeneration
         showLoader()
@@ -49,6 +56,79 @@ public final class PaymentElement: UIView {
         renderForm()
     }
 
+    /// Rebinds a new signed order in place. The form stays mounted; Pay is
+    /// locked with its current title until bind finishes. Does not show
+    /// “Processing...”.
+    @MainActor
+    public func updateOrder(intent: PaymentIntent) async throws {
+        if formView == nil {
+            try await prepare(intent: intent)
+            return
+        }
+        prepareGeneration += 1
+        let generation = prepareGeneration
+        formView?.setUpdatingOrder(true)
+        do {
+            try await payment.updateOrder(intent: intent) { [weak self] event in
+                Task { @MainActor in
+                    guard let self, self.prepareGeneration == generation else { return }
+                    self.onEvent(event)
+                    switch event {
+                    case .ready:
+                        break
+                    case let .processing(isProcessing):
+                        self.formView?.setProcessing(isProcessing)
+                        self.formView?.setOrderConsumed(self.payment.isOrderConsumed)
+                    }
+                }
+            }
+            guard !Task.isCancelled, prepareGeneration == generation else { return }
+            if let state = payment._controller.sheetState {
+                formView?.update(state: state)
+            }
+            formView?.setUpdatingOrder(false)
+            formView?.setProcessing(payment.isProcessing)
+            formView?.setOrderConsumed(payment.isOrderConsumed)
+            invalidateIntrinsicContentSize()
+            onContentSizeChange?()
+        } catch {
+            guard prepareGeneration == generation else { throw error }
+            formView?.setUpdatingOrder(false)
+            throw error
+        }
+    }
+
+    @MainActor
+    public func updateAppearance(_ appearance: PaymentConfig.AppearanceConfig) {
+        payment.updateAppearance(appearance)
+        if let config = payment._controller.paymentConfig {
+            formView?.applyConfig(config)
+            invalidateIntrinsicContentSize()
+            onContentSizeChange?()
+        }
+    }
+
+    @MainActor
+    public func updateLocale(_ locale: String) {
+        payment.updateLocale(locale)
+        if let config = payment._controller.paymentConfig {
+            formView?.applyConfig(config)
+            if formView != nil {
+                // Relabel after applyConfig rebuild; restore already ran.
+            }
+            invalidateIntrinsicContentSize()
+            onContentSizeChange?()
+        }
+    }
+
+    /// Submit the currently selected method (new card or saved card).
+    /// Use with `SubmitButtonConfig.visible = false` so the merchant owns the Pay CTA.
+    /// No-op while `isInteractionEnabled` is false.
+    @MainActor
+    public func confirm() {
+        payment.confirm()
+    }
+
     public var isOrderConsumed: Bool { payment.isOrderConsumed }
 
     private func setupLoader() {
@@ -65,6 +145,7 @@ public final class PaymentElement: UIView {
     }
 
     private func showLoader() {
+        payment._controller.bindSubmitHandler(nil)
         formView?.removeFromSuperview()
         formView = nil
         loaderHost.isHidden = false
@@ -108,8 +189,13 @@ public final class PaymentElement: UIView {
         }
         form.onContentSizeChange = { [weak self] in
             self?.invalidateIntrinsicContentSize()
+            self?.onContentSizeChange?()
+        }
+        controller.bindSubmitHandler { [weak form] in
+            form?.confirm()
         }
         form.setProcessing(controller.isProcessing)
+        form.setUpdatingOrder(controller.isUpdatingOrder)
         form.setOrderConsumed(controller.isOrderConsumed)
         addSubview(form)
         NSLayoutConstraint.activate([
@@ -121,6 +207,7 @@ public final class PaymentElement: UIView {
         formView = form
         invalidateIntrinsicContentSize()
         setNeedsLayout()
+        onContentSizeChange?()
     }
 
     public override var intrinsicContentSize: CGSize {
@@ -166,7 +253,7 @@ public struct PaymentElementView: UIViewRepresentable {
         context.coordinator.prepareTask?.cancel()
         context.coordinator.prepareTask = Task { @MainActor in
             guard !Task.isCancelled else { return }
-            try? await uiView.prepare(intent: intent)
+            try? await uiView.updateOrder(intent: intent)
         }
     }
 

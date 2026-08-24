@@ -13,6 +13,7 @@ final class PaymentSheetTransitioningDelegate: NSObject, UIViewControllerTransit
         }
     }
     var cornerRadius: CGFloat = 32
+    var dimmingColor: UIColor = UIColor(red: 22 / 255, green: 20 / 255, blue: 26 / 255, alpha: 0.45)
     var canDismiss: () -> Bool = { true }
     var onRequestClose: () -> Void = {}
     private(set) weak var presentationController: PaymentSheetPresentationController?
@@ -27,6 +28,7 @@ final class PaymentSheetTransitioningDelegate: NSObject, UIViewControllerTransit
             presenting: presenting
         )
         controller.cornerRadius = cornerRadius
+        controller.dimmingColor = dimmingColor
         controller.heightProvider = heightProvider
         controller.canDismiss = { [weak self] in self?.canDismiss() ?? false }
         controller.onRequestClose = { [weak self] in self?.onRequestClose() }
@@ -51,6 +53,7 @@ final class PaymentSheetTransitioningDelegate: NSObject, UIViewControllerTransit
 
 final class PaymentSheetPresentationController: UIPresentationController {
     var cornerRadius: CGFloat = 32
+    var dimmingColor: UIColor = UIColor(red: 22 / 255, green: 20 / 255, blue: 26 / 255, alpha: 0.45)
     weak var heightProvider: PaymentSheetHeightProviding?
     var canDismiss: () -> Bool = { true }
     var onRequestClose: () -> Void = {}
@@ -81,7 +84,7 @@ final class PaymentSheetPresentationController: UIPresentationController {
 
     override func presentationTransitionWillBegin() {
         guard let containerView else { return }
-        dimmingView.backgroundColor = UIColor.black.withAlphaComponent(0.4)
+        dimmingView.backgroundColor = dimmingColor
         dimmingView.alpha = 0
         dimmingView.frame = containerView.bounds
         dimmingView.autoresizingMask = [.flexibleWidth, .flexibleHeight]

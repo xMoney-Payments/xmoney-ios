@@ -91,6 +91,28 @@ final class ThemeResolutionTests: XCTestCase {
         let primary = color("#0E7C66")
         XCTAssertEqual(theme.selectedBackground.hexRGBA, primary.withAlphaComponent(0x0F / 255.0).hexRGBA)
         XCTAssertEqual(theme.accentIconBackground.hexRGBA, primary.withAlphaComponent(0x1F / 255.0).hexRGBA)
+
+        let dark = resolve(appearance: ["colors": ["primary": "#0E7C66"]], isDark: true)
+        XCTAssertEqual(dark.selectedBackground.hexRGBA, primary.withAlphaComponent(0.18).hexRGBA)
+        XCTAssertEqual(dark.accentIconBackground.hexRGBA, primary.withAlphaComponent(0.24).hexRGBA)
+    }
+
+    func testEightDigitHexIsARGBMatchingAndroid() {
+        let parsed = UIColor(hex: "#1FFFFFFF")
+        XCTAssertNotNil(parsed)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        parsed?.getRed(&r, green: &g, blue: &b, alpha: &a)
+        XCTAssertEqual(r, 1, accuracy: 0.01)
+        XCTAssertEqual(g, 1, accuracy: 0.01)
+        XCTAssertEqual(b, 1, accuracy: 0.01)
+        XCTAssertEqual(a, CGFloat(0x1F) / 255.0, accuracy: 0.01)
+
+        let theme = resolve(
+            appearance: ["colorsDark": ["componentBorder": "#1FFFFFFF", "containerBorder": "#1FFFFFFF"]],
+            isDark: true
+        )
+        XCTAssertEqual(theme.componentBorder.hexRGBA, "#1fffffff")
+        XCTAssertEqual(theme.containerBorder.hexRGBA, "#1fffffff")
     }
 
     func testContainerBorderNoneIsTransparent() {
@@ -99,7 +121,7 @@ final class ThemeResolutionTests: XCTestCase {
         XCTAssertEqual(theme.containerBorderWidth, 0)
     }
 
-    func testContainerBorderDefaultsMatchAndroidInkAlphas() {
+    func testContainerBorderDefaultsUseInkAlphas() {
         let light = resolve(isDark: false)
         let lightInk = color("#16141A")
         XCTAssertEqual(light.containerBorder.hexRGBA, lightInk.withAlphaComponent(0x17 / 255.0).hexRGBA)
@@ -108,16 +130,32 @@ final class ThemeResolutionTests: XCTestCase {
         XCTAssertEqual(light.fieldDivider.hexRGBA, lightInk.withAlphaComponent(0x14 / 255.0).hexRGBA)
         XCTAssertEqual(light.mutedIcon.hexRGBA, lightInk.withAlphaComponent(0x52 / 255.0).hexRGBA)
         XCTAssertEqual(light.unselectedRing.hexRGBA, lightInk.withAlphaComponent(0x29 / 255.0).hexRGBA)
+        XCTAssertEqual(light.componentBorder.hexRGBA, light.fieldBorder.hexRGBA)
+        XCTAssertEqual(light.grabber.hexRGBA, lightInk.withAlphaComponent(0.12).hexRGBA)
+        XCTAssertEqual(light.primaryButtonBorderRadius, 9999, accuracy: 0.001)
+        XCTAssertEqual(light.errorText.hexString, "#dc2626")
 
         let dark = resolve(isDark: true)
-        let darkInk = color("#F7F6F9")
-        XCTAssertEqual(dark.containerBorder.hexRGBA, darkInk.withAlphaComponent(0x17 / 255.0).hexRGBA)
-        XCTAssertEqual(dark.footerBorder.hexRGBA, darkInk.withAlphaComponent(0x0F / 255.0).hexRGBA)
+        let white = UIColor.white
+        XCTAssertEqual(dark.background.hexString, "#18181b")
+        XCTAssertEqual(dark.componentBackground.hexString, "#18181b")
+        XCTAssertEqual(dark.primaryText.hexString, "#fafafa")
+        XCTAssertEqual(dark.containerBorder.hexRGBA, white.withAlphaComponent(0.10).hexRGBA)
+        XCTAssertEqual(dark.footerBorder.hexRGBA, white.withAlphaComponent(0.08).hexRGBA)
+        XCTAssertEqual(dark.fieldBorder.hexRGBA, white.withAlphaComponent(0.10).hexRGBA)
+        XCTAssertEqual(dark.fieldDivider.hexRGBA, white.withAlphaComponent(0.09).hexRGBA)
         XCTAssertEqual(dark.mutedIcon.hexRGBA, color("#797585").hexRGBA)
-        XCTAssertEqual(dark.unselectedRing.hexRGBA, darkInk.withAlphaComponent(0x66 / 255.0).hexRGBA)
+        XCTAssertEqual(dark.unselectedRing.hexRGBA, white.withAlphaComponent(0.20).hexRGBA)
+        XCTAssertEqual(dark.checkboxRing.hexRGBA, white.withAlphaComponent(0.24).hexRGBA)
+        XCTAssertEqual(dark.grabber.hexRGBA, white.withAlphaComponent(0.16).hexRGBA)
+        XCTAssertEqual(dark.neutralChip.hexRGBA, white.withAlphaComponent(0.07).hexRGBA)
+        XCTAssertEqual(dark.errorText.hexString, "#f87171")
+        XCTAssertEqual(dark.visaTint.hexString, "#ffffff")
+        XCTAssertEqual(dark.brandTileBackground.hexString, "#1f1f23")
+        XCTAssertEqual(dark.scrim.hexRGBA, UIColor.black.withAlphaComponent(0.60).hexRGBA)
     }
 
-    func testLegacyAliasesMatchAndroidNames() {
+    func testLegacyThemeAliasesMatchCanonicalNames() {
         let theme = resolve(isDark: false)
         XCTAssertEqual(theme.subtleBorder.hexRGBA, theme.containerBorder.hexRGBA)
         XCTAssertEqual(theme.hairline.hexRGBA, theme.footerBorder.hexRGBA)

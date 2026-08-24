@@ -103,10 +103,14 @@ final class HTTPClient {
 
     private func sendExpectingJSON(_ request: URLRequest) async throws -> [String: Any] {
         let (data, response): (Data, URLResponse)
-        if let execute {
-            (data, response) = try await execute(request)
-        } else {
-            (data, response) = try await session.data(for: request)
+        do {
+            if let execute {
+                (data, response) = try await execute(request)
+            } else {
+                (data, response) = try await session.data(for: request)
+            }
+        } catch {
+            throw Self.mappedCancellation(error)
         }
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
@@ -122,7 +126,20 @@ final class HTTPClient {
         return json
     }
 
-    /// Opt-in request/response logging. Request bodies are never logged (multipart
+    /// URLSession often surfaces task cancel as `URLError.cancelled` ("cancelled")
+    /// instead of `CancellationError`. Map both so overlapping binds / `.task`
+    /// teardown are not reported as payment failures.
+    private static func mappedCancellation(_ error: Error) -> Error {
+        if error is CancellationError { return CancellationError() }
+        if let url = error as? URLError, url.code == .cancelled { return CancellationError() }
+        let ns = error as NSError
+        if ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCancelled {
+            return CancellationError()
+        }
+        return error
+    }
+
+    /// Opt-in request/response logging. Request bodies are never logged (multipart)
     /// card submissions pass through here). Response bodies are redacted.
     private static func log(request: URLRequest, statusCode: Int, responseBody: Data) {
         guard isDebugLoggingEnabled else { return }

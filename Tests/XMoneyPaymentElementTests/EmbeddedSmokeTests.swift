@@ -31,4 +31,20 @@ final class EmbeddedSmokeTests: XCTestCase {
             XCTFail()
         }
     }
+
+    @MainActor
+    func testUpdateAppearanceAndLocaleBeforePrepare() {
+        let embedded = EmbeddedPayment(configuration: PaymentConfig(publicKey: "test_pk_x")) { _ in }
+        embedded.updateAppearance(.init())
+        embedded.updateLocale("el-GR")
+        XCTAssertFalse(embedded.isInteractionEnabled)
+        embedded.confirm()
+    }
+
+    @MainActor
+    func testConfirmIsNoOpWhileUpdatingOrderFlag() {
+        let embedded = EmbeddedPayment(configuration: PaymentConfig(publicKey: "test_pk_x")) { _ in }
+        XCTAssertFalse(embedded.isInteractionEnabled)
+        embedded.confirm()
+    }
 }

@@ -5,7 +5,7 @@ import XMoneyCore
 
 @MainActor
 final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
-    let configuration: PaymentConfig
+    private var liveConfiguration: PaymentConfig
     private let onResult: (PaymentResult) -> Void
 
     private(set) var paymentConfig: PaymentConfig?
@@ -16,17 +16,22 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     private weak var hostView: UIView?
     private var prepareGeneration = 0
     private var operationTask: Task<Void, Never>?
+    private var submitHandler: (() -> Void)?
+    private(set) var isUpdatingOrder = false
 
     var sheetState: SheetState? { session?.state }
+    /// In-flight charge only. Order rebind uses `isUpdatingOrder`, not this flag.
     var isProcessing: Bool { session?.isProcessing ?? false }
     var isOrderConsumed: Bool { session?.isOrderConsumed ?? false }
-    var isInteractionEnabled: Bool { session?.isInteractionEnabled ?? false }
+    var isInteractionEnabled: Bool {
+        !isUpdatingOrder && (session?.isInteractionEnabled ?? false)
+    }
 
     init(
         configuration: PaymentConfig,
         onResult: @escaping (PaymentResult) -> Void
     ) {
-        self.configuration = configuration
+        self.liveConfiguration = configuration
         self.onResult = onResult
     }
 
@@ -34,33 +39,57 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         hostView = view
     }
 
+    /// Submit the currently selected method (new card or saved card).
+    /// Use with `SubmitButtonConfig.visible = false` so the merchant owns the Pay CTA.
+    func confirm() {
+        guard isInteractionEnabled else { return }
+        submitHandler?()
+    }
+
+    func bindSubmitHandler(_ handler: (() -> Void)?) {
+        submitHandler = handler
+    }
+
+    func updateAppearance(_ appearance: PaymentConfig.AppearanceConfig) {
+        liveConfiguration.options.appearance = appearance
+        paymentConfig = liveConfiguration
+    }
+
+    func updateLocale(_ locale: String) {
+        liveConfiguration.options.locale = locale
+        paymentConfig = liveConfiguration
+    }
+
     func prepare(intent: PaymentIntent, onEvent: @escaping (EmbeddedEvent) -> Void = { _ in }) async throws {
         self.onEvent = onEvent
-        paymentConfig = configuration
+        paymentConfig = liveConfiguration
         prepareGeneration += 1
         let generation = prepareGeneration
         operationTask?.cancel()
+        isUpdatingOrder = true
 
         do {
             if session == nil {
-                session = try PaymentSession(configuration: configuration, intent: intent)
+                session = try PaymentSession(configuration: liveConfiguration, intent: intent)
             }
             guard let session else { return }
             let state = try await session.bind(intent: intent)
             guard generation == prepareGeneration else { return }
             _ = state
+            isUpdatingOrder = false
             onEvent(.ready)
         } catch is CancellationError {
             guard generation == prepareGeneration else { return }
+            isUpdatingOrder = false
             throw CancellationError()
         } catch let error as PaymentError {
             guard generation == prepareGeneration else { return }
-            onEvent(.processing(false))
+            isUpdatingOrder = false
             onResult(.failed(error.merchantFacing()))
             throw error
         } catch {
             guard generation == prepareGeneration else { return }
-            onEvent(.processing(false))
+            isUpdatingOrder = false
             let mapped = PaymentError.load(error.localizedDescription)
             onResult(.failed(mapped.merchantFacing()))
             throw error

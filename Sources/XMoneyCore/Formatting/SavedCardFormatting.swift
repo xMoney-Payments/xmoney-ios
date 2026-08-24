@@ -31,11 +31,9 @@ package enum SavedCardFormatting {
         savedCardNetworkBrand(card)
     }
 
-    // MARK: - Private
-
-    private static func savedCardIssuerLabel(_ card: SavedCard) -> String {
-        if let issuer = card.issuerName?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines), !issuer.isEmpty {
-            return issuer
+    package static func savedCardIssuerLabel(_ card: SavedCard) -> String {
+        if let bank = card.bankName?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines), !bank.isEmpty {
+            return bank
         }
         if let cardType = card.cardType?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
            !cardType.isEmpty,
@@ -52,6 +50,25 @@ package enum SavedCardFormatting {
         }
         return "Card"
     }
+
+    package static func savedCardMaskedNumber(_ card: SavedCard) -> String {
+        let raw = card.cardNumber?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+        if raw.isEmpty { return "••••" }
+
+        if let regex = try? NSRegularExpression(pattern: "[•*]{4}\\s*(\\d{4})"),
+           let match = regex.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
+           let range = Range(match.range(at: 1), in: raw) {
+            return "•••• \(raw[range])"
+        }
+
+        let digits = raw.filter { $0.isNumber }
+        if digits.count >= 4 {
+            return "•••• \(digits.suffix(4))"
+        }
+        return raw
+    }
+
+    // MARK: - Private
 
     private static func savedCardBrandLabel(_ card: SavedCard) -> String {
         guard let brand = savedCardNetworkBrand(card) else { return "Card" }
@@ -75,23 +92,6 @@ package enum SavedCardFormatting {
             return cardType
         }
         return nil
-    }
-
-    static func savedCardMaskedNumber(_ card: SavedCard) -> String {
-        let raw = card.cardNumber?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
-        if raw.isEmpty { return "••••" }
-
-        if let regex = try? NSRegularExpression(pattern: "[•*]{4}\\s*(\\d{4})"),
-           let match = regex.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
-           let range = Range(match.range(at: 1), in: raw) {
-            return "•••• \(raw[range])"
-        }
-
-        let digits = raw.filter { $0.isNumber }
-        if digits.count >= 4 {
-            return "•••• \(digits.suffix(4))"
-        }
-        return raw
     }
 
     package static func isKnownCardBrand(_ value: String) -> Bool {

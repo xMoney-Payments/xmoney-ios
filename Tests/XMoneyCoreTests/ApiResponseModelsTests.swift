@@ -31,7 +31,7 @@ final class ApiResponseModelsTests: XCTestCase {
                     "expiryYear": "2034",
                     "nameOnCard": "Minas Kitsos",
                     "cardHolderCountry": "RO",
-                    "bankName": "",
+                    "bankName": "ING",
                 ],
                 [
                     "id": 143072,
@@ -58,13 +58,14 @@ final class ApiResponseModelsTests: XCTestCase {
         XCTAssertEqual(first.cardExpiryDate, "12/34")
         XCTAssertEqual(first.nameOnCard, "Minas Kitsos")
         XCTAssertEqual(first.cardHolderCountry, "RO")
-        XCTAssertNil(first.issuerName)
+        XCTAssertEqual(first.bankName, "ING")
 
         let second = cards[1]
         XCTAssertEqual(second.id, "143072")
         XCTAssertEqual(second.cardBrand, "visa")
         XCTAssertEqual(second.cardExpiryDate, "12/28")
         XCTAssertNil(second.cardHolderCountry)
+        XCTAssertNil(second.bankName)
     }
 
     func testWalletParamsParsesAllowedCardNetworks() {

@@ -1,6 +1,21 @@
 .build/
 .swiftpm/
 DerivedData/
+Examples/.derivedData/
 *.xcodeproj
 *.xcworkspace
 xcuserdata/
+.DS_Store
+
+# Commit the in-repo example app
+!Examples/Example.xcodeproj/
+!Examples/Example.xcodeproj/project.pbxproj
+!Examples/Example.xcodeproj/project.xcworkspace/
+!Examples/Example.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+!Examples/Example.xcodeproj/xcshareddata/
+!Examples/Example.xcodeproj/xcshareddata/xcschemes/
+!Examples/Example.xcodeproj/xcshareddata/xcschemes/*.xcscheme
+
+# Demo backend secrets (copy from Secrets.xcconfig.example)
+Examples/Secrets.xcconfig
+**/Secrets.xcconfig

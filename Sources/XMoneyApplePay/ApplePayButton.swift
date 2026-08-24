@@ -9,7 +9,7 @@ public final class ApplePayButton: UIView {
     public var onTap: (() -> Void)?
 
     private var paymentButton: PKPaymentButton
-    private let heightConstraint: NSLayoutConstraint
+    private var heightConstraint: NSLayoutConstraint
     private var appearance: PaymentConfig.WalletAppearance
     private var isDarkBackground: Bool
 
@@ -20,28 +20,23 @@ public final class ApplePayButton: UIView {
     ) {
         self.appearance = appearance
         self.isDarkBackground = isDarkBackground
-        paymentButton = PKPaymentButton(
+        let button = PKPaymentButton(
             paymentButtonType: Self.buttonType(from: appearance.type),
             paymentButtonStyle: Self.buttonStyle(
                 appearance: appearance,
                 isDarkBackground: isDarkBackground
             )
         )
-        heightConstraint = paymentButton.heightAnchor.constraint(equalToConstant: height)
+        paymentButton = button
+        heightConstraint = button.heightAnchor.constraint(equalToConstant: height)
         super.init(frame: .zero)
         ApplePay.register()
 
-        paymentButton.translatesAutoresizingMaskIntoConstraints = false
-        paymentButton.addTarget(self, action: #selector(tapped), for: .touchUpInside)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addTarget(self, action: #selector(tapped), for: .touchUpInside)
         applyCornerRadius(height: height)
-        addSubview(paymentButton)
-        NSLayoutConstraint.activate([
-            paymentButton.topAnchor.constraint(equalTo: topAnchor),
-            paymentButton.bottomAnchor.constraint(equalTo: bottomAnchor),
-            paymentButton.leadingAnchor.constraint(equalTo: leadingAnchor),
-            paymentButton.trailingAnchor.constraint(equalTo: trailingAnchor),
-            heightConstraint,
-        ])
+        addSubview(button)
+        installConstraints(for: button, height: heightConstraint)
     }
 
     @available(*, unavailable)
@@ -55,22 +50,34 @@ public final class ApplePayButton: UIView {
     public var buttonHeight: CGFloat {
         get { heightConstraint.constant }
         set {
+            guard heightConstraint.constant != newValue else { return }
             heightConstraint.constant = newValue
             applyCornerRadius(height: newValue)
         }
     }
 
     public func apply(appearance: PaymentConfig.WalletAppearance, isDarkBackground: Bool? = nil) {
+        let newDark = isDarkBackground ?? self.isDarkBackground
+        let needsNewButton =
+            Self.buttonType(from: appearance.type) != Self.buttonType(from: self.appearance.type)
+            || Self.buttonStyle(appearance: appearance, isDarkBackground: newDark)
+                != Self.buttonStyle(appearance: self.appearance, isDarkBackground: self.isDarkBackground)
+
         self.appearance = appearance
-        if let isDarkBackground {
-            self.isDarkBackground = isDarkBackground
+        self.isDarkBackground = newDark
+
+        if needsNewButton {
+            rebuildButton()
+        } else {
+            applyCornerRadius(height: heightConstraint.constant)
         }
-        rebuildButton()
     }
 
     private func rebuildButton() {
         let wasEnabled = paymentButton.isEnabled
+        let height = heightConstraint.constant
         paymentButton.removeFromSuperview()
+
         let button = PKPaymentButton(
             paymentButtonType: Self.buttonType(from: appearance.type),
             paymentButtonStyle: Self.buttonStyle(
@@ -81,15 +88,21 @@ public final class ApplePayButton: UIView {
         button.translatesAutoresizingMaskIntoConstraints = false
         button.addTarget(self, action: #selector(tapped), for: .touchUpInside)
         button.isEnabled = wasEnabled
+        let newHeight = button.heightAnchor.constraint(equalToConstant: height)
         paymentButton = button
-        applyCornerRadius(height: heightConstraint.constant)
+        heightConstraint = newHeight
+        applyCornerRadius(height: height)
         addSubview(button)
+        installConstraints(for: button, height: newHeight)
+    }
+
+    private func installConstraints(for button: PKPaymentButton, height: NSLayoutConstraint) {
         NSLayoutConstraint.activate([
             button.topAnchor.constraint(equalTo: topAnchor),
             button.bottomAnchor.constraint(equalTo: bottomAnchor),
             button.leadingAnchor.constraint(equalTo: leadingAnchor),
             button.trailingAnchor.constraint(equalTo: trailingAnchor),
-            heightConstraint,
+            height,
         ])
     }
 

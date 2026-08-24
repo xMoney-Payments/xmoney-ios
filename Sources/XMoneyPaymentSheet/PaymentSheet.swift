@@ -36,7 +36,7 @@ public final class PaymentSheet {
                     }
                 )
                 self.coordinator = coordinator
-                coordinator.present(from: presenter)
+                coordinator.present(from: PresentationAnchor.resolve(from: presenter))
             } catch let error as PaymentError {
                 completion(.failed(error.merchantFacing()))
             } catch {
