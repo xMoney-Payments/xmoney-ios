@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'XMoneyPaymentSheet'
-  s.version          = '0.0.1'
+  s.version          = '0.0.2'
   s.summary          = 'Native xMoney checkout SDK for iOS'
   s.description      = 'Drop-in payment sheet, embedded Payment Element, and Apple Pay for xMoney.'
   s.homepage         = 'https://github.com/xMoney-Payments/xmoney-ios'

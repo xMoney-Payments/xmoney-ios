@@ -24,12 +24,12 @@ XMoneyPaymentSheet ──► XMoneyPaymentElement ──► XMoneyCore
 
 ## Installation
 
-Latest release: **`0.0.1`**
+Latest release: **`0.0.2`**
 
 ### Swift Package Manager
 
 ```swift
-.package(url: "https://github.com/xMoney-Payments/xmoney-ios.git", from: "0.0.1")
+.package(url: "https://github.com/xMoney-Payments/xmoney-ios.git", from: "0.0.2")
 ```
 
 Link `XMoneyPaymentSheet` for the drop-in (includes Element + Apple Pay). Or pick surfaces: `XMoneyPaymentElement`, `XMoneyApplePay`.
