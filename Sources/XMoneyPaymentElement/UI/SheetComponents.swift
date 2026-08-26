@@ -1,13 +1,16 @@
 import UIKit
+#if canImport(XMoneyCore)
 import XMoneyCore
+#endif
 
 // MARK: - Grabber
 
-final class GrabberView: UIView {
-    init(theme: CheckoutTheme) {
+package final class GrabberView: UIView {
+    package init(theme: CheckoutTheme) {
         super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
         let pill = UIView()
-        pill.backgroundColor = theme.primaryText.withAlphaComponent(0.12)
+        pill.backgroundColor = theme.grabber
         pill.layer.cornerRadius = 2
         pill.translatesAutoresizingMaskIntoConstraints = false
         addSubview(pill)
@@ -26,8 +29,8 @@ final class GrabberView: UIView {
 
 // MARK: - Close
 
-final class CircleCloseButton: UIButton {
-    init(theme: CheckoutTheme) {
+package final class CircleCloseButton: UIButton {
+    package init(theme: CheckoutTheme) {
         super.init(frame: .zero)
         setTitle("✕", for: .normal)
         setTitleColor(theme.primaryText, for: .normal)
@@ -55,7 +58,7 @@ final class OrDividerView: UIView {
         let text = UILabel()
         text.text = label
         text.font = theme.font(ofSize: 13, weight: .medium)
-        text.textColor = theme.primaryText.withAlphaComponent(0.4)
+        text.textColor = theme.orLabel
         text.setContentHuggingPriority(.required, for: .horizontal)
 
         let stack = UIStackView(arrangedSubviews: [left, text, right])
@@ -78,7 +81,7 @@ final class OrDividerView: UIView {
 
     private func makeLine(theme: CheckoutTheme) -> UIView {
         let line = UIView()
-        line.backgroundColor = theme.footerBorder
+        line.backgroundColor = theme.fieldBorder
         line.translatesAutoresizingMaskIntoConstraints = false
         line.heightAnchor.constraint(equalToConstant: 1).isActive = true
         return line
@@ -188,7 +191,7 @@ final class CheckboxControl: UIControl {
                 self.checkView.alpha = 1
             } else {
                 self.box.backgroundColor = .clear
-                self.box.layer.borderColor = self.theme.unselectedRing.cgColor
+                self.box.layer.borderColor = self.theme.checkboxRing.cgColor
                 self.checkView.alpha = 0
             }
         }
@@ -237,14 +240,16 @@ final class BrandTileView: UIView {
         iconView.removeFromSuperview()
         layer.shadowOpacity = 0
         layer.borderWidth = 0
+        clipsToBounds = true
 
         switch style {
         case let .savedCard(brand):
-            backgroundColor = theme.componentBackground
-            layer.borderWidth = theme.containerBorderWidth
-            layer.borderColor = theme.containerBorder.cgColor
+            backgroundColor = theme.brandTileBackground
+            layer.borderWidth = 1
+            layer.borderColor = theme.brandTileBorder.cgColor
+            clipsToBounds = false
             let icon = CardBrandIcon(size: .savedCardRow)
-            icon.setBrand(brand, size: .savedCardRow)
+            icon.setBrand(brand, size: .savedCardRow, visaTint: theme.visaTint)
             brandIcon = icon
             addSubview(icon)
             NSLayoutConstraint.activate([
@@ -327,17 +332,13 @@ final class ErrorRowView: UIView {
 // MARK: - Powered by footer
 
 final class PoweredByFooterView: UIView {
+    private let label = UILabel()
+    private let logo = UIImageView()
+
     init(theme: CheckoutTheme, locale: String) {
         super.init(frame: .zero)
-        let label = UILabel()
-        label.text = Strings.text("sheet.poweredBy", locale: locale)
-        label.font = theme.font(ofSize: 12, weight: .medium)
-        label.textColor = theme.secondaryText.withAlphaComponent(0.3)
-
-        let logo = UIImageView()
         logo.image = EmbeddedAssets.image(named: "xmoney-wordmark")?
             .withRenderingMode(.alwaysTemplate)
-        logo.tintColor = theme.secondaryText.withAlphaComponent(0.42)
         logo.contentMode = .scaleAspectFit
         logo.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -356,6 +357,14 @@ final class PoweredByFooterView: UIView {
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+        apply(theme: theme, locale: locale)
+    }
+
+    func apply(theme: CheckoutTheme, locale: String) {
+        label.text = Strings.text("sheet.poweredBy", locale: locale)
+        label.font = theme.font(ofSize: 12, weight: .medium)
+        label.textColor = theme.poweredByText
+        logo.tintColor = theme.poweredByLogo
     }
 
     @available(*, unavailable)

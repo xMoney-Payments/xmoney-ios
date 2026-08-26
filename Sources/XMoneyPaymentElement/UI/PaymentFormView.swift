@@ -1,9 +1,11 @@
 import UIKit
 import PassKit
+#if canImport(XMoneyCore)
 import XMoneyCore
+#endif
 
 package final class PaymentFormView: UIView {
-    package struct ContentInsets {
+    package struct ContentInsets: Equatable {
         package var horizontal: CGFloat
         package var top: CGFloat
         package var bottom: CGFloat
@@ -15,7 +17,7 @@ package final class PaymentFormView: UIView {
         }
 
         package static let embedded = ContentInsets(horizontal: 16, top: 12, bottom: 8)
-        package static let sheet = ContentInsets(horizontal: 22, top: 16, bottom: 16)
+        package static let sheet = ContentInsets(horizontal: 22, top: 16, bottom: 12)
     }
 
     package enum MethodSelection: Equatable {
@@ -29,23 +31,22 @@ package final class PaymentFormView: UIView {
     package var onApplePay: (() -> Void)?
     package var onContentSizeChange: (() -> Void)?
 
-    private let config: PaymentConfig
+    private var config: PaymentConfig
     private var state: SheetState
     private let contentInsets: ContentInsets
     private let contentStack = UIStackView()
     private let rootStack = UIStackView()
-    private let payButton = UIButton(type: .system)
-    private let payTitleLabel = UILabel()
-    private let coinMarkContainer = UIView()
-    private var coinMark: XCoinButtonMarkView?
+    private let payButton = PayCTAButton()
     private var cardForm: CardFormView?
     private var methodContainer: PaymentMethodContainerView?
     private var selection: MethodSelection
     private var isProcessing = false
+    private var isUpdatingOrder = false
     private var isOrderConsumed = false
     private var isEditingSavedCards = false
     private var pendingDeleteId: String?
     private var isDeletingSavedCard = false
+    private var poweredFooter: PoweredByFooterView?
     private var rootBottomConstraint: NSLayoutConstraint?
     /// Cached content height — never measure via `systemLayoutSizeFitting` inside
     /// `intrinsicContentSize` (re-entrant Auto Layout → EXC_BAD_ACCESS).
@@ -106,16 +107,40 @@ package final class PaymentFormView: UIView {
         rebuild()
     }
 
+    package func applyConfig(_ config: PaymentConfig) {
+        self.config = config
+        backgroundColor = theme.background
+        poweredFooter?.apply(theme: theme, locale: config.options.locale)
+        rebuild()
+        updatePayButtonAppearance()
+    }
+
     package func setProcessing(_ processing: Bool) {
         isProcessing = processing
-        isUserInteractionEnabled = !processing && !isOrderConsumed
+        syncInteractionEnabled()
+        updatePayButtonAppearance()
+    }
+
+    /// Locks Pay / wallet without swapping the title to “Processing...”.
+    /// Charge in flight uses ``setProcessing(_:)`` instead.
+    package func setUpdatingOrder(_ updating: Bool) {
+        isUpdatingOrder = updating
+        syncInteractionEnabled()
         updatePayButtonAppearance()
     }
 
     package func setOrderConsumed(_ consumed: Bool) {
         isOrderConsumed = consumed
-        isUserInteractionEnabled = !isProcessing && !consumed
+        syncInteractionEnabled()
         updatePayButtonAppearance()
+    }
+
+    private var interactionEnabled: Bool {
+        !isProcessing && !isUpdatingOrder && !isOrderConsumed
+    }
+
+    private func syncInteractionEnabled() {
+        isUserInteractionEnabled = interactionEnabled
     }
 
     package func preferredHeight(forWidth width: CGFloat) -> CGFloat {
@@ -149,9 +174,8 @@ package final class PaymentFormView: UIView {
         isMeasuringHeight = true
         defer { isMeasuringHeight = false }
 
-        let inner = max(width - contentInsets.horizontal * 2, 1)
         let rootHeight = rootStack.systemLayoutSizeFitting(
-            CGSize(width: inner, height: UIView.layoutFittingCompressedSize.height),
+            CGSize(width: max(width, 1), height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel
         ).height
@@ -159,6 +183,8 @@ package final class PaymentFormView: UIView {
     }
 
     private func rebuild() {
+        let draft = cardForm?.draft
+        let showingErrors = cardForm?.hasVisibleErrors ?? false
         contentStack.arrangedSubviews.forEach {
             contentStack.removeArrangedSubview($0)
             $0.removeFromSuperview()
@@ -166,6 +192,12 @@ package final class PaymentFormView: UIView {
         cardForm = nil
         methodContainer = nil
         buildContent()
+        if let draft {
+            cardForm?.restore(draft)
+        }
+        if showingErrors {
+            cardForm?.relocalizeVisibleErrors()
+        }
         applySelection(animated: false)
     }
 
@@ -178,44 +210,53 @@ package final class PaymentFormView: UIView {
         contentStack.translatesAutoresizingMaskIntoConstraints = false
 
         payButton.translatesAutoresizingMaskIntoConstraints = false
-        payButton.layer.cornerRadius = t.payButtonHeight / 2
-        payButton.heightAnchor.constraint(equalToConstant: t.payButtonHeight).isActive = true
-        payButton.addTarget(self, action: #selector(payTapped), for: .touchUpInside)
-        payButton.isHidden = !config.card.submitButton.visible
-        payButton.clipsToBounds = true
-
-        payTitleLabel.font = t.font(ofSize: 16, weight: .bold)
-        payTitleLabel.textAlignment = .center
-        payTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        payButton.addSubview(payTitleLabel)
-
-        coinMarkContainer.translatesAutoresizingMaskIntoConstraints = false
-        coinMarkContainer.isHidden = true
-        payButton.addSubview(coinMarkContainer)
-
-        NSLayoutConstraint.activate([
-            payTitleLabel.centerXAnchor.constraint(equalTo: payButton.centerXAnchor, constant: 12),
-            payTitleLabel.centerYAnchor.constraint(equalTo: payButton.centerYAnchor),
-
-            coinMarkContainer.trailingAnchor.constraint(equalTo: payTitleLabel.leadingAnchor, constant: -12),
-            coinMarkContainer.centerYAnchor.constraint(equalTo: payButton.centerYAnchor),
-            coinMarkContainer.widthAnchor.constraint(equalToConstant: 17),
-            coinMarkContainer.heightAnchor.constraint(equalToConstant: 17 * 418 / 539),
-        ])
+        payButton.onTap = { [weak self] in self?.payTapped() }
+        payButton.isHidden = hidesPayButton
+        payButton.apply(theme: t, title: "", processing: false, enabled: true)
 
         let powered = PoweredByFooterView(theme: t, locale: config.options.locale)
+        poweredFooter = powered
+
+        let contentWrap = UIView()
+        contentWrap.translatesAutoresizingMaskIntoConstraints = false
+        contentWrap.addSubview(contentStack)
+        NSLayoutConstraint.activate([
+            contentStack.topAnchor.constraint(equalTo: contentWrap.topAnchor),
+            contentStack.leadingAnchor.constraint(equalTo: contentWrap.leadingAnchor, constant: contentInsets.horizontal),
+            contentStack.trailingAnchor.constraint(equalTo: contentWrap.trailingAnchor, constant: -contentInsets.horizontal),
+            contentStack.bottomAnchor.constraint(equalTo: contentWrap.bottomAnchor),
+        ])
+
         let footerHairline = UIView()
         footerHairline.backgroundColor = t.footerBorder
         footerHairline.translatesAutoresizingMaskIntoConstraints = false
         footerHairline.heightAnchor.constraint(equalToConstant: 1).isActive = true
 
+        let footerInner = UIStackView(arrangedSubviews: [payButton, powered])
+        footerInner.axis = .vertical
+        footerInner.spacing = 10
+        footerInner.translatesAutoresizingMaskIntoConstraints = false
+
+        let footerWrap = UIView()
+        footerWrap.translatesAutoresizingMaskIntoConstraints = false
+        footerWrap.addSubview(footerHairline)
+        footerWrap.addSubview(footerInner)
+        NSLayoutConstraint.activate([
+            footerHairline.topAnchor.constraint(equalTo: footerWrap.topAnchor),
+            footerHairline.leadingAnchor.constraint(equalTo: footerWrap.leadingAnchor),
+            footerHairline.trailingAnchor.constraint(equalTo: footerWrap.trailingAnchor),
+            footerInner.topAnchor.constraint(equalTo: footerHairline.bottomAnchor, constant: 12),
+            footerInner.leadingAnchor.constraint(equalTo: footerWrap.leadingAnchor, constant: contentInsets.horizontal),
+            footerInner.trailingAnchor.constraint(equalTo: footerWrap.trailingAnchor, constant: -contentInsets.horizontal),
+            footerInner.bottomAnchor.constraint(equalTo: footerWrap.bottomAnchor),
+        ])
+
         rootStack.axis = .vertical
         rootStack.spacing = 0
         rootStack.alignment = .fill
-        [contentStack, footerHairline, payButton, powered].forEach { rootStack.addArrangedSubview($0) }
-        rootStack.setCustomSpacing(12, after: contentStack)
-        rootStack.setCustomSpacing(0, after: footerHairline)
-        rootStack.setCustomSpacing(10, after: payButton)
+        rootStack.addArrangedSubview(contentWrap)
+        rootStack.addArrangedSubview(footerWrap)
+        rootStack.setCustomSpacing(16, after: contentWrap)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(rootStack)
 
@@ -223,8 +264,8 @@ package final class PaymentFormView: UIView {
         rootBottomConstraint = bottom
         NSLayoutConstraint.activate([
             rootStack.topAnchor.constraint(equalTo: topAnchor, constant: contentInsets.top),
-            rootStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: contentInsets.horizontal),
-            rootStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -contentInsets.horizontal),
+            rootStack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            rootStack.trailingAnchor.constraint(equalTo: trailingAnchor),
             bottom,
         ])
 
@@ -232,7 +273,7 @@ package final class PaymentFormView: UIView {
     }
 
     package func applyBottomSafeArea(_ safeAreaBottom: CGFloat) {
-        let inset = max(contentInsets.bottom, safeAreaBottom)
+        let inset = contentInsets.bottom + safeAreaBottom
         let constant = -inset
         guard rootBottomConstraint?.constant != constant else { return }
         rootBottomConstraint?.constant = constant
@@ -264,6 +305,15 @@ package final class PaymentFormView: UIView {
                 applePayButton.cornerRadius = CGFloat(radius)
             } else {
                 applePayButton.cornerRadius = t.walletButtonHeight / 2
+            }
+            if t.isDark {
+                applePayButton.layer.shadowOpacity = 0
+            } else {
+                applePayButton.layer.shadowColor = UIColor(red: 22 / 255, green: 20 / 255, blue: 26 / 255, alpha: 1).cgColor
+                applePayButton.layer.shadowOpacity = 0.18
+                applePayButton.layer.shadowOffset = CGSize(width: 0, height: 6)
+                applePayButton.layer.shadowRadius = 9
+                applePayButton.layer.masksToBounds = false
             }
             contentStack.addArrangedSubview(applePayButton)
             contentStack.addArrangedSubview(
@@ -383,54 +433,38 @@ package final class PaymentFormView: UIView {
         }
     }
 
-    private func updatePayButtonAppearance() {
-        let t = theme
-
-        if isProcessing {
-            let processing = Strings.text("button.processing", locale: config.options.locale)
-            payTitleLabel.text = processing
-            payTitleLabel.textColor = t.primaryButtonText
-            payButton.backgroundColor = t.primaryButtonBackground
-            payButton.layer.borderWidth = t.primaryButtonBorderWidth
-            payButton.layer.borderColor = t.primaryButtonBorder.cgColor
-            payButton.isEnabled = false
-            payButton.alpha = 0.9
-            showCoinMark(color: t.primaryButtonText)
-            return
-        }
-
-        coinMarkContainer.isHidden = true
-        coinMark?.stopAnimating()
-        coinMark?.removeFromSuperview()
-        coinMark = nil
-
-        let amount = Strings.formatAmount(state.orderInfo.amount, currency: state.orderInfo.currency)
-        let title = Strings.submitButtonTitle(type: config.card.submitButton.type.rawValue, locale: config.options.locale, amount: amount)
-        payTitleLabel.text = title
-        payTitleLabel.textColor = t.primaryButtonText
-        payButton.backgroundColor = t.primaryButtonBackground
-        payButton.layer.borderWidth = t.primaryButtonBorderWidth
-        payButton.layer.borderColor = t.primaryButtonBorder.cgColor
-        payButton.isEnabled = !isOrderConsumed
-        payButton.alpha = isOrderConsumed ? 0.5 : 1.0
+    private var hidesPayButton: Bool {
+        // Sheet always shows Pay. `submitButton.visible` is Embedded-only.
+        contentInsets == .embedded && !config.card.submitButton.visible
     }
 
-    private func showCoinMark(color: UIColor) {
-        coinMark?.removeFromSuperview()
-        let mark = XCoinButtonMarkView(color: color)
-        mark.translatesAutoresizingMaskIntoConstraints = false
-        coinMarkContainer.addSubview(mark)
-        NSLayoutConstraint.activate([
-            mark.centerXAnchor.constraint(equalTo: coinMarkContainer.centerXAnchor),
-            mark.centerYAnchor.constraint(equalTo: coinMarkContainer.centerYAnchor),
-        ])
-        coinMarkContainer.isHidden = false
-        coinMark = mark
-        mark.startAnimating()
+    private func updatePayButtonAppearance() {
+        let t = theme
+        payButton.isHidden = hidesPayButton
+        if isProcessing {
+            let processing = Strings.text("button.processing", locale: config.options.locale)
+            payButton.apply(theme: t, title: processing, processing: true, enabled: false)
+            return
+        }
+        let amount = Strings.formatAmount(
+            state.orderInfo.amount,
+            currency: state.orderInfo.currency,
+            locale: config.options.locale
+        )
+        let title = Strings.submitButtonTitle(
+            type: config.card.submitButton.type.rawValue,
+            locale: config.options.locale,
+            amount: amount
+        )
+        payButton.apply(theme: t, title: title, processing: false, enabled: interactionEnabled)
+    }
+
+    package func confirm() {
+        payTapped()
     }
 
     @objc private func payTapped() {
-        guard !isProcessing, !isOrderConsumed else { return }
+        guard !isProcessing, !isOrderConsumed, isUserInteractionEnabled else { return }
         switch selection {
         case let .saved(id):
             guard let card = state.savedCards.first(where: { $0.id == id }) else { return }
@@ -443,7 +477,7 @@ package final class PaymentFormView: UIView {
     }
 
     @objc private func applePayTapped() {
-        guard !isProcessing, !isOrderConsumed else { return }
+        guard !isProcessing, !isOrderConsumed, isUserInteractionEnabled else { return }
         onApplePay?()
     }
 

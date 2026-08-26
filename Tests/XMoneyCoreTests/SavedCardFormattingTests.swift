@@ -4,20 +4,22 @@ import XCTest
 final class SavedCardFormattingTests: XCTestCase {
     func testSavedCardsSummarySubtitleJoinsDistinctIssuers() {
         let cards = [
-            SavedCard(id: "1", cardNumber: "•••• 1111", cardType: "visa", cardExpiryDate: "12/26", issuerName: "ING", cardBrand: "visa"),
-            SavedCard(id: "2", cardNumber: "•••• 5599", cardType: "mastercard", cardExpiryDate: "12/34", issuerName: "Revolut", cardBrand: "mastercard"),
-            SavedCard(id: "3", cardNumber: "•••• 7043", cardType: "visa", cardExpiryDate: "08/29", issuerName: "BCR", cardBrand: "visa"),
+            SavedCard(id: "1", cardNumber: "•••• 1111", cardType: "visa", cardExpiryDate: "12/26", bankName: "ING", cardBrand: "visa"),
+            SavedCard(id: "2", cardNumber: "•••• 5599", cardType: "mastercard", cardExpiryDate: "12/34", bankName: "Revolut", cardBrand: "mastercard"),
+            SavedCard(id: "3", cardNumber: "•••• 7043", cardType: "visa", cardExpiryDate: "08/29", bankName: "BCR", cardBrand: "visa"),
         ]
         XCTAssertEqual(SavedCardFormatting.savedCardsSummarySubtitle(cards), "ING, Revolut, BCR")
     }
 
     func testSavedCardDisplayNameFormatsIssuerAndMaskedNumber() {
-        let card = SavedCard(id: "1", cardNumber: "411111******1111", cardType: "visa", cardExpiryDate: "12/26", issuerName: "ING", cardBrand: "visa")
+        let card = SavedCard(id: "1", cardNumber: "411111******1111", cardType: "visa", cardExpiryDate: "12/26", bankName: "ING", cardBrand: "visa")
+        XCTAssertEqual(SavedCardFormatting.savedCardIssuerLabel(card), "ING")
+        XCTAssertEqual(SavedCardFormatting.savedCardMaskedNumber(card), "•••• 1111")
         XCTAssertEqual(SavedCardFormatting.savedCardDisplayName(card), "ING •••• 1111")
     }
 
     func testSavedCardMetaIncludesBrandAndExpiry() {
-        let card = SavedCard(id: "1", cardNumber: "•••• 1111", cardType: "visa", cardExpiryDate: "12/26", issuerName: "ING", cardBrand: "visa")
+        let card = SavedCard(id: "1", cardNumber: "•••• 1111", cardType: "visa", cardExpiryDate: "12/26", bankName: "ING", cardBrand: "visa")
         XCTAssertEqual(SavedCardFormatting.savedCardMeta(card, locale: "en-US"), "Visa · 12/26")
     }
 
@@ -28,14 +30,14 @@ final class SavedCardFormattingTests: XCTestCase {
             cardType: "visa",
             cardExpiryDate: "12/26",
             isDefault: true,
-            issuerName: "ING",
+            bankName: "ING",
             cardBrand: "visa"
         )
         XCTAssertEqual(SavedCardFormatting.savedCardMeta(card, locale: "en-US"), "Visa · 12/26 · Default")
     }
 
     func testSavedCardBrandForIconUsesNetworkBrandNotIssuer() {
-        let card = SavedCard(id: "1", cardNumber: "•••• 1111", cardType: "visa", cardExpiryDate: "12/26", issuerName: "ING", cardBrand: "visa")
+        let card = SavedCard(id: "1", cardNumber: "•••• 1111", cardType: "visa", cardExpiryDate: "12/26", bankName: "ING", cardBrand: "visa")
         XCTAssertEqual(SavedCardFormatting.savedCardBrandForIcon(card), "visa")
     }
 

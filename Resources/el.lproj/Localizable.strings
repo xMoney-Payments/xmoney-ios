@@ -17,7 +17,7 @@
 "elements.saveCard" = "Αποθήκευση κάρτας για μελλοντική χρήση";
 "placeholder.cardNumber" = "0000 - 0000 - 0000 - 0000";
 "placeholder.expDate" = "ΜΜ / ΕΕ";
-"placeholder.cvv" = "000";
+"placeholder.cvv" = "cvv";
 "placeholder.cardholderName" = "Πλήρες όνομα στην κάρτα";
 "errors.cardNumberRequired" = "Ο αριθμός κάρτας είναι υποχρεωτικός.";
 "errors.cardNumberUnsupported" = "Ο τύπος κάρτας δεν υποστηρίζεται.";

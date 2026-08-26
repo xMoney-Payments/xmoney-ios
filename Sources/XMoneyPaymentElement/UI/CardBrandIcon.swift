@@ -1,5 +1,7 @@
 import UIKit
+#if canImport(XMoneyCore)
 import XMoneyCore
+#endif
 
 package enum CardBrandIconSize {
     case fieldTrailing
@@ -11,6 +13,7 @@ package final class CardBrandIcon: UIImageView {
     private var widthConstraint: NSLayoutConstraint?
     private var heightConstraint: NSLayoutConstraint?
     private var mutedTint: UIColor = UIColor(red: 22 / 255, green: 20 / 255, blue: 26 / 255, alpha: 0.32)
+    private var currentBrand: String?
 
     package init(size: CardBrandIconSize = .fieldTrailing) {
         super.init(frame: .zero)
@@ -29,12 +32,17 @@ package final class CardBrandIcon: UIImageView {
 
     func setMutedTint(_ color: UIColor) {
         mutedTint = color
-        if image?.renderingMode == .alwaysTemplate {
+        if currentBrand?.lowercased() != "visa", image?.renderingMode == .alwaysTemplate {
             tintColor = color
         }
     }
 
-    package func setBrand(_ brand: String?, size: CardBrandIconSize = .fieldTrailing) {
+    package func setBrand(
+        _ brand: String?,
+        size: CardBrandIconSize = .fieldTrailing,
+        visaTint: UIColor? = nil
+    ) {
+        currentBrand = brand
         let named: String
         let useTemplate: Bool
         let dimensions: (width: CGFloat, height: CGFloat)
@@ -46,7 +54,7 @@ package final class CardBrandIcon: UIImageView {
             dimensions = Self.mastercardSize(size)
         case "visa":
             named = "card-visa"
-            useTemplate = false
+            useTemplate = true
             dimensions = Self.visaSize(size)
         default:
             named = "card-generic"
@@ -60,7 +68,11 @@ package final class CardBrandIcon: UIImageView {
         let base = EmbeddedAssets.image(named: named, traitCollection: traitCollection)
         if useTemplate {
             image = base?.withRenderingMode(.alwaysTemplate)
-            tintColor = mutedTint
+            if brand?.lowercased() == "visa" {
+                tintColor = visaTint ?? UIColor(red: 0x14 / 255, green: 0x34 / 255, blue: 0xCB / 255, alpha: 1)
+            } else {
+                tintColor = mutedTint
+            }
         } else {
             image = base?.withRenderingMode(.alwaysOriginal)
             tintColor = nil

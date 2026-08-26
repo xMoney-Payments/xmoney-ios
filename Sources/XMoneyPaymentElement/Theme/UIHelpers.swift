@@ -1,5 +1,7 @@
 import UIKit
+#if canImport(XMoneyCore)
 import XMoneyCore
+#endif
 
 package enum UIHelpers {
     package static func isDarkMode(config: PaymentConfig, traitCollection: UITraitCollection?) -> Bool {

@@ -1,6 +1,8 @@
 import UIKit
+#if canImport(XMoneyCore)
 import XMoneyCore
 import XMoneyPaymentElement
+#endif
 
 package protocol PaymentSheetViewControllerDelegate: AnyObject {
     func sheetDidTapPayWithCard(_ input: CardInput)
@@ -68,25 +70,15 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
     }
 
     package var preferredSheetHeight: CGFloat {
-        let width = view.bounds.width > 0 ? view.bounds.width : UIScreen.main.bounds.width
-        guard let formView else { return 280 }
-
-        formView.applyBottomSafeArea(view.safeAreaInsets.bottom)
-
-        let targetWidth = max(1, width)
-        let formHeight = formView.preferredHeight(forWidth: targetWidth)
-
-        let headerChrome: CGFloat = 8 + 36
-        return ceil(headerChrome + formHeight)
+        // Grabber 16 (10+4+2) + 6 gap + 36 close row.
+        let headerChrome: CGFloat = 16 + 6 + 36
+        return ceil(headerChrome + (formView?.contentHeight ?? 280))
     }
 
     package func invalidateSheetHeight() {
         guard !isInvalidatingHeight else { return }
         isInvalidatingHeight = true
         defer { isInvalidatingHeight = false }
-
-        view.layoutIfNeeded()
-        formView?.layoutIfNeeded()
 
         let height = preferredSheetHeight
         guard abs(height - lastReportedHeight) > 1 else { return }
@@ -105,42 +97,18 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
     private func buildLayout() {
         let t = theme
 
-        let handle = UIView()
-        handle.backgroundColor = t.componentBorder
-        handle.layer.cornerRadius = 2
-        handle.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            handle.widthAnchor.constraint(equalToConstant: 38),
-            handle.heightAnchor.constraint(equalToConstant: 4),
-        ])
+        let grabber = GrabberView(theme: t)
 
-        let close = UIButton(type: .system)
-        close.setTitle("✕", for: .normal)
-        close.titleLabel?.font = t.font(ofSize: 13, weight: .semibold)
-        close.setTitleColor(t.primaryText, for: .normal)
-        close.backgroundColor = t.neutralChip
-        close.layer.cornerRadius = 18
-        close.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            close.widthAnchor.constraint(equalToConstant: 36),
-            close.heightAnchor.constraint(equalToConstant: 36),
-        ])
+        let close = CircleCloseButton(theme: t)
         close.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
         closeButton = close
 
-        let header = UIStackView(arrangedSubviews: [UIView(), handle, UIView()])
-        header.axis = .horizontal
-        header.alignment = .center
         let headerRow = UIView()
-        header.translatesAutoresizingMaskIntoConstraints = false
-        close.translatesAutoresizingMaskIntoConstraints = false
-        headerRow.addSubview(header)
+        headerRow.translatesAutoresizingMaskIntoConstraints = false
         headerRow.addSubview(close)
         NSLayoutConstraint.activate([
-            header.centerXAnchor.constraint(equalTo: headerRow.centerXAnchor),
-            header.centerYAnchor.constraint(equalTo: headerRow.centerYAnchor),
             headerRow.heightAnchor.constraint(equalToConstant: 36),
-            close.trailingAnchor.constraint(equalTo: headerRow.trailingAnchor, constant: -22),
+            close.leadingAnchor.constraint(equalTo: headerRow.leadingAnchor, constant: 20),
             close.centerYAnchor.constraint(equalTo: headerRow.centerYAnchor),
         ])
 
@@ -173,12 +141,14 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
 
         chromeStack.axis = .vertical
         chromeStack.spacing = 0
+        chromeStack.addArrangedSubview(grabber)
+        chromeStack.setCustomSpacing(6, after: grabber)
         chromeStack.addArrangedSubview(headerRow)
         chromeStack.addArrangedSubview(scrollView)
         chromeStack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(chromeStack)
         NSLayoutConstraint.activate([
-            chromeStack.topAnchor.constraint(equalTo: view.topAnchor, constant: 8),
+            chromeStack.topAnchor.constraint(equalTo: view.topAnchor),
             chromeStack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             chromeStack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             chromeStack.bottomAnchor.constraint(equalTo: view.bottomAnchor),

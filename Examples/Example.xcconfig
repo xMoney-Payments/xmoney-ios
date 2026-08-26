@@ -1,0 +1,9 @@
+// Defaults. Copy Secrets.xcconfig.example → Secrets.xcconfig to override.
+PUBLIC_KEY = pk_test_replace_me
+API_KEY =
+API_HOST = demo.xmoney.com
+CURRENCY = EUR
+DESCRIPTION = Embeddable Configuration - Payment Card
+MERCHANT_IDENTIFIER = merchant.com.example
+
+#include? "Secrets.xcconfig"

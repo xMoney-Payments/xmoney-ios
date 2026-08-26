@@ -19,7 +19,7 @@ package enum SavedCardFormatting {
 
     package static func savedCardMeta(_ card: SavedCard, locale: String) -> String {
         let brand = savedCardBrandLabel(card)
-        let expiry = card.cardExpiryDate?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let expiry = card.cardExpiryDate?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
         let base = expiry.isEmpty ? brand : "\(brand) · \(expiry)"
         if card.isDefault {
             return "\(base) · \(Strings.text("sheet.default", locale: locale))"
@@ -31,27 +31,44 @@ package enum SavedCardFormatting {
         savedCardNetworkBrand(card)
     }
 
-    // MARK: - Private
-
-    private static func savedCardIssuerLabel(_ card: SavedCard) -> String {
-        if let issuer = card.issuerName?.trimmingCharacters(in: .whitespacesAndNewlines), !issuer.isEmpty {
-            return issuer
+    package static func savedCardIssuerLabel(_ card: SavedCard) -> String {
+        if let bank = card.bankName?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines), !bank.isEmpty {
+            return bank
         }
-        if let cardType = card.cardType?.trimmingCharacters(in: .whitespacesAndNewlines),
+        if let cardType = card.cardType?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
            !cardType.isEmpty,
            !isKnownCardBrand(cardType) {
             return cardType
         }
-        let masked = card.cardNumber?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let masked = card.cardNumber?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
         if !masked.isEmpty {
             let prefix = masked.prefix { char in
                 char != "•" && char != "*" && !char.isNumber
             }
-            let trimmed = String(prefix).trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = String(prefix).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
             if !trimmed.isEmpty { return trimmed }
         }
         return "Card"
     }
+
+    package static func savedCardMaskedNumber(_ card: SavedCard) -> String {
+        let raw = card.cardNumber?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines) ?? ""
+        if raw.isEmpty { return "••••" }
+
+        if let regex = try? NSRegularExpression(pattern: "[•*]{4}\\s*(\\d{4})"),
+           let match = regex.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
+           let range = Range(match.range(at: 1), in: raw) {
+            return "•••• \(raw[range])"
+        }
+
+        let digits = raw.filter { $0.isNumber }
+        if digits.count >= 4 {
+            return "•••• \(digits.suffix(4))"
+        }
+        return raw
+    }
+
+    // MARK: - Private
 
     private static func savedCardBrandLabel(_ card: SavedCard) -> String {
         guard let brand = savedCardNetworkBrand(card) else { return "Card" }
@@ -66,10 +83,10 @@ package enum SavedCardFormatting {
     }
 
     private static func savedCardNetworkBrand(_ card: SavedCard) -> String? {
-        if let brand = card.cardBrand?.trimmingCharacters(in: .whitespacesAndNewlines), !brand.isEmpty {
+        if let brand = card.cardBrand?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines), !brand.isEmpty {
             return brand
         }
-        if let cardType = card.cardType?.trimmingCharacters(in: .whitespacesAndNewlines),
+        if let cardType = card.cardType?.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines),
            !cardType.isEmpty,
            isKnownCardBrand(cardType) {
             return cardType
@@ -77,25 +94,8 @@ package enum SavedCardFormatting {
         return nil
     }
 
-    static func savedCardMaskedNumber(_ card: SavedCard) -> String {
-        let raw = card.cardNumber?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if raw.isEmpty { return "••••" }
-
-        if let regex = try? NSRegularExpression(pattern: "[•*]{4}\\s*(\\d{4})"),
-           let match = regex.firstMatch(in: raw, range: NSRange(raw.startIndex..., in: raw)),
-           let range = Range(match.range(at: 1), in: raw) {
-            return "•••• \(raw[range])"
-        }
-
-        let digits = raw.filter(\.isNumber)
-        if digits.count >= 4 {
-            return "•••• \(digits.suffix(4))"
-        }
-        return raw
-    }
-
     package static func isKnownCardBrand(_ value: String) -> Bool {
-        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalized = value.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines).lowercased()
         return [
             "visa",
             "mastercard",

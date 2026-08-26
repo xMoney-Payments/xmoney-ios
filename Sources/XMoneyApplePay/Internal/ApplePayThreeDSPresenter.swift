@@ -1,5 +1,7 @@
 import UIKit
+#if canImport(XMoneyCore)
 import XMoneyCore
+#endif
 
 final class ApplePayThreeDSPresenter: ThreeDSPresenter {
     private weak var host: UIViewController?

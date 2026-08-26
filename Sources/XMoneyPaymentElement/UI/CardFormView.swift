@@ -1,5 +1,7 @@
 import UIKit
+#if canImport(XMoneyCore)
 import XMoneyCore
+#endif
 
 package final class CardFormView: UIView, UITextFieldDelegate {
     package struct Configuration {
@@ -14,7 +16,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         package init(
             showSaveOptIn: Bool,
             showCardDetailsCaption: Bool = false,
-            validationMode: PaymentConfig.ValidationMode = .onChange,
+            validationMode: PaymentConfig.ValidationMode = .onTouched,
             locale: String = "en-US",
             grouping: PaymentConfig.CardGrouping = .condensed
         ) {
@@ -27,7 +29,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
     }
 
     private enum Field: CaseIterable {
-        case holder, number, expiry, cvv
+        case number, expiry, cvv, holder
     }
 
     private struct FieldUI {
@@ -43,6 +45,14 @@ package final class CardFormView: UIView, UITextFieldDelegate {
     package var onContentSizeChange: (() -> Void)?
 
     private var showErrors = false
+    private var displayedErrors: [Field: CardFieldValidators.FieldError] = [:]
+
+    private enum RevalidateTrigger {
+        case change
+        case blur
+        case submit
+        case layout
+    }
 
     private let outerStack = UIStackView()
     private let captionLabel = UILabel()
@@ -53,7 +63,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
     private var spacedErrorLabels: [Field: UILabel] = [:]
     private var spacedBoxes: [Field: UIView] = [:]
     private let brandIcon = CardBrandIcon(size: .fieldTrailing)
-    private let lockIconView = LockIconView()
+    private let cvvIconView = CvvIconView()
     private var saveCheckbox: CheckboxControl?
     private let errorOverlay = UIView()
 
@@ -69,7 +79,8 @@ package final class CardFormView: UIView, UITextFieldDelegate {
 
     package func resetErrors() {
         showErrors = false
-        revalidate(changedField: nil)
+        displayedErrors = [:]
+        revalidate(changedField: nil, trigger: .layout)
     }
 
     package var currentInput: CardInput {
@@ -84,8 +95,51 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         )
     }
 
+    package struct Draft {
+        package var numberText: String
+        package var expiryText: String
+        package var cvvText: String
+        package var holderText: String
+        package var saveCard: Bool
+        package var showErrors: Bool
+    }
+
+    package var draft: Draft {
+        Draft(
+            numberText: fields[.number]?.field.text ?? "",
+            expiryText: fields[.expiry]?.field.text ?? "",
+            cvvText: fields[.cvv]?.field.text ?? "",
+            holderText: fields[.holder]?.field.text ?? "",
+            saveCard: saveCheckbox?.isChecked ?? false,
+            showErrors: showErrors
+        )
+    }
+
+    package func restore(_ draft: Draft) {
+        fields[.number]?.field.text = draft.numberText
+        fields[.expiry]?.field.text = draft.expiryText
+        fields[.cvv]?.field.text = draft.cvvText
+        fields[.holder]?.field.text = draft.holderText
+        saveCheckbox?.setChecked(draft.saveCard, animated: false)
+        if let number = fields[.number]?.field {
+            let result = CardFieldValidators.formatCardNumber(number.text ?? "")
+            number.text = result.formatted
+            brandIcon.setBrand(result.brand, visaTint: theme.visaTint)
+        }
+        if draft.showErrors {
+            _ = validateAndShowErrors()
+        }
+    }
+
+    package var hasVisibleErrors: Bool { hasVisibleErrorLabels() }
+
+    package func relocalizeVisibleErrors() {
+        guard hasVisibleErrors else { return }
+        revalidate(changedField: nil, trigger: .submit)
+    }
+
     package var isValid: Bool {
-        validateAll(markTouched: false).isEmpty
+        validateAll().isEmpty
     }
 
     package var isReady: Bool {
@@ -115,7 +169,17 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             captionLabel.text = Strings.text("sheet.cardDetails", locale: config.locale)
             captionLabel.font = theme.font(ofSize: 13, weight: .semibold)
             captionLabel.textColor = theme.primaryText.withAlphaComponent(0.45)
-            outerStack.addArrangedSubview(captionLabel)
+            let captionWrap = UIView()
+            captionLabel.translatesAutoresizingMaskIntoConstraints = false
+            captionWrap.addSubview(captionLabel)
+            NSLayoutConstraint.activate([
+                captionLabel.topAnchor.constraint(equalTo: captionWrap.topAnchor),
+                captionLabel.leadingAnchor.constraint(equalTo: captionWrap.leadingAnchor, constant: 2),
+                captionLabel.trailingAnchor.constraint(equalTo: captionWrap.trailingAnchor),
+                captionLabel.bottomAnchor.constraint(equalTo: captionWrap.bottomAnchor),
+            ])
+            outerStack.addArrangedSubview(captionWrap)
+            outerStack.setCustomSpacing(9, after: captionWrap)
         }
 
         if config.isSpaced {
@@ -151,10 +215,10 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             row.translatesAutoresizingMaskIntoConstraints = false
             saveRow.addSubview(row)
             NSLayoutConstraint.activate([
-                row.topAnchor.constraint(equalTo: saveRow.topAnchor, constant: 6),
-                row.leadingAnchor.constraint(equalTo: saveRow.leadingAnchor),
+                row.topAnchor.constraint(equalTo: saveRow.topAnchor, constant: 12),
+                row.leadingAnchor.constraint(equalTo: saveRow.leadingAnchor, constant: 2),
                 row.trailingAnchor.constraint(lessThanOrEqualTo: saveRow.trailingAnchor),
-                row.bottomAnchor.constraint(equalTo: saveRow.bottomAnchor),
+                row.bottomAnchor.constraint(equalTo: saveRow.bottomAnchor, constant: -12),
             ])
             saveRow.addAction(UIAction { [weak checkbox] _ in
                 checkbox?.sendActions(for: .touchUpInside)
@@ -199,11 +263,11 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             containerStack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
 
-        containerStack.addArrangedSubview(makeHolderRow())
-        containerStack.addArrangedSubview(makeDivider())
         containerStack.addArrangedSubview(makeNumberRow())
         containerStack.addArrangedSubview(makeDivider())
         containerStack.addArrangedSubview(makeExpCvvRow())
+        containerStack.addArrangedSubview(makeDivider())
+        containerStack.addArrangedSubview(makeHolderRow())
     }
 
     private func setupSpacedFields() {
@@ -213,11 +277,6 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         spaced.translatesAutoresizingMaskIntoConstraints = false
         outerStack.addArrangedSubview(spaced)
 
-        spaced.addArrangedSubview(makeSpacedLabeledField(
-            field: .holder,
-            titleKey: "elements.cardholderName",
-            content: makeHolderRow()
-        ))
         spaced.addArrangedSubview(makeSpacedLabeledField(
             field: .number,
             titleKey: "elements.cardNumber",
@@ -239,6 +298,11 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             content: makeStandaloneCvvRow()
         ))
         spaced.addArrangedSubview(expCvvRow)
+        spaced.addArrangedSubview(makeSpacedLabeledField(
+            field: .holder,
+            titleKey: "elements.cardholderName",
+            content: makeHolderRow()
+        ))
     }
 
     private func makeSpacedLabeledField(field: Field, titleKey: String, content: UIView) -> UIView {
@@ -368,19 +432,19 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             keyboard: .numberPad,
             secure: false
         )
-        lockIconView.iconColor = theme.mutedIcon
-        lockIconView.isUserInteractionEnabled = false
-        lockIconView.translatesAutoresizingMaskIntoConstraints = false
+        cvvIconView.iconColor = theme.mutedIcon
+        cvvIconView.isUserInteractionEnabled = false
+        cvvIconView.translatesAutoresizingMaskIntoConstraints = false
 
         row.addSubview(textField)
-        row.addSubview(lockIconView)
+        row.addSubview(cvvIconView)
         NSLayoutConstraint.activate([
-            lockIconView.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -14),
-            lockIconView.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            lockIconView.widthAnchor.constraint(equalToConstant: 19),
-            lockIconView.heightAnchor.constraint(equalToConstant: 20),
+            cvvIconView.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -14),
+            cvvIconView.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            cvvIconView.widthAnchor.constraint(equalToConstant: 20),
+            cvvIconView.heightAnchor.constraint(equalToConstant: 20),
             textField.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
-            textField.trailingAnchor.constraint(equalTo: lockIconView.leadingAnchor, constant: -10),
+            textField.trailingAnchor.constraint(equalTo: cvvIconView.leadingAnchor, constant: -10),
             textField.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             textField.heightAnchor.constraint(equalTo: row.heightAnchor),
         ])
@@ -418,20 +482,20 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             keyboard: .numberPad,
             secure: false
         )
-        lockIconView.iconColor = theme.mutedIcon
-        lockIconView.isUserInteractionEnabled = false
-        lockIconView.translatesAutoresizingMaskIntoConstraints = false
+        cvvIconView.iconColor = theme.mutedIcon
+        cvvIconView.isUserInteractionEnabled = false
+        cvvIconView.translatesAutoresizingMaskIntoConstraints = false
 
         cvvContainer.addSubview(cvvField)
-        cvvContainer.addSubview(lockIconView)
+        cvvContainer.addSubview(cvvIconView)
         cvvField.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            lockIconView.trailingAnchor.constraint(equalTo: cvvContainer.trailingAnchor, constant: -14),
-            lockIconView.centerYAnchor.constraint(equalTo: cvvContainer.centerYAnchor),
-            lockIconView.widthAnchor.constraint(equalToConstant: 19),
-            lockIconView.heightAnchor.constraint(equalToConstant: 20),
+            cvvIconView.trailingAnchor.constraint(equalTo: cvvContainer.trailingAnchor, constant: -14),
+            cvvIconView.centerYAnchor.constraint(equalTo: cvvContainer.centerYAnchor),
+            cvvIconView.widthAnchor.constraint(equalToConstant: 20),
+            cvvIconView.heightAnchor.constraint(equalToConstant: 20),
             cvvField.leadingAnchor.constraint(equalTo: cvvContainer.leadingAnchor, constant: 14),
-            cvvField.trailingAnchor.constraint(equalTo: lockIconView.leadingAnchor, constant: -10),
+            cvvField.trailingAnchor.constraint(equalTo: cvvIconView.leadingAnchor, constant: -10),
             cvvField.centerYAnchor.constraint(equalTo: cvvContainer.centerYAnchor),
             cvvField.heightAnchor.constraint(equalTo: cvvContainer.heightAnchor),
         ])
@@ -491,13 +555,13 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         if field === fields[.number]?.field {
             let result = CardFieldValidators.formatCardNumber(field.text ?? "")
             field.text = result.formatted
-            brandIcon.setBrand(result.brand)
+            brandIcon.setBrand(result.brand, visaTint: theme.visaTint)
         } else if field === fields[.expiry]?.field {
             field.text = CardFieldValidators.formatExpiry(field.text ?? "")
         } else if field === fields[.cvv]?.field {
             field.text = String(CardFieldValidators.normalizeDigits(field.text ?? "").prefix(4))
         }
-        revalidate(changedField: fieldFor(textField: field))
+        revalidate(changedField: fieldFor(textField: field), trigger: .change)
         onValidationChange?(isReady)
     }
 
@@ -507,28 +571,61 @@ package final class CardFormView: UIView, UITextFieldDelegate {
 
     private var lastErrorVisible = false
 
-    private func revalidate(changedField: Field?, forceAll: Bool = false) {
-        let errors = validateAll(markTouched: false)
-        updateContainerBorder(errors: errors)
-        let errorVisible = hasVisibleErrorLabels(errors: errors)
-        updateErrorLabels(errors: errors)
+    private func revalidate(changedField: Field?, trigger: RevalidateTrigger) {
+        let current = validateAll()
+        updateDisplayedErrors(current: current, changedField: changedField, trigger: trigger)
+        updateContainerBorder()
+        let errorVisible = hasVisibleErrorLabels()
+        updateErrorLabels()
         if errorVisible != lastErrorVisible {
             lastErrorVisible = errorVisible
             notifyContentSizeChangeIfNeeded()
         }
     }
 
-    private func hasVisibleErrorLabels(errors: [Field: CardFieldValidators.FieldError]) -> Bool {
-        if config.isSpaced {
-            return Field.allCases.contains { errors[$0] != nil && shouldShowError(for: $0) }
+    private func updateDisplayedErrors(
+        current: [Field: CardFieldValidators.FieldError],
+        changedField: Field?,
+        trigger: RevalidateTrigger
+    ) {
+        switch trigger {
+        case .submit:
+            displayedErrors = current
+        case .blur:
+            if let field = changedField {
+                displayedErrors[field] = current[field]
+            }
+        case .change:
+            for field in Field.allCases {
+                if CardValidationDisplay.shouldRefreshDisplayedErrorOnChange(
+                    mode: config.validationMode,
+                    fieldBlurred: fields[field]?.blurred ?? false,
+                    submitAttempted: showErrors
+                ) {
+                    displayedErrors[field] = current[field]
+                }
+            }
+        case .layout:
+            break
         }
-        return firstVisibleError(in: errors) != nil
     }
 
-    private func updateContainerBorder(errors: [Field: CardFieldValidators.FieldError]) {
+    private func visibleError(for field: Field) -> CardFieldValidators.FieldError? {
+        guard shouldShowError(for: field) else { return nil }
+        return displayedErrors[field]
+    }
+
+    private func hasVisibleErrorLabels() -> Bool {
+        if config.isSpaced {
+            return Field.allCases.contains { visibleError(for: $0) != nil }
+        }
+        return firstVisibleError() != nil
+    }
+
+    private func updateContainerBorder() {
         if config.isSpaced {
             for (field, box) in spacedBoxes {
-                let hasVisibleError = errors[field] != nil && shouldShowError(for: field)
+                let hasVisibleError = visibleError(for: field) != nil
                 let focused = fields[field]?.focused ?? false
                 if hasVisibleError {
                     box.layer.borderWidth = 1.5
@@ -544,7 +641,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             return
         }
 
-        let hasVisibleError = firstVisibleError(in: errors) != nil
+        let hasVisibleError = firstVisibleError() != nil
         let anyFocused = fields.values.contains(where: \.focused)
         errorOverlay.isHidden = !hasVisibleError
         if hasVisibleError {
@@ -561,17 +658,15 @@ package final class CardFormView: UIView, UITextFieldDelegate {
 
     private static let errorDisplayOrder: [Field] = [.number, .expiry, .cvv, .holder]
 
-    private func firstVisibleError(in errors: [Field: CardFieldValidators.FieldError]) -> Field? {
-        Self.errorDisplayOrder.first { field in
-            errors[field] != nil && shouldShowError(for: field)
-        }
+    private func firstVisibleError() -> Field? {
+        Self.errorDisplayOrder.first { visibleError(for: $0) != nil }
     }
 
-    private func updateErrorLabels(errors: [Field: CardFieldValidators.FieldError]) {
+    private func updateErrorLabels() {
         if config.isSpaced {
             for field in Field.allCases {
                 guard let label = spacedErrorLabels[field] else { continue }
-                if let error = errors[field], shouldShowError(for: field) {
+                if let error = visibleError(for: field) {
                     label.text = error.localizedMessage(locale: config.locale)
                     label.isHidden = false
                 } else {
@@ -587,7 +682,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             $0.removeFromSuperview()
         }
 
-        if let field = firstVisibleError(in: errors), let error = errors[field] {
+        if let field = firstVisibleError(), let error = visibleError(for: field) {
             let row = ErrorRowView(message: error.localizedMessage(locale: config.locale), theme: theme)
             errorsStack.addArrangedSubview(row)
         }
@@ -595,13 +690,14 @@ package final class CardFormView: UIView, UITextFieldDelegate {
 
     private func shouldShowError(for field: Field) -> Bool {
         guard fields[field] != nil else { return false }
-        if config.validationMode == .onSubmit {
-            return showErrors
-        }
-        return showErrors || (fields[field]?.blurred ?? false)
+        return CardValidationDisplay.shouldShowError(
+            mode: config.validationMode,
+            fieldBlurred: fields[field]?.blurred ?? false,
+            submitAttempted: showErrors
+        )
     }
 
-    private func validateAll(markTouched: Bool) -> [Field: CardFieldValidators.FieldError] {
+    private func validateAll() -> [Field: CardFieldValidators.FieldError] {
         let input = currentInput
         var errors: [Field: CardFieldValidators.FieldError] = [:]
         if let err = CardFieldValidators.validateCardNumber(input.number) { errors[.number] = err }
@@ -618,18 +714,12 @@ package final class CardFormView: UIView, UITextFieldDelegate {
     @discardableResult
     package func validateAndShowErrors() -> Bool {
         showErrors = true
-        revalidate(changedField: nil)
+        revalidate(changedField: nil, trigger: .submit)
         onValidationChange?(isReady)
         return isValid
     }
 
-    private var lastNotifiedHeight: CGFloat = 0
-
     private func notifyContentSizeChangeIfNeeded() {
-        layoutIfNeeded()
-        let height = systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).height
-        guard abs(height - lastNotifiedHeight) > 0.5 else { return }
-        lastNotifiedHeight = height
         onContentSizeChange?()
     }
 
@@ -639,7 +729,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         guard let field = fieldFor(textField: textField), var ui = fields[field] else { return }
         ui.focused = true
         fields[field] = ui
-        revalidate(changedField: field)
+        revalidate(changedField: field, trigger: .layout)
     }
 
     package func textFieldDidEndEditing(_ textField: UITextField) {
@@ -647,7 +737,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         ui.focused = false
         ui.blurred = true
         fields[field] = ui
-        revalidate(changedField: field)
+        revalidate(changedField: field, trigger: .blur)
         onValidationChange?(isReady)
     }
 

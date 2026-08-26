@@ -85,16 +85,22 @@ package final class PaymentEngine {
 
         let orderInfo = OrderPayloadDecoder.info(from: intent.orderPayload)
 
-        async let siteConfigTask = try? configService.getSiteConfig(sessionToken: sessionToken)
+        let token = sessionToken
         let showSavedCards = configuration.card.savedCards.enabled
             && !orderInfo.isVerifyCard
             && !orderInfo.isRecurring
-        async let savedCardsTask = showSavedCards
-            ? ((try? cards.getCards(sessionToken: sessionToken)) ?? [])
-            : []
+
+        // `async let x = try? foo()` crashes the Swift 5.10 runtime (Xcode 16 CI).
+        async let siteConfigTask: SiteConfig = {
+            (try? await self.configService.getSiteConfig(sessionToken: token)) ?? SiteConfig()
+        }()
+        async let savedCardsTask: [SavedCard] = {
+            guard showSavedCards else { return [] }
+            return (try? await self.cards.getCards(sessionToken: token)) ?? []
+        }()
         async let applePayParamsTask = fetchApplePayParamsIfEnabled()
 
-        let siteConfig = await siteConfigTask ?? SiteConfig()
+        let siteConfig = await siteConfigTask
         let savedCards = await savedCardsTask
         let applePayParams = await applePayParamsTask
         nameCheckValidationEnabled = siteConfig.nameCheckValidationEnabled

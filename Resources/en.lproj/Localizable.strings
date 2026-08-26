@@ -17,8 +17,8 @@
 "elements.saveCard" = "Save Card for Future Use";
 "placeholder.cardNumber" = "0000 - 0000 - 0000 - 0000";
 "placeholder.expDate" = "MM / YY";
-"placeholder.cvv" = "000";
-"placeholder.cardholderName" = "Full name on card";
+"placeholder.cvv" = "cvv";
+"placeholder.cardholderName" = "Name on card";
 "errors.cardNumberRequired" = "Card number is required.";
 "errors.cardNumberUnsupported" = "Card type is not supported.";
 "errors.cardNumberTooShort" = "Card number is too short.";

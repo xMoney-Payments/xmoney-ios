@@ -1,6 +1,8 @@
 import Foundation
 import PassKit
+#if canImport(XMoneyCore)
 import XMoneyCore
+#endif
 
 package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerDelegate, DigitalWalletAuthorizing {
     private let engine: PaymentEngine
@@ -59,6 +61,13 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
                 }
             }
         }
+    }
+
+    /// Dismisses the authorization controller before the user authorizes.
+    /// No-op after authorize (token submit / 3DS), matching Payment Sheet.
+    package func dismiss() {
+        guard !didAuthorizePayment else { return }
+        controller?.dismiss()
     }
 
     private func buildRequest(

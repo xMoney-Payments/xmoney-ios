@@ -1,6 +1,9 @@
 import UIKit
+#if canImport(XMoneyCore)
 @_exported import XMoneyCore
+#endif
 
+@MainActor
 public final class ApplePay {
     private let configuration: PaymentConfig
     private let onResult: (PaymentResult) -> Void
@@ -10,13 +13,16 @@ public final class ApplePay {
     private var applePayHandler: ApplePayHandler?
 
     private var consumedOrderKey: String?
+    private var dismissRequested = false
+    private var payableIntent: PaymentIntent?
+    private var isUpdatingOrder = false
 
     /// True after COMPLETE, FAILED, or post-submit CANCELED for the current order.
     /// Binding a new order via ``present(from:intent:onEvent:)`` clears this.
     public private(set) var isOrderConsumed = false
 
     public var isInteractionEnabled: Bool {
-        !isProcessing && !isOrderConsumed
+        !isProcessing && !isOrderConsumed && !isUpdatingOrder
     }
 
     public static func register() {
@@ -32,14 +38,34 @@ public final class ApplePay {
         self.onResult = onResult
     }
 
+    /// Validates and stores `intent` as the next payable order. Pay is locked until this returns.
+    public func updateOrder(intent: PaymentIntent) async throws {
+        guard !isProcessing else {
+            throw PaymentError.payment("Payment in progress")
+        }
+        isUpdatingOrder = true
+        defer { isUpdatingOrder = false }
+        var config = configuration
+        config.paymentMethods.applePay.enabled = true
+        let session = try PaymentSession(configuration: config, intent: intent)
+        _ = try await session.bind(intent: intent)
+        payableIntent = intent
+        let key = "\(intent.orderPayload):\(intent.orderChecksum)"
+        if consumedOrderKey != key {
+            isOrderConsumed = false
+        }
+    }
+
     public func present(
         from presenter: UIViewController,
         intent: PaymentIntent,
         onEvent: ((ApplePayEvent) -> Void)? = nil
     ) {
-        guard !isProcessing else { return }
+        guard !isProcessing, !isUpdatingOrder else { return }
         Self.register()
-        let key = "\(intent.orderPayload):\(intent.orderChecksum)"
+        dismissRequested = false
+        let payable = payableIntent ?? intent
+        let key = "\(payable.orderPayload):\(payable.orderChecksum)"
         if consumedOrderKey == key, isOrderConsumed { return }
         if consumedOrderKey != key {
             isOrderConsumed = false
@@ -52,8 +78,8 @@ public final class ApplePay {
             do {
                 var config = configuration
                 config.paymentMethods.applePay.enabled = true
-                let session = try PaymentSession(configuration: config, intent: intent)
-                let state = try await session.bind(intent: intent)
+                let session = try PaymentSession(configuration: config, intent: payable)
+                let state = try await session.bind(intent: payable)
 
                 guard state.applePayAvailable else {
                     deliverLoadOrSetupFailure(
@@ -65,7 +91,7 @@ public final class ApplePay {
 
                 onEvent?(.ready)
 
-                let threeDS = ApplePayThreeDSPresenter(host: presenter)
+                let threeDS = ApplePayThreeDSPresenter(host: PresentationAnchor.resolve(from: presenter))
                 self.threeDSPresenter = threeDS
                 guard let authorizer = session.makeWalletAuthorizer(presenter: threeDS) else {
                     deliverLoadOrSetupFailure(
@@ -75,6 +101,18 @@ public final class ApplePay {
                     return
                 }
                 self.applePayHandler = authorizer as? ApplePayHandler
+                if self.dismissRequested {
+                    deliver(
+                        .init(
+                            status: .canceled,
+                            transaction: nil,
+                            errorCode: nil,
+                            errorMessage: nil
+                        ),
+                        onEvent: onEvent
+                    )
+                    return
+                }
 
                 let result = await session.startWallet(authorizer)
                 deliver(result, onEvent: onEvent)
@@ -90,6 +128,16 @@ public final class ApplePay {
                     onEvent: onEvent
                 )
             }
+        }
+    }
+
+    /// Dismisses the Apple Pay sheet if it is visible and the user has not
+    /// authorized yet. No-op during token submit / 3DS.
+    public func dismiss() {
+        Task { @MainActor in
+            if self.applePayHandler?.didAuthorizePayment == true { return }
+            self.dismissRequested = true
+            self.applePayHandler?.dismiss()
         }
     }
 

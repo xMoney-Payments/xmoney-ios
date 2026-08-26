@@ -164,7 +164,7 @@ package struct SavedCard: Equatable {
     package let cardType: String?
     package let cardExpiryDate: String?
     package let isDefault: Bool
-    package let issuerName: String?
+    package let bankName: String?
     package let cardBrand: String?
     package let nameOnCard: String?
     package let customerId: String?
@@ -176,7 +176,7 @@ package struct SavedCard: Equatable {
         cardType: String?,
         cardExpiryDate: String?,
         isDefault: Bool = false,
-        issuerName: String? = nil,
+        bankName: String? = nil,
         cardBrand: String? = nil,
         nameOnCard: String? = nil,
         customerId: String? = nil,
@@ -187,7 +187,7 @@ package struct SavedCard: Equatable {
         self.cardType = cardType
         self.cardExpiryDate = cardExpiryDate
         self.isDefault = isDefault
-        self.issuerName = issuerName
+        self.bankName = bankName
         self.cardBrand = cardBrand
         self.nameOnCard = nameOnCard
         self.customerId = customerId
@@ -199,9 +199,7 @@ package struct SavedCard: Equatable {
         let binInfo = item["binInfo"] as? [String: Any]
         let cardType = APIMap.nonBlank(item["cardType"]) ?? APIMap.nonBlank(item["type"])
 
-        let issuerName = APIMap.nonBlank(item["issuerName"])
-            ?? APIMap.nonBlank(item["cardIssuer"])
-            ?? APIMap.nonBlank(item["bankName"])
+        let bankName = APIMap.nonBlank(item["bankName"])
             ?? APIMap.nonBlank(binInfo?["bank"])
             ?? cardType.flatMap { SavedCardFormatting.isKnownCardBrand($0) ? nil : $0 }
 
@@ -215,7 +213,7 @@ package struct SavedCard: Equatable {
             cardType: cardType,
             cardExpiryDate: parseExpiryDate(item),
             isDefault: APIMap.parseBoolean(item["isDefault"]) || APIMap.parseBoolean(item["default"]),
-            issuerName: issuerName,
+            bankName: bankName,
             cardBrand: cardBrand,
             nameOnCard: APIMap.nonBlank(item["nameOnCard"]),
             customerId: APIMap.stringOrNumber(item["customerId"]),

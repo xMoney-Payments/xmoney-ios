@@ -1,5 +1,7 @@
 import SwiftUI
+#if canImport(XMoneyCore)
 import XMoneyCore
+#endif
 
 private struct PaymentSheetPresenter: UIViewControllerRepresentable {
     @Binding var isPresented: Bool
@@ -12,44 +14,105 @@ private struct PaymentSheetPresenter: UIViewControllerRepresentable {
         Coordinator()
     }
 
-    func makeUIViewController(context: Context) -> UIViewController {
-        let controller = UIViewController()
-        controller.view.isHidden = true
-        controller.view.isUserInteractionEnabled = false
+    func makeUIViewController(context: Context) -> PaymentSheetHostController {
+        let controller = PaymentSheetHostController()
+        controller.onBecamePresentable = { [weak coordinator = context.coordinator] in
+            coordinator?.flushIfNeeded()
+        }
         return controller
     }
 
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+    func updateUIViewController(_ uiViewController: PaymentSheetHostController, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.host = uiViewController
+        uiViewController.onBecamePresentable = { [weak coordinator] in
+            coordinator?.flushIfNeeded()
+        }
+
         guard isPresented else {
-            context.coordinator.paymentSheet?.dismiss()
-            context.coordinator.isActive = false
+            coordinator.cancel()
             return
         }
 
-        guard !context.coordinator.isActive else { return }
-        context.coordinator.isActive = true
+        guard !coordinator.isActive else { return }
 
-        let paymentSheet = PaymentSheet(configuration: configuration)
-        context.coordinator.paymentSheet = paymentSheet
-        paymentSheet.present(
-            from: uiViewController,
-            intent: intent,
-            onEvent: onEvent,
-            completion: { result in
-                context.coordinator.isActive = false
-                context.coordinator.paymentSheet = nil
-                // Defer binding writes off the presentation completion stack.
-                DispatchQueue.main.async {
-                    isPresented = false
-                    onCompletion(result)
+        coordinator.enqueue { [weak coordinator, configuration, intent, onEvent, onCompletion] presenter in
+            guard let coordinator else { return }
+            let paymentSheet = PaymentSheet(configuration: configuration)
+            coordinator.paymentSheet = paymentSheet
+            paymentSheet.present(
+                from: presenter,
+                intent: intent,
+                onEvent: onEvent,
+                completion: { result in
+                    coordinator.isActive = false
+                    coordinator.paymentSheet = nil
+                    // Defer binding writes off the presentation completion stack.
+                    DispatchQueue.main.async {
+                        isPresented = false
+                        onCompletion(result)
+                    }
                 }
-            }
-        )
+            )
+        }
     }
 
+    @MainActor
     final class Coordinator {
         var paymentSheet: PaymentSheet?
         var isActive = false
+        weak var host: PaymentSheetHostController?
+        private var pending: ((UIViewController) -> Void)?
+
+        func enqueue(_ present: @escaping (UIViewController) -> Void) {
+            pending = present
+            flushIfNeeded()
+        }
+
+        func flushIfNeeded() {
+            guard !isActive, let pending, let host else { return }
+            let presenter = PresentationAnchor.resolve(from: host)
+            guard PresentationAnchor.isPresentable(presenter) else { return }
+            self.pending = nil
+            isActive = true
+            pending(presenter)
+        }
+
+        func cancel() {
+            pending = nil
+            paymentSheet?.dismiss()
+            isActive = false
+        }
+    }
+}
+
+private final class PaymentSheetHostController: UIViewController {
+    var onBecamePresentable: (() -> Void)?
+
+    override func loadView() {
+        let view = WindowObservingView()
+        view.backgroundColor = .clear
+        view.isUserInteractionEnabled = false
+        view.onMovedToWindow = { [weak self] in
+            self?.onBecamePresentable?()
+        }
+        self.view = view
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        onBecamePresentable?()
+    }
+}
+
+private final class WindowObservingView: UIView {
+    var onMovedToWindow: (() -> Void)?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil {
+            onMovedToWindow?()
+        }
     }
 }
 

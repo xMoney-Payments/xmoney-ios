@@ -1,5 +1,7 @@
 import PassKit
+#if canImport(XMoneyCore)
 import XMoneyCore
+#endif
 
 enum ApplePayBootstrap {
     static func install() {

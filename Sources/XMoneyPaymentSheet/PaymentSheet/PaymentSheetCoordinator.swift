@@ -1,7 +1,9 @@
 import UIKit
+#if canImport(XMoneyCore)
 import XMoneyCore
 import XMoneyPaymentElement
 import XMoneyApplePay
+#endif
 
 @MainActor
 package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControllerDelegate, ThreeDSPresenter {
@@ -52,6 +54,7 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
         let transitioning = PaymentSheetTransitioningDelegate()
         transitioning.heightProvider = loading
         transitioning.cornerRadius = theme.sheetCornerRadius
+        transitioning.dimmingColor = theme.scrim
         transitioning.canDismiss = { [weak self] in
             guard let self else { return false }
             return !self.session.isProcessing

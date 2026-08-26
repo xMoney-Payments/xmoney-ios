@@ -1,5 +1,7 @@
 import UIKit
+#if canImport(XMoneyCore)
 import XMoneyCore
+#endif
 
 package struct CheckoutTheme {
     package let primary: UIColor
@@ -26,6 +28,7 @@ package struct CheckoutTheme {
     package let primaryButtonBorderRadius: CGFloat
     package let primaryButtonBorderWidth: CGFloat
 
+    package let isDark: Bool
     package let selectedBackground: UIColor
     package let accentIconBackground: UIColor
     package let containerBorder: UIColor
@@ -34,9 +37,18 @@ package struct CheckoutTheme {
     package let fieldDivider: UIColor
     package let mutedIcon: UIColor
     package let unselectedRing: UIColor
+    package let checkboxRing: UIColor
     package let errorBorder: UIColor
     package let errorText: UIColor
     package let footerBorder: UIColor
+    package let grabber: UIColor
+    package let brandTileBackground: UIColor
+    package let brandTileBorder: UIColor
+    package let visaTint: UIColor
+    package let orLabel: UIColor
+    package let poweredByText: UIColor
+    package let poweredByLogo: UIColor
+    package let scrim: UIColor
 
     package let sheetCornerRadius: CGFloat
     package let paymentContainerRadius: CGFloat
@@ -98,7 +110,6 @@ package struct CheckoutTheme {
         let defaults = isDark ? DefaultColors.dark : DefaultColors.light
         let modeColors = isDark ? appearance.colorsDark : appearance.colorsLight
         let sharedColors = appearance.colors
-        let ink = isDark ? Ink.dark : Ink.light
 
         func color(
             _ key: (PaymentConfig.AppearanceColors) -> String?,
@@ -111,7 +122,12 @@ package struct CheckoutTheme {
         }
 
         func inkAlpha(_ alphaByte: Int) -> UIColor {
-            ink.withAlphaComponent(CGFloat(alphaByte) / 255.0)
+            Ink.light.withAlphaComponent(CGFloat(alphaByte) / 255.0)
+        }
+
+        // Dark hairlines are white-alpha (HTML `.xmn-dark`); light uses ink `#16141A`.
+        func hairline(_ alpha: CGFloat) -> UIColor {
+            (isDark ? UIColor.white : Ink.light).withAlphaComponent(alpha)
         }
 
         let pbMode = isDark ? appearance.primaryButton?.colorsDark : appearance.primaryButton?.colorsLight
@@ -120,6 +136,14 @@ package struct CheckoutTheme {
 
         let primary = color(\.primary, fallback: defaults.primary)
         let icon = color(\.icon, fallback: defaults.icon)
+        let background = color(\.background, fallback: defaults.background)
+        let componentBackground = color(\.componentBackground, fallback: defaults.componentBackground)
+        let primaryText = color(\.primaryText, fallback: defaults.primaryText)
+        let secondaryText = color(\.secondaryText, fallback: defaults.secondaryText)
+
+        let fieldBorder = isDark ? hairline(0.10) : inkAlpha(0x1A)
+        let fieldDivider = isDark ? hairline(0.09) : inkAlpha(0x14)
+        let footerBorder = isDark ? hairline(0.08) : inkAlpha(0x0F)
 
         let containerBorderOverride: UIColor? = {
             let raw = modeColors?.containerBorder ?? sharedColors?.containerBorder
@@ -133,12 +157,12 @@ package struct CheckoutTheme {
 
         return CheckoutTheme(
             primary: primary,
-            background: color(\.background, fallback: defaults.background),
-            componentBackground: color(\.componentBackground, fallback: defaults.componentBackground),
-            componentBorder: color(\.componentBorder, fallback: defaults.componentBorder),
-            componentDivider: color(\.componentDivider, fallback: defaults.componentDivider),
-            primaryText: color(\.primaryText, fallback: defaults.primaryText),
-            secondaryText: color(\.secondaryText, fallback: defaults.secondaryText),
+            background: background,
+            componentBackground: componentBackground,
+            componentBorder: color(\.componentBorder, fallback: fieldBorder),
+            componentDivider: color(\.componentDivider, fallback: fieldDivider),
+            primaryText: primaryText,
+            secondaryText: secondaryText,
             componentText: color(\.componentText, fallback: defaults.componentText),
             placeholderText: color(\.placeholderText, fallback: defaults.placeholderText),
             icon: icon,
@@ -152,19 +176,35 @@ package struct CheckoutTheme {
             primaryButtonText: UIColor(hex: pbMode?.text ?? pbShared?.text) ?? .white,
             primaryButtonBorder: UIColor(hex: pbMode?.border ?? pbShared?.border)
                 ?? primary,
-            primaryButtonBorderRadius: CGFloat(pbShapes?.borderRadius ?? 12),
+            primaryButtonBorderRadius: CGFloat(pbShapes?.borderRadius ?? 9999),
             primaryButtonBorderWidth: CGFloat(pbShapes?.borderWidth ?? 0),
-            selectedBackground: primary.withAlphaComponent(CGFloat(0x0F) / 255.0),
-            accentIconBackground: primary.withAlphaComponent(CGFloat(0x1F) / 255.0),
-            containerBorder: containerBorderOverride ?? inkAlpha(0x17),
-            neutralChip: inkAlpha(0x0D),
-            fieldBorder: inkAlpha(0x1A),
-            fieldDivider: inkAlpha(0x14),
+            isDark: isDark,
+            selectedBackground: primary.withAlphaComponent(isDark ? 0.18 : CGFloat(0x0F) / 255.0),
+            accentIconBackground: primary.withAlphaComponent(isDark ? 0.24 : CGFloat(0x1F) / 255.0),
+            containerBorder: containerBorderOverride ?? (isDark ? hairline(0.10) : inkAlpha(0x17)),
+            neutralChip: isDark ? hairline(0.07) : inkAlpha(0x0D),
+            fieldBorder: fieldBorder,
+            fieldDivider: fieldDivider,
             mutedIcon: isDark ? icon : inkAlpha(0x52),
-            unselectedRing: isDark ? inkAlpha(0x66) : inkAlpha(0x29),
+            unselectedRing: isDark ? hairline(0.20) : inkAlpha(0x29),
+            checkboxRing: isDark ? hairline(0.24) : hairline(0.20),
             errorBorder: UIColor(hex: "#EF4444")!,
-            errorText: UIColor(hex: "#DC2626")!,
-            footerBorder: inkAlpha(0x0F),
+            errorText: UIColor(hex: isDark ? "#F87171" : "#DC2626")!,
+            footerBorder: footerBorder,
+            grabber: isDark ? hairline(0.16) : hairline(0.12),
+            brandTileBackground: isDark ? UIColor(hex: "#1F1F23")! : componentBackground,
+            brandTileBorder: isDark ? hairline(0.12) : footerBorder,
+            visaTint: isDark ? .white : UIColor(hex: "#1434CB")!,
+            orLabel: primaryText.withAlphaComponent(isDark ? 0.42 : 0.40),
+            poweredByText: isDark
+                ? UIColor.white.withAlphaComponent(0.32)
+                : secondaryText.withAlphaComponent(0.30),
+            poweredByLogo: isDark
+                ? UIColor.white.withAlphaComponent(0.60)
+                : secondaryText.withAlphaComponent(0.42),
+            scrim: isDark
+                ? UIColor.black.withAlphaComponent(0.60)
+                : Ink.light.withAlphaComponent(0.45),
             sheetCornerRadius: 32,
             paymentContainerRadius: 20,
             rowRadius: 15,
@@ -178,7 +218,6 @@ package struct CheckoutTheme {
 
     private enum Ink {
         static let light = UIColor(hex: "#16141A")!
-        static let dark = UIColor(hex: "#F7F6F9")!
     }
 
     private enum DefaultColors {
@@ -186,8 +225,6 @@ package struct CheckoutTheme {
             primary: UIColor(hex: "#7c4dff")!,
             background: UIColor(hex: "#ffffff")!,
             componentBackground: UIColor(hex: "#ffffff")!,
-            componentBorder: UIColor(hex: "#d1cddb")!,
-            componentDivider: UIColor(hex: "#d1cddb")!,
             primaryText: UIColor(hex: "#16141a")!,
             secondaryText: UIColor(hex: "#4a4653")!,
             componentText: UIColor(hex: "#4a4653")!,
@@ -197,11 +234,9 @@ package struct CheckoutTheme {
         )
         static let dark = Palette(
             primary: UIColor(hex: "#7c4dff")!,
-            background: UIColor(hex: "#16141a")!,
-            componentBackground: UIColor(hex: "#201e25")!,
-            componentBorder: UIColor(hex: "#3f3b48")!,
-            componentDivider: UIColor(hex: "#3f3b48")!,
-            primaryText: UIColor(hex: "#f7f6f9")!,
+            background: UIColor(hex: "#18181B")!,
+            componentBackground: UIColor(hex: "#18181B")!,
+            primaryText: UIColor(hex: "#FAFAFA")!,
             secondaryText: UIColor(hex: "#d1cddb")!,
             componentText: UIColor(hex: "#d1cddb")!,
             placeholderText: UIColor(hex: "#797585")!,
@@ -214,8 +249,6 @@ package struct CheckoutTheme {
         let primary: UIColor
         let background: UIColor
         let componentBackground: UIColor
-        let componentBorder: UIColor
-        let componentDivider: UIColor
         let primaryText: UIColor
         let secondaryText: UIColor
         let componentText: UIColor
@@ -232,16 +265,17 @@ extension UIColor {
         return 0.2126 * r + 0.7152 * g + 0.0722 * b
     }
 
-    convenience init?(hex: String?) {
+    package convenience init?(hex: String?) {
         guard var hex = hex?.trimmingCharacters(in: .whitespaces) else { return nil }
         hex = hex.replacingOccurrences(of: "#", with: "")
         if hex.count == 8 {
             guard let value = UInt64(hex, radix: 16) else { return nil }
+            // AARRGGBB — same as Android CheckoutTheme.parseColor.
             self.init(
-                red: CGFloat((value >> 24) & 0xFF) / 255.0,
-                green: CGFloat((value >> 16) & 0xFF) / 255.0,
-                blue: CGFloat((value >> 8) & 0xFF) / 255.0,
-                alpha: CGFloat(value & 0xFF) / 255.0
+                red: CGFloat((value >> 16) & 0xFF) / 255.0,
+                green: CGFloat((value >> 8) & 0xFF) / 255.0,
+                blue: CGFloat(value & 0xFF) / 255.0,
+                alpha: CGFloat((value >> 24) & 0xFF) / 255.0
             )
             return
         }

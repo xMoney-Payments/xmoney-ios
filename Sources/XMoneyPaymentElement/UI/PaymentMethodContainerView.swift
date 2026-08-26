@@ -1,5 +1,7 @@
 import UIKit
+#if canImport(XMoneyCore)
 import XMoneyCore
+#endif
 
 final class PaymentMethodContainerView: UIView {
     enum Selection: Equatable {
@@ -213,7 +215,10 @@ final class PaymentMethodContainerView: UIView {
         cardsStack.axis = .vertical
         cardsStack.spacing = 0
 
-        for card in cards {
+        for (index, card) in cards.enumerated() {
+            if index > 0 {
+                cardsStack.addArrangedSubview(makeRowHairline())
+            }
             let isSelected: Bool
             if case let .saved(id) = selection {
                 isSelected = card.id == id
@@ -239,7 +244,8 @@ final class PaymentMethodContainerView: UIView {
 
         let visibleRows = min(cards.count, Self.maxVisibleSavedCards)
         let extra = pendingDeleteId == nil ? 0 : Self.confirmPanelHeight
-        let viewportHeight = Self.savedCardRowHeight * CGFloat(max(visibleRows, 1)) + extra
+        let hairlines = CGFloat(max(visibleRows - 1, 0))
+        let viewportHeight = Self.savedCardRowHeight * CGFloat(max(visibleRows, 1)) + hairlines + extra
         let heightConstraint = scroll.heightAnchor.constraint(equalToConstant: viewportHeight)
         heightConstraint.priority = .required
 
@@ -257,10 +263,7 @@ final class PaymentMethodContainerView: UIView {
 
         stack.addArrangedSubview(scroll)
 
-        let separator = UIView()
-        separator.backgroundColor = theme.fieldDivider
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        separator.heightAnchor.constraint(equalToConstant: 1).isActive = true
+        let separator = makeRowHairline()
         stack.addArrangedSubview(separator)
 
         stack.addArrangedSubview(makeUseOtherCardRow())
@@ -272,6 +275,14 @@ final class PaymentMethodContainerView: UIView {
                 scroll.setContentOffset(CGPoint(x: 0, y: offset), animated: true)
             }
         }
+    }
+
+    private func makeRowHairline() -> UIView {
+        let line = UIView()
+        line.backgroundColor = theme.footerBorder
+        line.translatesAutoresizingMaskIntoConstraints = false
+        line.heightAnchor.constraint(equalToConstant: 1).isActive = true
+        return line
     }
 
     private static let savedCardRowHeight: CGFloat = 56
@@ -346,18 +357,42 @@ final class PaymentMethodContainerView: UIView {
         let tile = BrandTileView(theme: theme)
         tile.apply(style: .savedCard(brand: SavedCardFormatting.savedCardBrandForIcon(card)), theme: theme)
 
-        let title = UILabel()
-        title.attributedText = NSAttributedString(
-            string: SavedCardFormatting.savedCardDisplayName(card),
-            attributes: theme.titleAttributes(color: theme.primaryText)
+        let titleAttributes = theme.titleAttributes(color: theme.primaryText)
+
+        let bankLabel = UILabel()
+        bankLabel.attributedText = NSAttributedString(
+            string: SavedCardFormatting.savedCardIssuerLabel(card),
+            attributes: titleAttributes
         )
+        bankLabel.numberOfLines = 1
+        bankLabel.lineBreakMode = .byTruncatingTail
+        bankLabel.setContentHuggingPriority(.required, for: .horizontal)
+        bankLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let last4Label = UILabel()
+        last4Label.attributedText = NSAttributedString(
+            string: SavedCardFormatting.savedCardMaskedNumber(card),
+            attributes: titleAttributes
+        )
+        last4Label.numberOfLines = 1
+        last4Label.setContentHuggingPriority(.required, for: .horizontal)
+        last4Label.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        let titleSpacer = UIView()
+        titleSpacer.setContentHuggingPriority(.fittingSizeLevel, for: .horizontal)
+        titleSpacer.setContentCompressionResistancePriority(.fittingSizeLevel, for: .horizontal)
+
+        let titleRow = UIStackView(arrangedSubviews: [bankLabel, last4Label, titleSpacer])
+        titleRow.axis = .horizontal
+        titleRow.spacing = 4
+        titleRow.alignment = .center
 
         let subtitleLabel = UILabel()
         subtitleLabel.text = SavedCardFormatting.savedCardMeta(card, locale: locale)
         subtitleLabel.font = theme.font(ofSize: 13, weight: .medium)
         subtitleLabel.textColor = theme.primaryText.withAlphaComponent(0.45)
 
-        let textStack = UIStackView(arrangedSubviews: [title, subtitleLabel])
+        let textStack = UIStackView(arrangedSubviews: [titleRow, subtitleLabel])
         textStack.axis = .vertical
         textStack.spacing = 1
 
@@ -413,7 +448,7 @@ final class PaymentMethodContainerView: UIView {
         control.addAction(UIAction { [weak self] _ in
             self?.onSelectSaved?(card)
         }, for: .touchUpInside)
-        control.accessibilityLabel = title.text
+        control.accessibilityLabel = SavedCardFormatting.savedCardDisplayName(card)
         control.heightAnchor.constraint(equalToConstant: Self.savedCardRowHeight).isActive = true
 
         if isEditing {
@@ -547,12 +582,13 @@ final class PaymentMethodContainerView: UIView {
         )
 
         let visa = CardBrandIcon(size: .useOtherCardPair)
-        visa.setBrand("visa", size: .useOtherCardPair)
+        visa.setBrand("visa", size: .useOtherCardPair, visaTint: theme.visaTint)
         let mc = CardBrandIcon(size: .useOtherCardPair)
         mc.setBrand("mastercard", size: .useOtherCardPair)
         let brands = UIStackView(arrangedSubviews: [visa, mc])
         brands.axis = .horizontal
-        brands.spacing = 6
+        brands.spacing = 8
+        brands.alpha = 0.85
 
         let row = UIStackView(arrangedSubviews: [tile, title, brands])
         row.axis = .horizontal

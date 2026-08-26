@@ -1,8 +1,13 @@
-# Manual publish. Actions → Publish → Run workflow → enter version (e.g. 0.0.1).
+# Manual publish for https://github.com/xMoney-Payments/xmoney-ios
+# Actions → Publish → Run workflow → enter version (e.g. 0.0.1).
 #
-# Requires the COCOAPODS_TRUNK_TOKEN repo secret (password from
-# `grep -A2 trunk.cocoapods.org ~/.netrc` after `pod trunk register`).
-# SPM needs no extra secret: `gh release create` tags the run SHA.
+# Secrets:
+#   COCOAPODS_TRUNK_TOKEN  — required for pod trunk push
+#   RELEASE_GITHUB_TOKEN   — optional PAT (contents: write). Use if GITHUB_TOKEN
+#                            gets HTTP 403 creating the release.
+#
+# If gh release still 403s without a PAT: repo Settings → Actions → General →
+# Workflow permissions → "Read and write permissions".
 
 name: Publish
 
@@ -12,15 +17,21 @@ on:
       version:
         description: 'Version to publish (e.g. 0.0.1)'
         required: true
-        default: '0.0.1'
+        default: '0.0.2'
+
+permissions:
+  contents: write
 
 jobs:
   publish:
-    runs-on: macos-14
+    runs-on: macos-15
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
 
       - name: Resolve version
         id: version
@@ -40,24 +51,51 @@ jobs:
 
       - name: Test
         run: |
-          xcodebuild test \
-            -scheme XMoneyPaymentSheet-Package \
-            -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
-            -quiet
+          chmod +x scripts/xcode-ios-test.sh
+          scripts/xcode-ios-test.sh
+
+      - name: Lint podspec
+        run: |
+          gem install cocoapods
+          # lib lint uses the checkout; trunk push lints the git tag from s.source.
+          pod lib lint XMoneyPaymentSheet.podspec --allow-warnings
+
+      # pod trunk push clones s.source's tag, not this checkout. A leftover 0.0.1
+      # from a failed publish would keep validating the old sources.
+      - name: Point version tag at this commit
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git tag -f "$VERSION" "${{ github.sha }}"
+          git push -f origin "refs/tags/$VERSION"
+          REMOTE_SHA=$(git ls-remote origin "refs/tags/$VERSION" | awk '{print $1}')
+          if [ "$REMOTE_SHA" != "${{ github.sha }}" ]; then
+            echo "Tag $VERSION is $REMOTE_SHA, expected ${{ github.sha }}"
+            exit 1
+          fi
 
       - name: GitHub Release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_GITHUB_TOKEN || github.token }}
         run: |
-          gh release create "${{ steps.version.outputs.version }}" \
-            --title "${{ steps.version.outputs.version }}" \
-            --notes-file CHANGELOG.md \
-            --target "$GITHUB_SHA"
+          VERSION="${{ steps.version.outputs.version }}"
+          attempt() {
+            if gh release view "$VERSION" >/dev/null 2>&1; then
+              gh release edit "$VERSION" --title "$VERSION" --notes-file CHANGELOG.md
+            else
+              gh release create "$VERSION" --title "$VERSION" --notes-file CHANGELOG.md
+            fi
+          }
+          for i in 1 2 3 4 5; do
+            if attempt; then
+              exit 0
+            fi
+            echo "GitHub release failed (attempt $i), retrying..."
+            sleep $((i * 5))
+          done
+          exit 1
 
       - name: Publish CocoaPods
         env:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
         run: |
-          gem install cocoapods
-          pod spec lint XMoneyPaymentSheet.podspec --allow-warnings
           pod trunk push XMoneyPaymentSheet.podspec --allow-warnings
