@@ -4,6 +4,7 @@
 "sheet.poweredBy" = "Με την υποστήριξη";
 "sheet.savedCards" = "Αποθηκευμένες κάρτες";
 "sheet.useAnotherCard" = "Χρήση άλλης κάρτας";
+"sheet.useOtherCard" = "Χρήση άλλης κάρτας";
 "sheet.delete" = "Διαγραφή";
 "sheet.edit" = "Επεξεργασία";
 "sheet.done" = "Τέλος";
@@ -15,10 +16,12 @@
 "elements.expDate" = "Ημερομηνία λήξης";
 "elements.cvv" = "CVV";
 "elements.saveCard" = "Αποθήκευση κάρτας για μελλοντική χρήση";
-"placeholder.cardNumber" = "0000 - 0000 - 0000 - 0000";
+"placeholder.cardNumber" = "Αριθμός κάρτας";
+"placeholder.cardNumber.spaced" = "1234 1234 1234 1234";
 "placeholder.expDate" = "ΜΜ / ΕΕ";
-"placeholder.cvv" = "cvv";
-"placeholder.cardholderName" = "Πλήρες όνομα στην κάρτα";
+"placeholder.cvv" = "CVV";
+"placeholder.cvv.spaced" = "123";
+"placeholder.cardholderName" = "Όνομα στην κάρτα";
 "errors.cardNumberRequired" = "Ο αριθμός κάρτας είναι υποχρεωτικός.";
 "errors.cardNumberUnsupported" = "Ο τύπος κάρτας δεν υποστηρίζεται.";
 "errors.cardNumberTooShort" = "Ο αριθμός κάρτας είναι πολύ σύντομος.";

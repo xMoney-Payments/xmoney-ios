@@ -16,7 +16,7 @@ package final class PaymentFormView: UIView {
             self.bottom = bottom
         }
 
-        package static let embedded = ContentInsets(horizontal: 16, top: 12, bottom: 8)
+        package static let embedded = ContentInsets(horizontal: 0, top: 0, bottom: 0)
         package static let sheet = ContentInsets(horizontal: 22, top: 16, bottom: 12)
     }
 
@@ -109,7 +109,7 @@ package final class PaymentFormView: UIView {
 
     package func applyConfig(_ config: PaymentConfig) {
         self.config = config
-        backgroundColor = theme.background
+        applyPageFill()
         poweredFooter?.apply(theme: theme, locale: config.options.locale)
         rebuild()
         updatePayButtonAppearance()
@@ -201,9 +201,21 @@ package final class PaymentFormView: UIView {
         applySelection(animated: false)
     }
 
+    private var isEmbedded: Bool { contentInsets == .embedded }
+
+    private func applyPageFill() {
+        if isEmbedded {
+            backgroundColor = .clear
+            isOpaque = false
+        } else {
+            backgroundColor = theme.background
+            isOpaque = true
+        }
+    }
+
     private func buildLayout() {
         let t = theme
-        backgroundColor = t.background
+        applyPageFill()
 
         contentStack.axis = .vertical
         contentStack.spacing = 18
@@ -227,11 +239,6 @@ package final class PaymentFormView: UIView {
             contentStack.bottomAnchor.constraint(equalTo: contentWrap.bottomAnchor),
         ])
 
-        let footerHairline = UIView()
-        footerHairline.backgroundColor = t.footerBorder
-        footerHairline.translatesAutoresizingMaskIntoConstraints = false
-        footerHairline.heightAnchor.constraint(equalToConstant: 1).isActive = true
-
         let footerInner = UIStackView(arrangedSubviews: [payButton, powered])
         footerInner.axis = .vertical
         footerInner.spacing = 10
@@ -239,24 +246,39 @@ package final class PaymentFormView: UIView {
 
         let footerWrap = UIView()
         footerWrap.translatesAutoresizingMaskIntoConstraints = false
-        footerWrap.addSubview(footerHairline)
         footerWrap.addSubview(footerInner)
-        NSLayoutConstraint.activate([
-            footerHairline.topAnchor.constraint(equalTo: footerWrap.topAnchor),
-            footerHairline.leadingAnchor.constraint(equalTo: footerWrap.leadingAnchor),
-            footerHairline.trailingAnchor.constraint(equalTo: footerWrap.trailingAnchor),
-            footerInner.topAnchor.constraint(equalTo: footerHairline.bottomAnchor, constant: 12),
+
+        var footerConstraints: [NSLayoutConstraint] = [
             footerInner.leadingAnchor.constraint(equalTo: footerWrap.leadingAnchor, constant: contentInsets.horizontal),
             footerInner.trailingAnchor.constraint(equalTo: footerWrap.trailingAnchor, constant: -contentInsets.horizontal),
             footerInner.bottomAnchor.constraint(equalTo: footerWrap.bottomAnchor),
-        ])
+        ]
+        if isEmbedded {
+            // Compact: no hairline; 8pt above Pay / powered-by (matches Android).
+            footerConstraints.append(
+                footerInner.topAnchor.constraint(equalTo: footerWrap.topAnchor, constant: 8)
+            )
+        } else {
+            let footerHairline = UIView()
+            footerHairline.backgroundColor = t.footerBorder
+            footerHairline.translatesAutoresizingMaskIntoConstraints = false
+            footerWrap.addSubview(footerHairline)
+            footerConstraints.append(contentsOf: [
+                footerHairline.topAnchor.constraint(equalTo: footerWrap.topAnchor),
+                footerHairline.leadingAnchor.constraint(equalTo: footerWrap.leadingAnchor),
+                footerHairline.trailingAnchor.constraint(equalTo: footerWrap.trailingAnchor),
+                footerHairline.heightAnchor.constraint(equalToConstant: 1),
+                footerInner.topAnchor.constraint(equalTo: footerHairline.bottomAnchor, constant: 12),
+            ])
+        }
+        NSLayoutConstraint.activate(footerConstraints)
 
         rootStack.axis = .vertical
         rootStack.spacing = 0
         rootStack.alignment = .fill
         rootStack.addArrangedSubview(contentWrap)
         rootStack.addArrangedSubview(footerWrap)
-        rootStack.setCustomSpacing(16, after: contentWrap)
+        rootStack.setCustomSpacing(isEmbedded ? 0 : 16, after: contentWrap)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(rootStack)
 
@@ -283,7 +305,7 @@ package final class PaymentFormView: UIView {
     private func buildContent() {
         let t = theme
 
-        if state.applePayAvailable {
+        if state.applePayAvailable, state.applePayReady {
             #if DEBUG
             if config.paymentMethods.applePay.enabled, DigitalWalletFactory.makeApplePay == nil {
                 assertionFailure(
@@ -435,7 +457,7 @@ package final class PaymentFormView: UIView {
 
     private var hidesPayButton: Bool {
         // Sheet always shows Pay. `submitButton.visible` is Embedded-only.
-        contentInsets == .embedded && !config.card.submitButton.visible
+        isEmbedded && !config.card.submitButton.visible
     }
 
     private func updatePayButtonAppearance() {

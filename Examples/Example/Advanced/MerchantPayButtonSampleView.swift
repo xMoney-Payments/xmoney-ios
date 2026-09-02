@@ -62,7 +62,6 @@ struct MerchantPayButtonSampleView: View {
             }
             if let error { ExampleStatusChip(error, .error) }
         }
-        .id(theme.isDark)
         .onAppear {
             ApplePay.register()
             if payment == nil {
@@ -71,8 +70,7 @@ struct MerchantPayButtonSampleView: View {
             if intent == nil { loadOrder() }
         }
         .onChange(of: theme.isDark) { _ in
-            payment = EmbeddedPayment(configuration: configuration, onResult: handleResult)
-            ready = false
+            applyLiveTheme(configuration)
         }
     }
 
@@ -85,6 +83,12 @@ struct MerchantPayButtonSampleView: View {
         if result == .canceled, payment?.isOrderConsumed == false {
             lastResult = nil
         }
+    }
+
+    private func applyLiveTheme(_ configuration: PaymentConfig) {
+        payment?.updateStyle(configuration.options.style)
+        payment?.updateWalletAppearance(configuration.paymentMethods.applePay.appearance)
+        payment?.updateAppearance(configuration.options.appearance)
     }
 
     private func loadOrder() {

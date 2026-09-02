@@ -9,7 +9,10 @@ package struct SheetState {
     package let sessionToken: String
     package let orderInfo: OrderPayloadInfo
     package let savedCards: [SavedCard]
+    /// Site/config returned a usable Apple Pay merchant ID for this order.
     package let applePayAvailable: Bool
+    /// PassKit reports this device can make Apple Pay payments.
+    package let applePayReady: Bool
     package let nameCheckValidationEnabled: Bool
 
     package init(
@@ -17,12 +20,14 @@ package struct SheetState {
         orderInfo: OrderPayloadInfo,
         savedCards: [SavedCard],
         applePayAvailable: Bool,
+        applePayReady: Bool = false,
         nameCheckValidationEnabled: Bool = false
     ) {
         self.sessionToken = sessionToken
         self.orderInfo = orderInfo
         self.savedCards = savedCards
         self.applePayAvailable = applePayAvailable
+        self.applePayReady = applePayReady
         self.nameCheckValidationEnabled = nameCheckValidationEnabled
     }
 
@@ -32,6 +37,7 @@ package struct SheetState {
             orderInfo: orderInfo,
             savedCards: cards,
             applePayAvailable: applePayAvailable,
+            applePayReady: applePayReady,
             nameCheckValidationEnabled: nameCheckValidationEnabled
         )
     }
@@ -110,12 +116,14 @@ package final class PaymentEngine {
             cachedWalletParams["applePay"] = params
             applePayAvailable = true
         }
+        let applePayReady = applePayAvailable && DigitalWalletFactory.canMakePayments()
 
         return SheetState(
             sessionToken: sessionToken,
             orderInfo: orderInfo,
             savedCards: savedCards,
             applePayAvailable: applePayAvailable,
+            applePayReady: applePayReady,
             nameCheckValidationEnabled: nameCheckValidationEnabled
         )
     }
@@ -135,7 +143,8 @@ package final class PaymentEngine {
                 sessionToken: sessionToken
             )
             let callback = onCardHolderVerification ?? verification.onCardHolderVerification
-            if !callback(result) {
+            let accepted = await MainActor.run { callback(result) }
+            if !accepted {
                 return EngineResult(
                     status: .failed,
                     transaction: nil,
@@ -194,9 +203,7 @@ package final class PaymentEngine {
     }
 
     private func fetchApplePayParamsIfEnabled() async -> WalletParams? {
-        guard configuration.paymentMethods.applePay.enabled, DigitalWalletFactory.canMakePayments() else {
-            return nil
-        }
+        guard configuration.paymentMethods.applePay.enabled else { return nil }
         return try? await wallets.getParams(walletType: "applePay", sessionToken: sessionToken)
     }
 

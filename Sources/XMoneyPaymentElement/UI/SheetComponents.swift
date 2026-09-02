@@ -30,13 +30,14 @@ package final class GrabberView: UIView {
 // MARK: - Close
 
 package final class CircleCloseButton: UIButton {
-    package init(theme: CheckoutTheme) {
+    package init(theme: CheckoutTheme, locale: String = "en-US") {
         super.init(frame: .zero)
         setTitle("✕", for: .normal)
         setTitleColor(theme.primaryText, for: .normal)
         titleLabel?.font = theme.font(ofSize: 14, weight: .medium)
         backgroundColor = theme.neutralChip
         layer.cornerRadius = 18
+        accessibilityLabel = Strings.text("sheet.cancel", locale: locale)
         translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: 36),
@@ -81,7 +82,7 @@ final class OrDividerView: UIView {
 
     private func makeLine(theme: CheckoutTheme) -> UIView {
         let line = UIView()
-        line.backgroundColor = theme.fieldBorder
+        line.backgroundColor = theme.orDivider
         line.translatesAutoresizingMaskIntoConstraints = false
         line.heightAnchor.constraint(equalToConstant: 1).isActive = true
         return line

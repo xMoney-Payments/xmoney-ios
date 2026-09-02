@@ -66,13 +66,17 @@ package final class CardBrandIcon: UIImageView {
         heightConstraint?.constant = dimensions.height
 
         let base = EmbeddedAssets.image(named: named, traitCollection: traitCollection)
-        if useTemplate {
-            image = base?.withRenderingMode(.alwaysTemplate)
-            if brand?.lowercased() == "visa" {
-                tintColor = visaTint ?? UIColor(red: 0x14 / 255, green: 0x34 / 255, blue: 0xCB / 255, alpha: 1)
+        if brand?.lowercased() == "visa" {
+            if let visaTint {
+                image = base?.withRenderingMode(.alwaysTemplate)
+                tintColor = visaTint
             } else {
-                tintColor = mutedTint
+                image = base?.withRenderingMode(.alwaysOriginal)
+                tintColor = nil
             }
+        } else if useTemplate {
+            image = base?.withRenderingMode(.alwaysTemplate)
+            tintColor = mutedTint
         } else {
             image = base?.withRenderingMode(.alwaysOriginal)
             tintColor = nil

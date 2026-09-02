@@ -18,7 +18,9 @@ func exampleWalletAppearance(isDark: Bool) -> PaymentConfig.WalletAppearance {
  * merchant chrome (especially dark). Copy this pattern in your app — SDK
  * defaults stay xMoney purple on a white card until you set `options.appearance`.
  *
- * `primary` is the interactive accent (Edit, selected marks, “Use other card”).
+ * `primary` is the interactive accent (Edit, selected marks, “Use other card”,
+ * focused field outline). `borderRadius` is the card field and payment-methods
+ * container radius (SDK default 16 pt fields / 20 pt container when omitted).
  * For a light brand fill, pass a dark readable `primary` and the fill as
  * `buttonBackground` so links stay above WCAG contrast on white.
  * `primaryDark` / `buttonBackground` default to `primary` (same as Android).

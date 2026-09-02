@@ -68,15 +68,14 @@ struct EmbeddedPaymentSampleView: View {
             }
             if let error { ExampleStatusChip(error, .error) }
         }
-        .id("\(theme.isDark)-\(useUIKit)")
+        .id("\(useUIKit)")
         .onAppear {
             ApplePay.register()
             ensurePayment(configuration)
             if intent == nil { loadOrder() }
         }
         .onChange(of: theme.isDark) { _ in
-            payment = EmbeddedPayment(configuration: configuration, onResult: handleResult)
-            ready = false
+            applyLiveTheme(configuration)
         }
     }
 
@@ -88,6 +87,12 @@ struct EmbeddedPaymentSampleView: View {
         if payment == nil {
             payment = EmbeddedPayment(configuration: configuration, onResult: handleResult)
         }
+    }
+
+    private func applyLiveTheme(_ configuration: PaymentConfig) {
+        payment?.updateStyle(configuration.options.style)
+        payment?.updateWalletAppearance(configuration.paymentMethods.applePay.appearance)
+        payment?.updateAppearance(configuration.options.appearance)
     }
 
     private func handleResult(_ result: PaymentResult) {

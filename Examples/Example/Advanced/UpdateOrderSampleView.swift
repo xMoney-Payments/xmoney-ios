@@ -64,7 +64,6 @@ struct UpdateOrderSampleView: View {
             }
             if let error { ExampleStatusChip(error, .error) }
         }
-        .id(theme.isDark)
         .onAppear {
             ApplePay.register()
             if payment == nil {
@@ -72,11 +71,9 @@ struct UpdateOrderSampleView: View {
             }
         }
         .onChange(of: theme.isDark) { _ in
-            payment = EmbeddedPayment(configuration: configuration, onResult: handleResult)
-            ready = false
-            interactionEnabled = false
+            applyLiveTheme(configuration)
         }
-        .task(id: "\(amountMinor)-\(consumed)-\(theme.isDark)-\(payment != nil)") {
+        .task(id: "\(amountMinor)-\(consumed)-\(payment != nil)") {
             guard !consumed, payment != nil else { return }
             if hostIntent != nil {
                 await MainActor.run { interactionEnabled = false }
@@ -105,6 +102,12 @@ struct UpdateOrderSampleView: View {
         if result == .canceled, payment?.isOrderConsumed == false {
             lastResult = nil
         }
+    }
+
+    private func applyLiveTheme(_ configuration: PaymentConfig) {
+        payment?.updateStyle(configuration.options.style)
+        payment?.updateWalletAppearance(configuration.paymentMethods.applePay.appearance)
+        payment?.updateAppearance(configuration.options.appearance)
     }
 }
 

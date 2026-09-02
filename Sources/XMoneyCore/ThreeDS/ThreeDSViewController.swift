@@ -84,6 +84,7 @@ package final class ThreeDSViewController: UIViewController, WKNavigationDelegat
         close.layer.cornerRadius = 18
         close.translatesAutoresizingMaskIntoConstraints = false
         close.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
+        close.accessibilityLabel = Strings.text("sheet.cancel", locale: locale)
 
         let title = UILabel()
         title.text = Strings.text("sheet.authentication", locale: locale)

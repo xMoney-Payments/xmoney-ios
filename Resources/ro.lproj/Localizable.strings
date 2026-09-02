@@ -4,6 +4,7 @@
 "sheet.poweredBy" = "Oferit de";
 "sheet.savedCards" = "Carduri salvate";
 "sheet.useAnotherCard" = "Folosește alt card";
+"sheet.useOtherCard" = "Folosește alt card";
 "sheet.delete" = "Șterge";
 "sheet.edit" = "Editează";
 "sheet.done" = "Gata";
@@ -15,10 +16,12 @@
 "elements.expDate" = "Data expirării";
 "elements.cvv" = "CVV";
 "elements.saveCard" = "Salvează cardul pentru utilizări viitoare";
-"placeholder.cardNumber" = "0000 - 0000 - 0000 - 0000";
+"placeholder.cardNumber" = "Număr card";
+"placeholder.cardNumber.spaced" = "1234 1234 1234 1234";
 "placeholder.expDate" = "LL / AA";
-"placeholder.cvv" = "cvv";
-"placeholder.cardholderName" = "Numele complet de pe card";
+"placeholder.cvv" = "CVV";
+"placeholder.cvv.spaced" = "123";
+"placeholder.cardholderName" = "Numele de pe card";
 "errors.cardNumberRequired" = "Numărul cardului este obligatoriu.";
 "errors.cardNumberUnsupported" = "Tipul de card nu este acceptat.";
 "errors.cardNumberTooShort" = "Numărul cardului este prea scurt.";

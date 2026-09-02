@@ -37,6 +37,11 @@ final class EmbeddedSmokeTests: XCTestCase {
         let embedded = EmbeddedPayment(configuration: PaymentConfig(publicKey: "test_pk_x")) { _ in }
         embedded.updateAppearance(.init())
         embedded.updateLocale("el-GR")
+        embedded.updateStyle(.alwaysDark)
+        embedded.updateWalletAppearance(.init(color: .white, radius: 12, type: .pay))
+        XCTAssertEqual(embedded._controller.paymentConfig?.options.locale, "el-GR")
+        XCTAssertEqual(embedded._controller.paymentConfig?.options.style, .alwaysDark)
+        XCTAssertEqual(embedded._controller.paymentConfig?.paymentMethods.applePay.appearance.color, .white)
         XCTAssertFalse(embedded.isInteractionEnabled)
         embedded.confirm()
     }
@@ -46,5 +51,13 @@ final class EmbeddedSmokeTests: XCTestCase {
         let embedded = EmbeddedPayment(configuration: PaymentConfig(publicKey: "test_pk_x")) { _ in }
         XCTAssertFalse(embedded.isInteractionEnabled)
         embedded.confirm()
+    }
+
+    func testEmbeddedContentInsetsAreZero() {
+        let insets = PaymentFormView.ContentInsets.embedded
+        XCTAssertEqual(insets.horizontal, 0)
+        XCTAssertEqual(insets.top, 0)
+        XCTAssertEqual(insets.bottom, 0)
+        XCTAssertNotEqual(insets, .sheet)
     }
 }

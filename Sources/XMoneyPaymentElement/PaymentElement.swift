@@ -23,7 +23,12 @@ public final class PaymentElement: UIView {
         self.payment = payment
         self.onEvent = onEvent
         super.init(frame: .zero)
+        isOpaque = false
+        backgroundColor = .clear
         payment._controller.attachHostView(self)
+        payment._controller.setOnLiveConfigChange { [weak self] in
+            self?.applyLiveConfig()
+        }
         setupLoader()
     }
 
@@ -101,24 +106,21 @@ public final class PaymentElement: UIView {
     @MainActor
     public func updateAppearance(_ appearance: PaymentConfig.AppearanceConfig) {
         payment.updateAppearance(appearance)
-        if let config = payment._controller.paymentConfig {
-            formView?.applyConfig(config)
-            invalidateIntrinsicContentSize()
-            onContentSizeChange?()
-        }
     }
 
     @MainActor
     public func updateLocale(_ locale: String) {
         payment.updateLocale(locale)
-        if let config = payment._controller.paymentConfig {
-            formView?.applyConfig(config)
-            if formView != nil {
-                // Relabel after applyConfig rebuild; restore already ran.
-            }
-            invalidateIntrinsicContentSize()
-            onContentSizeChange?()
-        }
+    }
+
+    @MainActor
+    public func updateStyle(_ style: PaymentConfig.UserInterfaceStyle) {
+        payment.updateStyle(style)
+    }
+
+    @MainActor
+    public func updateWalletAppearance(_ appearance: PaymentConfig.WalletAppearance) {
+        payment.updateWalletAppearance(appearance)
     }
 
     /// Submit the currently selected method (new card or saved card).
@@ -197,6 +199,7 @@ public final class PaymentElement: UIView {
         form.setProcessing(controller.isProcessing)
         form.setUpdatingOrder(controller.isUpdatingOrder)
         form.setOrderConsumed(controller.isOrderConsumed)
+        overrideUserInterfaceStyle = UIHelpers.overrideStyle(for: config)
         addSubview(form)
         NSLayoutConstraint.activate([
             form.topAnchor.constraint(equalTo: topAnchor),
@@ -207,6 +210,14 @@ public final class PaymentElement: UIView {
         formView = form
         invalidateIntrinsicContentSize()
         setNeedsLayout()
+        onContentSizeChange?()
+    }
+
+    private func applyLiveConfig() {
+        guard let config = payment._controller.paymentConfig else { return }
+        overrideUserInterfaceStyle = UIHelpers.overrideStyle(for: config)
+        formView?.applyConfig(config)
+        invalidateIntrinsicContentSize()
         onContentSizeChange?()
     }
 

@@ -89,12 +89,12 @@ package final class PayCTAButton: UIView {
         titleLabel.isHidden = false
         titleLabel.text = title
         titleLabel.textColor = theme.primaryButtonText
-        titleLabel.font = theme.font(ofSize: 16, weight: .semibold)
+        titleLabel.font = theme.payFont(ofSize: 16, weight: .semibold)
         let tracking = -0.01 * 16 * theme.fontScale
         titleLabel.attributedText = NSAttributedString(
             string: title,
             attributes: [
-                .font: theme.font(ofSize: 16, weight: .semibold),
+                .font: theme.payFont(ofSize: 16, weight: .semibold),
                 .foregroundColor: theme.primaryButtonText,
                 .kern: tracking,
             ]

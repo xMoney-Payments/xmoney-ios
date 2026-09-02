@@ -17,6 +17,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     private var prepareGeneration = 0
     private var operationTask: Task<Void, Never>?
     private var submitHandler: (() -> Void)?
+    private var onLiveConfigChange: (() -> Void)?
     private(set) var isUpdatingOrder = false
 
     var sheetState: SheetState? { session?.state }
@@ -39,6 +40,10 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         hostView = view
     }
 
+    func setOnLiveConfigChange(_ handler: (() -> Void)?) {
+        onLiveConfigChange = handler
+    }
+
     /// Submit the currently selected method (new card or saved card).
     /// Use with `SubmitButtonConfig.visible = false` so the merchant owns the Pay CTA.
     func confirm() {
@@ -52,12 +57,27 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
 
     func updateAppearance(_ appearance: PaymentConfig.AppearanceConfig) {
         liveConfiguration.options.appearance = appearance
-        paymentConfig = liveConfiguration
+        publishLiveConfig()
     }
 
     func updateLocale(_ locale: String) {
         liveConfiguration.options.locale = locale
+        publishLiveConfig()
+    }
+
+    func updateStyle(_ style: PaymentConfig.UserInterfaceStyle) {
+        liveConfiguration.options.style = style
+        publishLiveConfig()
+    }
+
+    func updateWalletAppearance(_ appearance: PaymentConfig.WalletAppearance) {
+        liveConfiguration.paymentMethods.applePay.appearance = appearance
+        publishLiveConfig()
+    }
+
+    private func publishLiveConfig() {
         paymentConfig = liveConfiguration
+        onLiveConfigChange?()
     }
 
     func prepare(intent: PaymentIntent, onEvent: @escaping (EmbeddedEvent) -> Void = { _ in }) async throws {

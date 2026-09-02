@@ -24,6 +24,11 @@ final class StringsCatalogTests: XCTestCase {
         XCTAssertEqual(Strings.text("sheet.title", locale: "not-a-locale"), "Payment")
     }
 
+    func testUseOtherCardMatchesAndroid() {
+        XCTAssertEqual(Strings.text("sheet.useOtherCard", locale: "en"), "Use other card")
+        XCTAssertEqual(Strings.text("sheet.useAnotherCard", locale: "en"), "Use another card")
+    }
+
     func testEveryLanguageHasTheSameKeysAsEnglish() {
         let english = Strings.catalogKeys(for: "en")
         XCTAssertFalse(english.isEmpty)

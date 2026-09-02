@@ -61,6 +61,14 @@ public final class EmbeddedPayment {
         controller.updateLocale(locale)
     }
 
+    public func updateStyle(_ style: PaymentConfig.UserInterfaceStyle) {
+        controller.updateStyle(style)
+    }
+
+    public func updateWalletAppearance(_ appearance: PaymentConfig.WalletAppearance) {
+        controller.updateWalletAppearance(appearance)
+    }
+
     /// Submit the currently selected method (new card or saved card).
     /// Use with `SubmitButtonConfig.visible = false` so the merchant owns the Pay CTA.
     /// No-op while `isInteractionEnabled` is false (`updateOrder` or an in-flight charge).
