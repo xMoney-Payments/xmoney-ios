@@ -10,6 +10,7 @@ final class PaymentSheetAssetsTests: XCTestCase {
             "card-amex",
             "card-discover",
             "card-generic",
+            "card-cvv-base",
             "card-stack",
             "check",
             "chevron-down",
