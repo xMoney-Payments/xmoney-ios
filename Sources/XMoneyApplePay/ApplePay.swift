@@ -16,6 +16,7 @@ public final class ApplePay {
     private var dismissRequested = false
     private var payableIntent: PaymentIntent?
     private var isUpdatingOrder = false
+    private var bindGeneration = 0
 
     /// True after COMPLETE, FAILED, or post-submit CANCELED for the current order.
     /// Binding a new order via ``present(from:intent:onEvent:)`` clears this.
@@ -62,9 +63,18 @@ public final class ApplePay {
         guard !isProcessing else {
             throw PaymentError.payment("Payment in progress")
         }
+        bindGeneration += 1
+        let generation = bindGeneration
         isUpdatingOrder = true
-        defer { isUpdatingOrder = false }
+        defer {
+            if generation == bindGeneration {
+                isUpdatingOrder = false
+            }
+        }
         let state = try await bindWalletSession(intent: intent)
+        guard generation == bindGeneration else {
+            throw CancellationError()
+        }
         _ = store(state)
         payableIntent = intent
         let key = "\(intent.orderPayload):\(intent.orderChecksum)"

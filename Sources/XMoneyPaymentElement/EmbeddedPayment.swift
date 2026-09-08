@@ -41,7 +41,7 @@ public final class EmbeddedPayment {
     /// Pay, `confirm()`, and Apple Pay are no-ops until this returns
     /// (`isInteractionEnabled` is false). The Pay button keeps its current
     /// title — this does not emit ``EmbeddedEvent/processing(_:)``. A newer
-    /// `updateOrder` cancels the in-flight one.
+    /// `updateOrder` cancels the in-flight bind. Throws while a charge is in flight.
     public func updateOrder(intent: PaymentIntent) async throws {
         try await controller.prepare(intent: intent)
     }

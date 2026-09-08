@@ -81,11 +81,13 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     }
 
     func prepare(intent: PaymentIntent, onEvent: @escaping (EmbeddedEvent) -> Void = { _ in }) async throws {
+        guard !(session?.isProcessing ?? false) else {
+            throw PaymentError.payment("Payment in progress")
+        }
         self.onEvent = onEvent
         paymentConfig = liveConfiguration
         prepareGeneration += 1
         let generation = prepareGeneration
-        operationTask?.cancel()
         isUpdatingOrder = true
 
         do {
