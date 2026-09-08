@@ -6,6 +6,28 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-08
+
+### Changed
+
+- First stable 1.0 release.
+
+## [0.0.3] - 2026-09-02
+
+### Added
+
+- `EmbeddedPayment.updateStyle` / `updateWalletAppearance` (and the same on `PaymentElement`) restyle a mounted Element without remounting
+- `ApplePay.availability()` and `isAvailable` / `isReady` to gate the wallet without presenting PassKit
+
+### Changed
+
+- `appearance.borderRadius` / `borderWidth` now apply to card fields and the methods container (omit-defaults 16 / 20); field chrome uses `componentBorder` / `error`.
+- Checkout copy and default chrome colors match Android (`sheet.useOtherCard`, dark text `#F7F6F9`, field/container ink alphas).
+
+### Fixed
+
+- VoiceOver labels on condensed card fields, the sheet close button, and the 3DS close button (`sheet.cancel`).
+
 ## [0.0.2] - 2026-08-24
 
 ### Breaking

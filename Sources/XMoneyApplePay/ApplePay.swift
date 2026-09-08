@@ -16,10 +16,17 @@ public final class ApplePay {
     private var dismissRequested = false
     private var payableIntent: PaymentIntent?
     private var isUpdatingOrder = false
+    private var bindGeneration = 0
 
     /// True after COMPLETE, FAILED, or post-submit CANCELED for the current order.
     /// Binding a new order via ``present(from:intent:onEvent:)`` clears this.
     public private(set) var isOrderConsumed = false
+
+    /// Site/config returned a usable Apple Pay merchant ID for this order.
+    public private(set) var isAvailable = false
+
+    /// PassKit reports this device can make Apple Pay payments.
+    public private(set) var isReady = false
 
     public var isInteractionEnabled: Bool {
         !isProcessing && !isOrderConsumed && !isUpdatingOrder
@@ -38,17 +45,37 @@ public final class ApplePay {
         self.onResult = onResult
     }
 
+    /// Bind without presenting PassKit and return controller-equivalent availability flags.
+    /// Load / setup failures resolve to both flags false. `CancellationError` is rethrown.
+    public func availability(intent: PaymentIntent) async throws -> ApplePayAvailability {
+        do {
+            return store(try await bindWalletSession(intent: intent))
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            clearAvailability()
+            return ApplePayAvailability(isAvailable: false, isReady: false)
+        }
+    }
+
     /// Validates and stores `intent` as the next payable order. Pay is locked until this returns.
     public func updateOrder(intent: PaymentIntent) async throws {
         guard !isProcessing else {
             throw PaymentError.payment("Payment in progress")
         }
+        bindGeneration += 1
+        let generation = bindGeneration
         isUpdatingOrder = true
-        defer { isUpdatingOrder = false }
-        var config = configuration
-        config.paymentMethods.applePay.enabled = true
-        let session = try PaymentSession(configuration: config, intent: intent)
-        _ = try await session.bind(intent: intent)
+        defer {
+            if generation == bindGeneration {
+                isUpdatingOrder = false
+            }
+        }
+        let state = try await bindWalletSession(intent: intent)
+        guard generation == bindGeneration else {
+            throw CancellationError()
+        }
+        _ = store(state)
         payableIntent = intent
         let key = "\(intent.orderPayload):\(intent.orderChecksum)"
         if consumedOrderKey != key {
@@ -80,8 +107,9 @@ public final class ApplePay {
                 config.paymentMethods.applePay.enabled = true
                 let session = try PaymentSession(configuration: config, intent: payable)
                 let state = try await session.bind(intent: payable)
+                _ = store(state)
 
-                guard state.applePayAvailable else {
+                guard state.applePayAvailable, state.applePayReady else {
                     deliverLoadOrSetupFailure(
                         .applePay("Apple Pay is not available on this device."),
                         onEvent: onEvent
@@ -139,6 +167,31 @@ public final class ApplePay {
             self.dismissRequested = true
             self.applePayHandler?.dismiss()
         }
+    }
+
+    // MARK: - Bind / flags
+
+    private func bindWalletSession(intent: PaymentIntent) async throws -> SheetState {
+        Self.register()
+        var config = configuration
+        config.paymentMethods.applePay.enabled = true
+        let session = try PaymentSession(configuration: config, intent: intent)
+        return try await session.bind(intent: intent)
+    }
+
+    private func store(_ state: SheetState) -> ApplePayAvailability {
+        let flags = ApplePayAvailability(
+            isAvailable: state.applePayAvailable,
+            isReady: state.applePayReady
+        )
+        isAvailable = flags.isAvailable
+        isReady = flags.isReady
+        return flags
+    }
+
+    private func clearAvailability() {
+        isAvailable = false
+        isReady = false
     }
 
     // MARK: - Result delivery

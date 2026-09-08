@@ -231,12 +231,12 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         container.backgroundColor = theme.componentBackground
         container.layer.cornerRadius = theme.fieldGroupRadius
         container.layer.borderWidth = theme.borderWidth
-        container.layer.borderColor = theme.componentBorder.cgColor
+        container.layer.borderColor = theme.fieldBorder.cgColor
         container.clipsToBounds = true
         container.translatesAutoresizingMaskIntoConstraints = false
         outerStack.addArrangedSubview(container)
 
-        errorOverlay.layer.borderWidth = 1.5
+        errorOverlay.layer.borderWidth = theme.fieldStrokeWidth(hasError: true)
         errorOverlay.layer.borderColor = theme.errorBorder.cgColor
         errorOverlay.layer.cornerRadius = theme.fieldGroupRadius
         errorOverlay.isUserInteractionEnabled = false
@@ -314,12 +314,13 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         label.text = Strings.text(titleKey, locale: config.locale)
         label.font = theme.font(ofSize: 13, weight: .semibold)
         label.textColor = theme.secondaryText
+        label.isAccessibilityElement = false
 
         let box = UIView()
         box.backgroundColor = theme.componentBackground
         box.layer.cornerRadius = theme.fieldGroupRadius
         box.layer.borderWidth = theme.borderWidth
-        box.layer.borderColor = theme.componentBorder.cgColor
+        box.layer.borderColor = theme.fieldBorder.cgColor
         box.clipsToBounds = true
         spacedBoxes[field] = box
 
@@ -368,7 +369,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             attributes: [.foregroundColor: theme.placeholderText]
         )
         textField.font = theme.font(ofSize: 18, weight: .medium)
-        textField.textColor = theme.primaryText
+        textField.textColor = theme.componentText
         textField.keyboardType = keyboard
         textField.borderStyle = .none
         textField.contentVerticalAlignment = .center
@@ -376,10 +377,22 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         textField.isSecureTextEntry = secure
         textField.autocapitalizationType = capitalization
         if let contentType { textField.textContentType = contentType }
+        textField.accessibilityLabel = accessibilityLabel(for: field)
         textField.addTarget(self, action: #selector(editingChanged(_:)), for: .editingChanged)
         textField.translatesAutoresizingMaskIntoConstraints = false
         fields[field] = FieldUI(field: textField)
         return textField
+    }
+
+    private func accessibilityLabel(for field: Field) -> String {
+        let key: String
+        switch field {
+        case .number: key = "elements.cardNumber"
+        case .expiry: key = "elements.expDate"
+        case .cvv: key = "elements.cvv"
+        case .holder: key = "elements.cardholderName"
+        }
+        return Strings.text(key, locale: config.locale)
     }
 
     private func makeNumberRow() -> UIView {
@@ -387,7 +400,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
 
         let textField = makeTextField(
             field: .number,
-            placeholderKey: "placeholder.cardNumber",
+            placeholderKey: config.isSpaced ? "placeholder.cardNumber.spaced" : "placeholder.cardNumber",
             keyboard: .numberPad,
             contentType: .creditCardNumber
         )
@@ -428,7 +441,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
 
         let textField = makeTextField(
             field: .cvv,
-            placeholderKey: "placeholder.cvv",
+            placeholderKey: "placeholder.cvv.spaced",
             keyboard: .numberPad,
             secure: false
         )
@@ -628,14 +641,14 @@ package final class CardFormView: UIView, UITextFieldDelegate {
                 let hasVisibleError = visibleError(for: field) != nil
                 let focused = fields[field]?.focused ?? false
                 if hasVisibleError {
-                    box.layer.borderWidth = 1.5
+                    box.layer.borderWidth = theme.fieldStrokeWidth(hasError: true)
                     box.layer.borderColor = theme.errorBorder.cgColor
                 } else if focused {
-                    box.layer.borderWidth = theme.borderWidth
+                    box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
                     box.layer.borderColor = theme.primary.cgColor
                 } else {
-                    box.layer.borderWidth = theme.borderWidth
-                    box.layer.borderColor = theme.componentBorder.cgColor
+                    box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
+                    box.layer.borderColor = theme.fieldBorder.cgColor
                 }
             }
             return
@@ -645,14 +658,14 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         let anyFocused = fields.values.contains(where: \.focused)
         errorOverlay.isHidden = !hasVisibleError
         if hasVisibleError {
-            container.layer.borderWidth = 1.5
+            container.layer.borderWidth = theme.fieldStrokeWidth(hasError: true)
             container.layer.borderColor = theme.errorBorder.cgColor
         } else if anyFocused {
-            container.layer.borderWidth = theme.borderWidth
+            container.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
             container.layer.borderColor = theme.primary.cgColor
         } else {
-            container.layer.borderWidth = theme.borderWidth
-            container.layer.borderColor = theme.componentBorder.cgColor
+            container.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
+            container.layer.borderColor = theme.fieldBorder.cgColor
         }
     }
 

@@ -2,12 +2,12 @@
 
 Native iOS SDK for [xMoney](https://xmoney.com) checkout. Three surfaces, one `PaymentConfig`, one `PaymentResult`.
 
-| Module              | Product                 | Use when                                                |
-| ------------------- | ----------------------- | ------------------------------------------------------- |
-| **Payment Sheet**   | `XMoneyPaymentSheet`    | Drop-in bottom sheet. SDK owns the UI and the Pay button. |
-| **Payment Element** | `XMoneyPaymentElement`  | Card, saved cards, and Apple Pay **in your layout**.    |
-| **Apple Pay**       | `XMoneyApplePay`        | Standalone wallet button or `present()`.                |
-| **Core**            | `XMoneyCore`            | Pulled in by the surfaces. Do not depend on it directly. |
+| Module              | Product                | Use when                                                  |
+| ------------------- | ---------------------- | --------------------------------------------------------- |
+| **Payment Sheet**   | `XMoneyPaymentSheet`   | Drop-in bottom sheet. SDK owns the UI and the Pay button. |
+| **Payment Element** | `XMoneyPaymentElement` | Card, saved cards, and Apple Pay **in your layout**.      |
+| **Apple Pay**       | `XMoneyApplePay`       | Standalone wallet button or `present()`.                  |
+| **Core**            | `XMoneyCore`           | Pulled in by the surfaces. Do not depend on it directly.  |
 
 ```
 XMoneyPaymentSheet ──► XMoneyPaymentElement ──► XMoneyCore
@@ -24,12 +24,12 @@ XMoneyPaymentSheet ──► XMoneyPaymentElement ──► XMoneyCore
 
 ## Installation
 
-Latest release: **`0.0.2`**
+Latest release: **`1.0.0`**
 
 ### Swift Package Manager
 
 ```swift
-.package(url: "https://github.com/xMoney-Payments/xmoney-ios.git", from: "0.0.2")
+.package(url: "https://github.com/xMoney-Payments/xmoney-ios.git", from: "1.0.0")
 ```
 
 Link `XMoneyPaymentSheet` for the drop-in (includes Element + Apple Pay). Or pick surfaces: `XMoneyPaymentElement`, `XMoneyApplePay`.
@@ -81,13 +81,13 @@ Interim events (`.ready`, `.processing`) are optional and do not replace the res
 
 Order checksums are **one-shot**. After a consumed result the bound order cannot be charged again.
 
-| Outcome                                              | Consumes order? | What you do                               |
-| ---------------------------------------------------- | --------------- | ----------------------------------------- |
-| `.complete`                                          | Yes             | New `PaymentIntent` for another payment   |
-| `.failed`                                            | Yes             | New `PaymentIntent`                       |
-| `.canceled` **after** pay / 3DS started              | Yes             | New `PaymentIntent`                       |
-| Sheet closed **before** pay (header, drag, scrim)    | No              | Present the **same** intent again         |
-| Apple Pay dismissed **before** authorization         | No              | Present / tap again with the **same** intent |
+| Outcome                                           | Consumes order? | What you do                                  |
+| ------------------------------------------------- | --------------- | -------------------------------------------- |
+| `.complete`                                       | Yes             | New `PaymentIntent` for another payment      |
+| `.failed`                                         | Yes             | New `PaymentIntent`                          |
+| `.canceled` **after** pay / 3DS started           | Yes             | New `PaymentIntent`                          |
+| Sheet closed **before** pay (header, drag, scrim) | No              | Present the **same** intent again            |
+| Apple Pay dismissed **before** authorization      | No              | Present / tap again with the **same** intent |
 
 Embedded and standalone Apple Pay stay mounted after a consumed result; Pay / wallet disable (`isOrderConsumed`). Unmount them, or `prepare` / `present` with a **new** intent.
 
@@ -138,7 +138,7 @@ Copy-paste sample: [`PaymentSheetSampleView.swift`](Examples/Example/Samples/Pay
 
 ## Payment Element
 
-Same form as the sheet, without the bottom-sheet chrome. Mount it in your layout.
+Same form as the sheet, without the bottom-sheet chrome. Mount it in your layout. Embedded does not add outer content padding or a page fill — the host background shows through; supply your own page spacing.
 
 ```swift
 import XMoneyPaymentElement
@@ -152,6 +152,7 @@ let embedded = EmbeddedPayment(configuration: configuration) { result in
 
 let element = PaymentElement(payment: embedded)
 view.addSubview(element)
+// Merchant owns page spacing, e.g. 20pt horizontal insets.
 try await element.prepare(intent: intent)
 ```
 
@@ -170,6 +171,19 @@ try await embedded.updateOrder(intent: next)
 `PaymentElement` / `PaymentElementView` call `updateOrder` when `intent` changes. Keep the surface mounted; do not set the intent to `nil` or swap the form for a loader. Pay stays locked (`isInteractionEnabled`) until `.ready`. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`.
 
 Copy-paste sample: [`UpdateOrderSampleView.swift`](Examples/Example/Advanced/UpdateOrderSampleView.swift)
+
+### Live appearance
+
+Keep `EmbeddedPayment` across appearance changes. Call `updateAppearance` / `updateStyle` / `updateLocale` / `updateWalletAppearance` instead of recreating `PaymentConfig`:
+
+```swift
+embedded.updateAppearance(appearance)
+embedded.updateStyle(style)
+embedded.updateWalletAppearance(wallet)
+embedded.updateLocale(locale)
+```
+
+`PaymentElement` / `PaymentElementView` apply those updates to the mounted form. Payment Sheet snapshots config at `present()` — pass appearance on `PaymentConfig` and present again to replace an idle sheet.
 
 ### Merchant-owned Pay button
 
@@ -208,7 +222,11 @@ let applePay = ApplePay(configuration: configuration) { result in
     // PaymentResult
 }
 
-applePay.present(from: self, intent: intent)
+let flags = try await applePay.availability(intent: intent)
+if flags.isAvailable && flags.isReady {
+    applePay.present(from: self, intent: intent)
+}
+
 applePay.dismiss() // closes PassKit before authorize; no-op during token submit / 3DS
 
 let button = ApplePayButton()
@@ -221,6 +239,15 @@ button.onTap = { applePay.present(from: self, intent: intent) }
 ApplePayButtonView {
     applePay.present(from: presenter, intent: intent)
 }
+```
+
+After `availability` or `updateOrder`, gate your own chrome with the same flags:
+
+```swift
+applePay.isAvailable  // site / config allows Apple Pay
+applePay.isReady      // PassKit can make payments on this device
+applePay.isInteractionEnabled  // false during updateOrder and while paying
+applePay.isOrderConsumed
 ```
 
 Pre-auth dismiss delivers `.canceled` and does **not** consume. Present or tap again with the same intent.
@@ -260,6 +287,7 @@ PaymentConfig(
         locale: "en-US",    // UI language + pay-button amount punctuation
         style: .automatic,
         appearance: .init(
+            borderRadius: 12,  // card fields + methods container
             primaryButton: .init(borderRadius: 12)
         )
     )
@@ -277,7 +305,7 @@ PaymentConfig(
 
 Pay uses current field validity. Cardholder name is always collected.
 
-**Appearance** — pass light / dark colors so the form matches your chrome. Pay button radius comes from `appearance.primaryButton.borderRadius` (default pill `9999`, clamped to half height).
+**Appearance** — pass `colorsLight` / `colorsDark` so the form matches your chrome. Card fields (condensed box and spaced inputs) use `appearance.borderRadius` (default 16 pt), `appearance.borderWidth`, and `colors.componentBorder`. The methods container shares the radius (omit-default 20 pt). Pay button radius comes from `appearance.primaryButton.borderRadius` (default a pill, `9999`). Pass `12` for a squircle. On a mounted Element, call `updateAppearance` / `updateStyle` / `updateWalletAppearance`. See [`exampleAppearance()`](Examples/Example/SampleHelpers.swift) for a copy-paste palette.
 
 **Locale** — `options.locale` sets UI copy and pay-button amount punctuation. Supported languages: `en`, `el`, `ro`, `bg`, `hu`, `pl`. Region tags (`en-US`, `pl-PL`) work; unknown languages fall back to English.
 
@@ -302,12 +330,12 @@ Return `true` to continue pay, `false` to block. Sample: [`CardHolderVerificatio
 
 Use only these merchant-facing types:
 
-| Surface         | Types                                                                 |
-| --------------- | --------------------------------------------------------------------- |
-| Config / models | `PaymentConfig` and nested options, `PaymentIntent` / `OrderCredentials` / `OrderPayload` / `OrderChecksum`, `PaymentResult`, `PaymentError`, `Transaction` |
-| Payment Sheet   | `PaymentSheet`, `.paymentSheet`, `PaymentSheetEvent`                  |
-| Payment Element | `PaymentElement`, `PaymentElementView`, `EmbeddedPayment`, `EmbeddedEvent` |
-| Apple Pay       | `ApplePay`, `ApplePayButton`, `ApplePayButtonView`, `ApplePayEvent`   |
+| Surface         | Types                                                                                                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Config / models | `PaymentConfig` and nested options, `PaymentIntent` / `OrderCredentials` / `OrderPayload` / `OrderChecksum`, `PaymentResult`, `PaymentError`, `Transaction`                        |
+| Payment Sheet   | `PaymentSheet`, `.paymentSheet`, `PaymentSheetEvent`                                                                                                                               |
+| Payment Element | `PaymentElement`, `PaymentElementView`, `EmbeddedPayment` (`updateOrder`, `confirm`, `updateAppearance`, `updateStyle`, `updateLocale`, `updateWalletAppearance`), `EmbeddedEvent` |
+| Apple Pay       | `ApplePay` (`availability`, `present`, `updateOrder`, `dismiss`), `ApplePayAvailability`, `ApplePayButton`, `ApplePayButtonView`, `ApplePayEvent`                                  |
 
 Everything else (HTTP, services, 3DS host, form views, theme helpers) is library-internal.
 
@@ -335,5 +363,5 @@ Contract tests read `Tests/XMoneyCoreTests/test-vectors.json`.
 ## Support
 
 - Releases: [CHANGELOG.md](CHANGELOG.md)
-- Security: [SECURITY.md](SECURITY.md) — report vulnerabilities to **support@xmoney.com**, not a public issue
+- Security: [SECURITY.md](SECURITY.md) — report vulnerabilities to **it-support@xmoney.com**, not a public issue
 - License: [MIT](LICENSE)

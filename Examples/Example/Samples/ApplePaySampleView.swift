@@ -61,13 +61,18 @@ struct ApplePaySampleView: View {
                 ExampleLoader(message: "Preparing Apple Pay…")
             } else if let intent {
                 MerchantReadyGate(ready: bound, message: "Preparing Apple Pay…") {
-                    ApplePayButtonView(
-                        appearance: wallet,
-                        isEnabled: applePay?.isInteractionEnabled ?? true,
-                        isDarkBackground: theme.isDark,
-                        onTap: { present(intent: intent) }
-                    )
-                    .frame(height: 56)
+                    if applePay?.isAvailable == true, applePay?.isReady == true {
+                        ApplePayButtonView(
+                            appearance: wallet,
+                            isEnabled: applePay?.isInteractionEnabled ?? true,
+                            isDarkBackground: theme.isDark,
+                            onTap: { present(intent: intent) }
+                        )
+                        .frame(height: 56)
+                    }
+                }
+                if bound, applePay?.isReady != true {
+                    ExampleStatusChip("Apple Pay isn’t available on this device.", .neutral)
                 }
                 if lastResult == .canceled && !consumed {
                     ExampleStatusChip("You closed Apple Pay before finishing.", .neutral)

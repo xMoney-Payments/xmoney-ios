@@ -49,8 +49,8 @@ Integrations and name-check include a **Test cards** sheet with the four xMoney 
 - Payment Sheet: keep the merchant Pay button loading until `.ready`. Samples use `PaymentSheetEvent.processing` to tell pre-pay cancel apart from post-submit cancel.
 - After a consumed result, samples hide the payment UI and show **New payment**.
 - To change the amount on a mounted Element, `updateOrder` with a new `PaymentIntent`. Do **not** set the intent to `nil` or hide the form. Hearth, Pulse, and Update order do this; `PaymentElementHost` calls `updateOrder` when the payload/checksum changes. Pay stays locked (`isInteractionEnabled`) with its current title — `Processing` is an in-flight charge only. The form stays on screen. Playground Sheet mints a new intent when the amount stepper changes so Pay matches.
-- Call `updateAppearance` / `updateLocale` when you restyle a live Element. Playground Appearance writes `AppearanceConfig` and the live Element picks it up. There is no public `updateStyle` / `updateWalletAppearance` — remount the controller when style or wallet appearance changes.
-- [`exampleAppearance()`](Example/SampleHelpers.swift) is the appearance copy-paste — restyle Sheet / Element / Apple Pay to match your chrome.
+- Call `updateAppearance` / `updateStyle` / `updateLocale` / `updateWalletAppearance` when you restyle a live Element. Playground Appearance writes `AppearanceConfig` and the live Element picks it up. Do not recreate `EmbeddedPayment` for style or wallet chrome.
+- [`exampleAppearance()`](Example/SampleHelpers.swift) is the appearance copy-paste — restyle Sheet / Element / Apple Pay to match your chrome. `borderRadius` is the card field and payment-methods container radius.
 - Cart amounts are **minor units** (`Int64` cents). The demo backend converts to a decimal only at the HTTP boundary.
 - Do not put `PaymentElementView` in an unbounded `ScrollView` on iOS 15 (`sizeThatFits` is iOS 16+). Give it a `minHeight` or host `PaymentElement` in Auto Layout (see [`PaymentElementHost`](Example/UI/PaymentElementHost.swift)).
 - Do not present Payment Sheet from inside a SwiftUI `.sheet`. This app pushes full-screen destinations.

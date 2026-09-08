@@ -49,12 +49,15 @@ struct PlaygroundView: View {
             buttonType.value,
             validation.value,
             String(submitVisible),
-            style.value,
-            walletColor.value,
-            walletType.value,
-            String(Int(walletRadius)),
-            fontFamily,
         ].joined(separator: "|")
+    }
+
+    private var walletAppearance: PaymentConfig.WalletAppearance {
+        PaymentConfig.WalletAppearance(
+            color: PaymentConfig.WalletButtonColor.from(walletColor.value == "auto" ? nil : walletColor.value),
+            radius: walletRadius,
+            type: playgroundWalletType(walletType.value)
+        )
     }
 
     var body: some View {
@@ -87,7 +90,7 @@ struct PlaygroundView: View {
                         ExampleButton(label: "New payment", variant: .secondary, action: resetInline)
                     }
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 20)
                 .padding(.bottom, 32)
             }
         }
@@ -129,8 +132,17 @@ struct PlaygroundView: View {
         .onChange(of: appearance) { _ in
             payment?.updateAppearance(appearanceWithFont)
         }
+        .onChange(of: fontFamily) { _ in
+            payment?.updateAppearance(appearanceWithFont)
+        }
         .onChange(of: locale) { _ in
             payment?.updateLocale(locale.value)
+        }
+        .onChange(of: style) { _ in
+            payment?.updateStyle(playgroundStyle(style.value))
+        }
+        .onChange(of: walletAppearance) { next in
+            payment?.updateWalletAppearance(next)
         }
         .onChange(of: amountMinor) { _ in
             if mode == .paymentSheet {
@@ -154,11 +166,6 @@ struct PlaygroundView: View {
     }
 
     private func makeConfiguration() -> PaymentConfig {
-        let wallet = PaymentConfig.WalletAppearance(
-            color: PaymentConfig.WalletButtonColor.from(walletColor.value == "auto" ? nil : walletColor.value),
-            radius: walletRadius,
-            type: playgroundWalletType(walletType.value)
-        )
         return PaymentConfig(
             publicKey: ExampleSecrets.publicKey,
             card: .init(
@@ -173,7 +180,7 @@ struct PlaygroundView: View {
                 validationMode: playgroundValidation(validation.value),
                 submitButton: .init(visible: submitVisible, type: playgroundButtonType(buttonType.value))
             ),
-            paymentMethods: .init(applePay: .init(enabled: applePayEnabled, appearance: wallet)),
+            paymentMethods: .init(applePay: .init(enabled: applePayEnabled, appearance: walletAppearance)),
             options: .init(
                 locale: locale.value,
                 style: playgroundStyle(style.value),
@@ -411,7 +418,8 @@ private struct AppearancePlaygroundView: View {
                             title: "Border radius",
                             value: borderRadius,
                             range: 0...32,
-                            format: { "\(Int($0.rounded())) pt" }
+                            format: { "\(Int($0.rounded())) pt" },
+                            caption: "appearance.borderRadius — default 16 pt on fields, 20 pt on the methods container."
                         )
                         AppearanceSliderRow(
                             title: "Border width",
@@ -489,7 +497,7 @@ private struct AppearancePlaygroundView: View {
 
     private var borderRadius: Binding<Double> {
         Binding(
-            get: { appearance.borderRadius ?? 8 },
+            get: { appearance.borderRadius ?? 16 },
             set: { appearance.borderRadius = $0 }
         )
     }
@@ -623,6 +631,7 @@ private struct AppearanceSliderRow: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
     let format: (Double) -> String
+    var caption: String? = nil
     @EnvironmentObject private var theme: ExampleThemeState
 
     var body: some View {
@@ -631,6 +640,11 @@ private struct AppearanceSliderRow: View {
                 Text(title).font(ExampleFont.titleMedium)
                 Spacer()
                 Text(format(value))
+                    .font(ExampleFont.bodyMedium)
+                    .foregroundColor(theme.isDark ? ExampleColors.darkMuted : ExampleColors.lightMuted)
+            }
+            if let caption {
+                Text(caption)
                     .font(ExampleFont.bodyMedium)
                     .foregroundColor(theme.isDark ? ExampleColors.darkMuted : ExampleColors.lightMuted)
             }

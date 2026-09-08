@@ -4,6 +4,7 @@
 "sheet.poweredBy" = "Powered by";
 "sheet.savedCards" = "Saved cards";
 "sheet.useAnotherCard" = "Use another card";
+"sheet.useOtherCard" = "Use other card";
 "sheet.delete" = "Delete";
 "sheet.edit" = "Edit";
 "sheet.done" = "Done";
@@ -15,9 +16,11 @@
 "elements.expDate" = "Expiration Date";
 "elements.cvv" = "CVV";
 "elements.saveCard" = "Save Card for Future Use";
-"placeholder.cardNumber" = "0000 - 0000 - 0000 - 0000";
+"placeholder.cardNumber" = "Card number";
+"placeholder.cardNumber.spaced" = "1234 1234 1234 1234";
 "placeholder.expDate" = "MM / YY";
-"placeholder.cvv" = "cvv";
+"placeholder.cvv" = "CVV";
+"placeholder.cvv.spaced" = "123";
 "placeholder.cardholderName" = "Name on card";
 "errors.cardNumberRequired" = "Card number is required.";
 "errors.cardNumberUnsupported" = "Card type is not supported.";

@@ -99,7 +99,7 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
 
         let grabber = GrabberView(theme: t)
 
-        let close = CircleCloseButton(theme: t)
+        let close = CircleCloseButton(theme: t, locale: config.options.locale)
         close.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
         closeButton = close
 

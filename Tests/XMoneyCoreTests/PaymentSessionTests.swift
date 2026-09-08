@@ -59,6 +59,7 @@ final class PaymentSessionTests: XCTestCase {
         }
         let state = try await session.bind(intent: session.intent)
         XCTAssertFalse(state.applePayAvailable)
+        XCTAssertFalse(state.applePayReady)
     }
 
     func testApplePayAvailableWhenParamsIncludeMerchantId() async throws {
@@ -68,6 +69,17 @@ final class PaymentSessionTests: XCTestCase {
         }
         let state = try await session.bind(intent: session.intent)
         XCTAssertTrue(state.applePayAvailable)
+        XCTAssertTrue(state.applePayReady)
+    }
+
+    func testApplePayAvailableButNotReadyWhenDeviceCannotPay() async throws {
+        DigitalWalletFactory.canMakePayments = { false }
+        let session = try makeSession(applePayEnabled: true) { request in
+            StubHTTP.okJSON(for: request, wallet: ["merchantId": "merchant.com.xmoney"])
+        }
+        let state = try await session.bind(intent: session.intent)
+        XCTAssertTrue(state.applePayAvailable)
+        XCTAssertFalse(state.applePayReady)
     }
 
     func testPreAuthorizeCancelDoesNotConsume() async throws {
@@ -227,6 +239,7 @@ final class PaymentSessionTests: XCTestCase {
         }
         let state = try await session.bind(intent: session.intent)
         XCTAssertTrue(state.applePayAvailable)
+        XCTAssertTrue(state.applePayReady)
     }
 
     func testDeleteSavedCardNon2xxThrows() async throws {

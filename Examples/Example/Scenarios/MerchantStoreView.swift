@@ -526,6 +526,8 @@ private struct SheetCheckoutScreen: View {
     @State private var heldIntent: PaymentIntent?
     @State private var didProcess = false
     @State private var showSheet = false
+    @State private var revealed = false
+    @State private var retryKey = 0
 
     var body: some View {
         let currency = ExampleSecrets.currency
@@ -542,39 +544,30 @@ private struct SheetCheckoutScreen: View {
                         showThemeToggle: false,
                         onBack: onBack
                     )
-                    OrderSummaryCard(lines: lines, currency: currency)
-                        .padding(.horizontal, 20)
+                    if revealed {
+                        OrderSummaryCard(lines: lines, currency: currency)
+                            .padding(.horizontal, 20)
+                    } else if error == nil {
+                        ExampleCheckoutSkeleton(showOrder: true)
+                            .padding(.horizontal, 20)
+                    }
                 }
             }
             VStack(spacing: 12) {
-                if let error { ExampleStatusChip(error, .error) }
-                ExampleButton(label: "Pay \(formatMoney(total, currency: currency))", loading: loading) {
-                    loading = true
-                    error = nil
-                    Task {
-                        do {
-                            let intent: PaymentIntent
-                            if let heldIntent {
-                                intent = heldIntent
-                            } else {
-                                intent = try await DemoCheckoutBackend.createPaymentIntent(
-                                    amountMinor: total,
-                                    description: description
-                                )
-                            }
-                            await MainActor.run {
-                                heldIntent = intent
-                                didProcess = false
-                                showSheet = true
-                            }
-                        } catch {
-                            if isCancellation(error) { return }
-                            await MainActor.run {
-                                self.error = error.localizedDescription
-                                loading = false
-                            }
-                        }
+                if revealed {
+                    if let error { ExampleStatusChip(error, .error) }
+                    ExampleButton(label: "Pay \(formatMoney(total, currency: currency))", loading: loading) {
+                        guard heldIntent != nil else { return }
+                        loading = true
+                        error = nil
+                        didProcess = false
+                        showSheet = true
                     }
+                } else if let error {
+                    ExampleStatusChip(error, .error)
+                    ExampleButton(label: "Try again", variant: .secondary) { retryKey += 1 }
+                } else {
+                    ExampleCheckoutSkeleton(showOrder: false, showPayButton: true)
                 }
             }
             .padding(.horizontal, 20)
@@ -608,6 +601,24 @@ private struct SheetCheckoutScreen: View {
             }
         )
         .id(theme.isDark)
+        .task(id: retryKey) {
+            if heldIntent != nil { return }
+            error = nil
+            do {
+                let intent = try await DemoCheckoutBackend.createPaymentIntent(
+                    amountMinor: total,
+                    description: description
+                )
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    heldIntent = intent
+                    revealed = true
+                }
+            } catch {
+                if isCancellation(error) { return }
+                await MainActor.run { self.error = error.localizedDescription }
+            }
+        }
     }
 }
 
@@ -638,23 +649,32 @@ private struct EmbeddedCheckoutScreen: View {
                     showThemeToggle: false,
                     onBack: onBack
                 )
-                OrderSummaryCard(lines: lines, currency: currency, onQty: onQty)
-                    .padding(.horizontal, 12)
+                if ready {
+                    OrderSummaryCard(lines: lines, currency: currency, onQty: onQty)
+                        .padding(.horizontal, 20)
+                } else if error == nil {
+                    ExampleCheckoutSkeleton(showOrder: true)
+                        .padding(.horizontal, 20)
+                }
                 if let payment, let intent {
-                    MerchantReadyGate(ready: ready, message: "Preparing checkout…") {
+                    MerchantReadyGate(
+                        ready: ready,
+                        placeholder: { ExampleCheckoutSkeleton(showOrder: false, showForm: true) }
+                    ) {
                         PaymentElementHost(payment: payment, intent: intent) { event in
                             if case .ready = event { ready = true }
                         }
                     }
-                    .padding(.horizontal, 12)
-                } else {
-                    ExampleLoader(message: "Preparing checkout…")
+                    .padding(.horizontal, 20)
+                } else if error == nil {
+                    ExampleCheckoutSkeleton(showOrder: false, showForm: true)
+                        .padding(.horizontal, 20)
                 }
                 if let error {
                     ExampleStatusChip(error, .error)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 20)
                     ExampleButton(label: "Try again", variant: .secondary) { retryKey += 1 }
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 20)
                 }
             }
             .padding(.bottom, 24)

@@ -280,22 +280,140 @@ struct ExampleLoader: View {
     }
 }
 
+struct ExampleCheckoutSkeleton: View {
+    var showOrder: Bool = true
+    var showForm: Bool = false
+    var showPayButton: Bool = false
+    @State private var highlight: CGFloat = 0.08
+    @EnvironmentObject private var theme: ExampleThemeState
+    @Environment(\.exampleSemantics) private var semantics
+
+    var body: some View {
+        let onSurface = theme.isDark ? ExampleColors.darkText : ExampleColors.lightText
+        let boneColor = onSurface.opacity(highlight)
+        VStack(alignment: .leading, spacing: 16) {
+            if showOrder {
+                ExampleCard {
+                    SkeletonBone(color: boneColor, height: 12)
+                        .frame(width: 56)
+                    ForEach(0..<3, id: \.self) { _ in
+                        HStack(spacing: 0) {
+                            SkeletonBone(color: boneColor, height: 16)
+                                .frame(maxWidth: .infinity)
+                                .padding(.trailing, 24)
+                            SkeletonBone(color: boneColor, height: 16)
+                                .frame(width: 64)
+                        }
+                    }
+                    Divider().background(semantics.hairline)
+                    HStack {
+                        SkeletonBone(color: boneColor, height: 14)
+                            .frame(width: 72)
+                        Spacer()
+                        SkeletonBone(color: boneColor, height: 14)
+                            .frame(width: 48)
+                    }
+                    HStack {
+                        SkeletonBone(color: boneColor, height: 18)
+                            .frame(width: 48)
+                        Spacer()
+                        SkeletonBone(color: boneColor, height: 18)
+                            .frame(width: 72)
+                    }
+                }
+            }
+            if showForm {
+                VStack(alignment: .leading, spacing: 12) {
+                    SkeletonBone(color: boneColor, height: 56, radius: ExampleRadii.inner)
+                    HStack(spacing: 14) {
+                        Rectangle()
+                            .fill(semantics.hairline)
+                            .frame(height: 1)
+                        SkeletonBone(color: boneColor, height: 10)
+                            .frame(width: 24)
+                        Rectangle()
+                            .fill(semantics.hairline)
+                            .frame(height: 1)
+                    }
+                    .padding(.vertical, 4)
+                    formFieldGroup(boneColor: boneColor)
+                    SkeletonBone(color: boneColor, height: 52, radius: ExampleRadii.pill)
+                }
+            }
+            if showPayButton {
+                SkeletonBone(color: boneColor, height: 52, radius: ExampleRadii.pill)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Loading checkout")
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                highlight = 0.16
+            }
+        }
+    }
+
+    private func formFieldGroup(boneColor: Color) -> some View {
+        let fieldShape = RoundedRectangle(cornerRadius: ExampleRadii.card, style: .continuous)
+        return VStack(spacing: 0) {
+            SkeletonBone(color: boneColor, height: 52, radius: 0)
+            Rectangle().fill(semantics.hairline).frame(height: 1)
+            HStack(spacing: 0) {
+                SkeletonBone(color: boneColor, height: 52, radius: 0)
+                Rectangle().fill(semantics.hairline).frame(width: 1, height: 52)
+                SkeletonBone(color: boneColor, height: 52, radius: 0)
+            }
+            Rectangle().fill(semantics.hairline).frame(height: 1)
+            SkeletonBone(color: boneColor, height: 52, radius: 0)
+        }
+        .clipShape(fieldShape)
+        .overlay(fieldShape.stroke(semantics.hairline, lineWidth: 1))
+    }
+}
+
+private struct SkeletonBone: View {
+    let color: Color
+    var height: CGFloat = 14
+    var radius: CGFloat = 8
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(color)
+            .frame(height: height)
+    }
+}
+
 /// Merchant loading chrome for the **initial** bind. Always keeps `content`
 /// in the tree so `PaymentElement` / `ApplePayButton` can emit `.ready`. After
 /// the first Ready, the surface stays visible — `updateOrder` must not hide it.
-struct MerchantReadyGate<Content: View>: View {
+struct MerchantReadyGate<Content: View, Placeholder: View>: View {
     let ready: Bool
-    let message: String
-    @ViewBuilder var content: () -> Content
+    private let placeholder: () -> Placeholder
+    private let content: () -> Content
     @State private var hasBound = false
+
+    init(
+        ready: Bool,
+        @ViewBuilder placeholder: @escaping () -> Placeholder,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.ready = ready
+        self.placeholder = placeholder
+        self.content = content
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
             content()
+                .frame(maxWidth: .infinity)
+                .frame(height: hasBound ? nil : 0, alignment: .top)
+                .clipped()
                 .opacity(hasBound ? 1 : 0)
                 .accessibilityHidden(!hasBound)
+                .allowsHitTesting(hasBound)
             if !hasBound {
-                ExampleLoader(message: message)
+                placeholder()
             }
         }
         .frame(maxWidth: .infinity)
@@ -305,6 +423,20 @@ struct MerchantReadyGate<Content: View>: View {
         .onChange(of: ready) { isReady in
             if isReady { hasBound = true }
         }
+    }
+}
+
+extension MerchantReadyGate where Placeholder == ExampleLoader {
+    init(
+        ready: Bool,
+        message: String,
+        @ViewBuilder content: @escaping () -> Content
+    ) {
+        self.init(
+            ready: ready,
+            placeholder: { ExampleLoader(message: message) },
+            content: content
+        )
     }
 }
 
@@ -553,7 +685,7 @@ struct SampleScaffold<Content: View>: View {
                     VStack(alignment: .leading, spacing: 16) {
                         content()
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 20)
                     .padding(.vertical, 8)
                     .padding(.bottom, 24)
                 }
@@ -561,7 +693,7 @@ struct SampleScaffold<Content: View>: View {
                 VStack(alignment: .leading, spacing: 16) {
                     content()
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 20)
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
