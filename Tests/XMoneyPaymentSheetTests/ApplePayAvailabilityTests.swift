@@ -5,7 +5,7 @@ import XMoneyApplePay
 final class ApplePayAvailabilityTests: XCTestCase {
     @MainActor
     func testFlagsStartFalse() {
-        let applePay = ApplePay(configuration: PaymentConfig(publicKey: "test_pk_x")) { _ in }
+        let applePay = ApplePay(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in }
         XCTAssertFalse(applePay.isAvailable)
         XCTAssertFalse(applePay.isReady)
     }

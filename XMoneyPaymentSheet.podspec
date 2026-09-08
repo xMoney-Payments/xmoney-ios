@@ -1,11 +1,11 @@
 Pod::Spec.new do |s|
   s.name             = 'XMoneyPaymentSheet'
-  s.version          = '0.0.3'
+  s.version          = '1.0.0'
   s.summary          = 'Native xMoney checkout SDK for iOS'
   s.description      = 'Drop-in payment sheet, embedded Payment Element, and Apple Pay for xMoney.'
   s.homepage         = 'https://github.com/xMoney-Payments/xmoney-ios'
   s.license          = { type: 'MIT', file: 'LICENSE' }
-  s.author           = { 'xMoney' => 'support@xmoney.com' }
+  s.author           = { 'xMoney' => 'it-support@xmoney.com' }
   s.source           = { git: 'https://github.com/xMoney-Payments/xmoney-ios.git', tag: s.version.to_s }
   s.swift_version    = '5.9'
   s.ios.deployment_target = '15.0'

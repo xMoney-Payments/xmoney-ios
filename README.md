@@ -2,12 +2,12 @@
 
 Native iOS SDK for [xMoney](https://xmoney.com) checkout. Three surfaces, one `PaymentConfig`, one `PaymentResult`.
 
-| Module              | Product                 | Use when                                                |
-| ------------------- | ----------------------- | ------------------------------------------------------- |
-| **Payment Sheet**   | `XMoneyPaymentSheet`    | Drop-in bottom sheet. SDK owns the UI and the Pay button. |
-| **Payment Element** | `XMoneyPaymentElement`  | Card, saved cards, and Apple Pay **in your layout**.    |
-| **Apple Pay**       | `XMoneyApplePay`        | Standalone wallet button or `present()`.                |
-| **Core**            | `XMoneyCore`            | Pulled in by the surfaces. Do not depend on it directly. |
+| Module              | Product                | Use when                                                  |
+| ------------------- | ---------------------- | --------------------------------------------------------- |
+| **Payment Sheet**   | `XMoneyPaymentSheet`   | Drop-in bottom sheet. SDK owns the UI and the Pay button. |
+| **Payment Element** | `XMoneyPaymentElement` | Card, saved cards, and Apple Pay **in your layout**.      |
+| **Apple Pay**       | `XMoneyApplePay`       | Standalone wallet button or `present()`.                  |
+| **Core**            | `XMoneyCore`           | Pulled in by the surfaces. Do not depend on it directly.  |
 
 ```
 XMoneyPaymentSheet ──► XMoneyPaymentElement ──► XMoneyCore
@@ -24,12 +24,12 @@ XMoneyPaymentSheet ──► XMoneyPaymentElement ──► XMoneyCore
 
 ## Installation
 
-Latest release: **`0.0.3`**
+Latest release: **`1.0.0`**
 
 ### Swift Package Manager
 
 ```swift
-.package(url: "https://github.com/xMoney-Payments/xmoney-ios.git", from: "0.0.3")
+.package(url: "https://github.com/xMoney-Payments/xmoney-ios.git", from: "1.0.0")
 ```
 
 Link `XMoneyPaymentSheet` for the drop-in (includes Element + Apple Pay). Or pick surfaces: `XMoneyPaymentElement`, `XMoneyApplePay`.
@@ -81,13 +81,13 @@ Interim events (`.ready`, `.processing`) are optional and do not replace the res
 
 Order checksums are **one-shot**. After a consumed result the bound order cannot be charged again.
 
-| Outcome                                              | Consumes order? | What you do                               |
-| ---------------------------------------------------- | --------------- | ----------------------------------------- |
-| `.complete`                                          | Yes             | New `PaymentIntent` for another payment   |
-| `.failed`                                            | Yes             | New `PaymentIntent`                       |
-| `.canceled` **after** pay / 3DS started              | Yes             | New `PaymentIntent`                       |
-| Sheet closed **before** pay (header, drag, scrim)    | No              | Present the **same** intent again         |
-| Apple Pay dismissed **before** authorization         | No              | Present / tap again with the **same** intent |
+| Outcome                                           | Consumes order? | What you do                                  |
+| ------------------------------------------------- | --------------- | -------------------------------------------- |
+| `.complete`                                       | Yes             | New `PaymentIntent` for another payment      |
+| `.failed`                                         | Yes             | New `PaymentIntent`                          |
+| `.canceled` **after** pay / 3DS started           | Yes             | New `PaymentIntent`                          |
+| Sheet closed **before** pay (header, drag, scrim) | No              | Present the **same** intent again            |
+| Apple Pay dismissed **before** authorization      | No              | Present / tap again with the **same** intent |
 
 Embedded and standalone Apple Pay stay mounted after a consumed result; Pay / wallet disable (`isOrderConsumed`). Unmount them, or `prepare` / `present` with a **new** intent.
 
@@ -330,12 +330,12 @@ Return `true` to continue pay, `false` to block. Sample: [`CardHolderVerificatio
 
 Use only these merchant-facing types:
 
-| Surface         | Types                                                                 |
-| --------------- | --------------------------------------------------------------------- |
-| Config / models | `PaymentConfig` and nested options, `PaymentIntent` / `OrderCredentials` / `OrderPayload` / `OrderChecksum`, `PaymentResult`, `PaymentError`, `Transaction` |
-| Payment Sheet   | `PaymentSheet`, `.paymentSheet`, `PaymentSheetEvent`                  |
+| Surface         | Types                                                                                                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Config / models | `PaymentConfig` and nested options, `PaymentIntent` / `OrderCredentials` / `OrderPayload` / `OrderChecksum`, `PaymentResult`, `PaymentError`, `Transaction`                        |
+| Payment Sheet   | `PaymentSheet`, `.paymentSheet`, `PaymentSheetEvent`                                                                                                                               |
 | Payment Element | `PaymentElement`, `PaymentElementView`, `EmbeddedPayment` (`updateOrder`, `confirm`, `updateAppearance`, `updateStyle`, `updateLocale`, `updateWalletAppearance`), `EmbeddedEvent` |
-| Apple Pay       | `ApplePay` (`availability`, `present`, `updateOrder`, `dismiss`), `ApplePayAvailability`, `ApplePayButton`, `ApplePayButtonView`, `ApplePayEvent` |
+| Apple Pay       | `ApplePay` (`availability`, `present`, `updateOrder`, `dismiss`), `ApplePayAvailability`, `ApplePayButton`, `ApplePayButtonView`, `ApplePayEvent`                                  |
 
 Everything else (HTTP, services, 3DS host, form views, theme helpers) is library-internal.
 
@@ -363,5 +363,5 @@ Contract tests read `Tests/XMoneyCoreTests/test-vectors.json`.
 ## Support
 
 - Releases: [CHANGELOG.md](CHANGELOG.md)
-- Security: [SECURITY.md](SECURITY.md) — report vulnerabilities to **support@xmoney.com**, not a public issue
+- Security: [SECURITY.md](SECURITY.md) — report vulnerabilities to **it-support@xmoney.com**, not a public issue
 - License: [MIT](LICENSE)

@@ -4,13 +4,13 @@
 
 | Version | Supported |
 | ------- | --------- |
-| 0.0.x   | Yes       |
+| 1.0.x   | Yes       |
 
 ## Reporting a vulnerability
 
 Do **not** open a public GitHub issue for security vulnerabilities.
 
-Email **support@xmoney.com** with:
+Email **it-team@xmoney.com** with:
 
 - a clear description of the issue
 - steps to reproduce
@@ -26,7 +26,7 @@ Issues in merchant apps, backends, or non-SDK xMoney products are out of scope h
 
 ## Hard rules for integrators
 
-- Put only the publishable `publicKey` (`test_…` / `live_…`) in the iOS app.
+- Put only the publishable `publicKey` (`pk_test_…` / `pk_live_…`) in the iOS app.
 - Keep secret / private API keys on your server. Create orders server-side.
 - Never commit live keys, order payloads with secrets, or card data to source control.
 - Use sandbox keys during development.
@@ -40,4 +40,4 @@ Native card entry collects PAN + CVV in memory and sends them over HTTPS to xMon
 
 All SDK network calls use HTTPS to hardcoded xMoney hosts only (no cleartext, no merchant-supplied base URLs).
 
-Certificate pinning is **not** implemented in the SDK. For v0.0.x we **accept** the residual risk that a compromised device trust store could enable MITM. Revisit pinning if the threat model or merchant compliance requirements change.
+Certificate pinning is **not** implemented in the SDK. For v1.0.x we **accept** the residual risk that a compromised device trust store could enable MITM. Revisit pinning if the threat model or merchant compliance requirements change.
