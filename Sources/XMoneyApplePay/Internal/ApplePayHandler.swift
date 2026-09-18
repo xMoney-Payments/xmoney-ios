@@ -13,6 +13,14 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
     private var continuation: CheckedContinuation<EngineResult, Never>?
     private var didProduceResult = false
 
+    /// PassKit holds its delegate weakly, and the surfaces release their
+    /// handler as soon as the result is delivered — while PassKit may still
+    /// be showing the success tick or the error. Without this, the later
+    /// `paymentAuthorizationControllerDidFinish` has no receiver, `dismiss()`
+    /// is never called and the sheet can't be closed. Set while the sheet is
+    /// on screen; cleared once PassKit has dismissed it.
+    private var presentationRetain: ApplePayHandler?
+
     /// `true` once the user authorizes a payment (token submit / 3DS may follow).
     /// Pre-authorize sheet dismiss is canceled without this flag.
     package private(set) var didAuthorizePayment = false
@@ -55,9 +63,11 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
             let controller = PKPaymentAuthorizationController(paymentRequest: request)
             controller.delegate = self
             self.controller = controller
+            self.presentationRetain = self
             controller.present { presented in
                 if !presented {
                     self.resolve(.init(status: .canceled, transaction: nil, errorCode: nil, errorMessage: nil))
+                    self.releasePresentation()
                 }
             }
         }
@@ -67,7 +77,21 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
     /// No-op after authorize (token submit / 3DS), matching Payment Sheet.
     package func dismiss() {
         guard !didAuthorizePayment else { return }
-        controller?.dismiss()
+        controller?.dismiss { [self] in
+            // PassKit does not always follow a programmatic dismiss with
+            // didFinish; resolve here so the caller isn't left waiting.
+            if !didAuthorizePayment {
+                resolve(.init(status: .canceled, transaction: nil, errorCode: nil, errorMessage: nil))
+            }
+            releasePresentation()
+        }
+    }
+
+    private func releasePresentation() {
+        DispatchQueue.main.async { [self] in
+            controller = nil
+            presentationRetain = nil
+        }
     }
 
     private func buildRequest(
@@ -162,7 +186,9 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
     }
 
     package func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
-        controller.dismiss()
+        controller.dismiss { [self] in
+            releasePresentation()
+        }
         guard !didProduceResult else { return }
         resolve(.init(status: .canceled, transaction: nil, errorCode: nil, errorMessage: nil))
     }
