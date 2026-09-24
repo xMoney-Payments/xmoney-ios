@@ -17,7 +17,7 @@ on:
       version:
         description: 'Version to publish (e.g. 0.0.1)'
         required: true
-        default: '1.0.0'
+        default: '1.0.1'
 
 permissions:
   contents: write
@@ -98,4 +98,34 @@ jobs:
         env:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
         run: |
-          pod trunk push XMoneyPaymentSheet.podspec --allow-warnings
+          VERSION="${{ steps.version.outputs.version }}"
+          POD_NAME="XMoneyPaymentSheet"
+
+          trunk_has_version() {
+            curl -fsS "https://trunk.cocoapods.org/api/v1/pods/${POD_NAME}" \
+              | grep -qE '"name"[[:space:]]*:[[:space:]]*"'"${VERSION}"'"'
+          }
+
+          set +e
+          push_output=$(pod trunk push XMoneyPaymentSheet.podspec --allow-warnings 2>&1)
+          push_status=$?
+          set -e
+          echo "$push_output"
+
+          if [ "$push_status" -eq 0 ]; then
+            exit 0
+          fi
+
+          # Trunk accepts the spec before post-publish GitHub verification finishes.
+          # A client-side timeout (or duplicate-entry on retry) can exit non-zero even
+          # though the version is live — trust Trunk, not only the CLI exit code.
+          for i in 1 2 3 4 5; do
+            if trunk_has_version; then
+              echo "::notice title=CocoaPods::${POD_NAME} ${VERSION} is on Trunk — push landed despite client error."
+              exit 0
+            fi
+            echo "Waiting for Trunk to list ${VERSION} (attempt ${i})..."
+            sleep 5
+          done
+
+          exit 1

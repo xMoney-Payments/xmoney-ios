@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-24
+
 ### Fixed
 
 - The Apple Pay sheet could not be closed after a payment result (success or failure), including via its close button: the SDK released the PassKit delegate before `paymentAuthorizationControllerDidFinish` arrived. The handler now stays alive until PassKit has dismissed the sheet.
