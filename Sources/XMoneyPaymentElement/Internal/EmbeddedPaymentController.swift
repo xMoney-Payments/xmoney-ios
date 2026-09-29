@@ -99,7 +99,6 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
             guard generation == prepareGeneration else { return }
             _ = state
             isUpdatingOrder = false
-            onEvent(.ready)
         } catch is CancellationError {
             guard generation == prepareGeneration else { return }
             isUpdatingOrder = false

@@ -75,6 +75,13 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         return ceil(headerChrome + (formView?.contentHeight ?? 280))
     }
 
+    /// Card form and Apple Pay button (when offered) have drawn under the loading cover.
+    package func waitUntilSurfaceDrawn() async {
+        loadViewIfNeeded()
+        view.layoutIfNeeded()
+        await formView.waitUntilSurfaceDrawn()
+    }
+
     package func invalidateSheetHeight() {
         guard !isInvalidatingHeight else { return }
         isInvalidatingHeight = true

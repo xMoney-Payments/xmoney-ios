@@ -17,7 +17,8 @@ struct ApplePaySampleView: View {
     @State private var lastResult: PaymentResult?
     @State private var error: String?
     @State private var loading = true
-    @State private var bound = false
+    @State private var orderBound = false
+    @State private var buttonDrawn = false
     @State private var presenter: UIViewController?
     @State private var applePay: ApplePay?
 
@@ -60,18 +61,19 @@ struct ApplePaySampleView: View {
             } else if loading && intent == nil {
                 ExampleLoader(message: "Preparing Apple Pay…")
             } else if let intent {
-                MerchantReadyGate(ready: bound, message: "Preparing Apple Pay…") {
+                MerchantReadyGate(ready: surfaceReady, message: "Preparing Apple Pay…") {
                     if applePay?.isAvailable == true, applePay?.isReady == true {
                         ApplePayButtonView(
                             appearance: wallet,
                             isEnabled: applePay?.isInteractionEnabled ?? true,
                             isDarkBackground: theme.isDark,
-                            onTap: { present(intent: intent) }
+                            onTap: { present(intent: intent) },
+                            onFirstDraw: { buttonDrawn = true }
                         )
                         .frame(height: 56)
                     }
                 }
-                if bound, applePay?.isReady != true {
+                if surfaceReady, applePay?.isReady != true {
                     ExampleStatusChip("Apple Pay isn’t available on this device.", .neutral)
                 }
                 if lastResult == .canceled && !consumed {
@@ -88,22 +90,31 @@ struct ApplePaySampleView: View {
         }
         .onChange(of: theme.isDark) { _ in
             applePay = ApplePay(configuration: configuration, onResult: handleResult)
-            bound = false
             if let intent {
-                Task { try? await applePay?.updateOrder(intent: intent) }
+                Task {
+                    try? await applePay?.updateOrder(intent: intent)
+                    await MainActor.run { orderBound = true }
+                }
             }
         }
         .task(id: intent.map { "\($0.orderPayload):\($0.orderChecksum)" }) {
             guard let intent, let applePay else { return }
-            bound = false
+            orderBound = false
             do {
                 try await applePay.updateOrder(intent: intent)
-                await MainActor.run { bound = true }
+                await MainActor.run { orderBound = true }
             } catch {
                 guard !isCancellation(error) else { return }
                 await MainActor.run { self.error = error.localizedDescription }
             }
         }
+    }
+
+    /// Shown once the order is bound and, when Apple Pay is offered, the button has drawn.
+    private var surfaceReady: Bool {
+        guard orderBound else { return false }
+        let showsButton = applePay?.isAvailable == true && applePay?.isReady == true
+        return showsButton ? buttonDrawn : true
     }
 
     private var consumed: Bool {
@@ -116,16 +127,15 @@ struct ApplePaySampleView: View {
 
     private func present(intent: PaymentIntent) {
         guard let applePay, let presenter else { return }
-        applePay.present(from: presenter, intent: intent) { event in
-            if case .ready = event { bound = true }
-        }
+        applePay.present(from: presenter, intent: intent)
     }
 
     private func loadOrder() {
         loading = true
         error = nil
         lastResult = nil
-        bound = false
+        orderBound = false
+        buttonDrawn = false
         intent = nil
         Task {
             do {
