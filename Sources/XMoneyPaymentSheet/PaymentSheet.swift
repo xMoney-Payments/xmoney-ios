@@ -3,6 +3,10 @@ import UIKit
 import XMoneyCore
 #endif
 
+/// Merchant-facing events while a Payment Sheet is on screen.
+///
+/// ``ready`` is emitted once the sheet form has been laid out and, when Apple Pay
+/// is offered, the Apple Pay button has drawn. ``processing`` is an in-flight charge.
 public enum PaymentSheetEvent {
     case ready
     case processing(Bool)

@@ -82,13 +82,35 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
                 let sheet = PaymentSheetViewController(config: config, state: state)
                 sheet.delegate = self
                 self.sheetVC = sheet
+                // Stay on the coin height until the form and Apple Pay mark have painted.
+                // Layout callbacks during that wait must not grow the sheet.
+                var surfaceRevealed = false
                 sheet.onContentSizeChange = { [weak transitioning] in
+                    guard surfaceRevealed else { return }
                     transitioning?.presentationController?.updateLayout(animated: true)
                 }
-                transitioning.heightProvider = sheet
                 nav.setViewControllers([sheet], animated: false)
+                let cover = loading.view!
+                cover.translatesAutoresizingMaskIntoConstraints = false
+                nav.view.addSubview(cover)
+                let coverPins = [
+                    cover.topAnchor.constraint(equalTo: nav.view.topAnchor),
+                    cover.leadingAnchor.constraint(equalTo: nav.view.leadingAnchor),
+                    cover.trailingAnchor.constraint(equalTo: nav.view.trailingAnchor),
+                    cover.bottomAnchor.constraint(equalTo: nav.view.bottomAnchor),
+                ]
+                NSLayoutConstraint.activate(coverPins)
+                // Full width at the loader height is enough for PassKit to paint.
                 nav.view.layoutIfNeeded()
                 sheet.view.layoutIfNeeded()
+                await sheet.waitUntilSurfaceDrawn()
+                guard self.presentedNav === nav, nav.presentingViewController != nil, !Task.isCancelled else {
+                    return
+                }
+                surfaceRevealed = true
+                transitioning.heightProvider = sheet
+                NSLayoutConstraint.deactivate(coverPins)
+                cover.removeFromSuperview()
                 transitioning.presentationController?.updateLayout(animated: true)
                 self.onEvent(.ready)
             } catch is CancellationError {

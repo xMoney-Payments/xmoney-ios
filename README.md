@@ -168,7 +168,7 @@ SwiftUI: `PaymentElementView(payment:intent:onEvent:)`.
 try await embedded.updateOrder(intent: next)
 ```
 
-`PaymentElement` / `PaymentElementView` call `updateOrder` when `intent` changes. Keep the surface mounted; do not set the intent to `nil` or swap the form for a loader. Pay stays locked (`isInteractionEnabled`) until `.ready`. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`.
+`PaymentElement` / `PaymentElementView` call `updateOrder` when `intent` changes. Keep the surface mounted; do not set the intent to `nil` or swap the form for a loader. `.ready` fires after the form has laid out and, when Apple Pay is offered, the wallet button has drawn — including again after `updateOrder`. Pay stays locked (`isInteractionEnabled`) until that event. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`.
 
 Copy-paste sample: [`UpdateOrderSampleView.swift`](Examples/Example/Advanced/UpdateOrderSampleView.swift)
 
@@ -231,7 +231,10 @@ applePay.dismiss() // closes PassKit before authorize; no-op during token submit
 
 let button = ApplePayButton()
 button.onTap = { applePay.present(from: self, intent: intent) }
+button.onFirstDraw = { /* PassKit mark is on screen */ }
 ```
+
+`onFirstDraw` also exists on `ApplePayButtonView`. It runs once the button has painted (or after a short wait if it never does). Keep your own loader up until then.
 
 **SwiftUI**
 

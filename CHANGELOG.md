@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `ApplePayButton.onFirstDraw` and `ApplePayButtonView.onFirstDraw` run once the PassKit button has painted, or after a short wait if it never does. Use this to keep merchant loading up until the wallet mark is visible.
+
+### Changed
+
+- `EmbeddedPayment.prepare` and `EmbeddedPayment.updateOrder` no longer emit `.ready`. A mounted `PaymentElement` emits it after the surface has drawn. `isInteractionEnabled` still unlocks when the bind finishes.
+
+### Fixed
+
+- Payment Element and Payment Sheet keep their loading cover in place until the card form has a real size and, when Apple Pay is offered, the PassKit button has visible pixels. A blank iOS 26 placeholder image does not count. `.ready` is emitted then, including again after `PaymentElement.updateOrder`, so checkout does not flash an empty wallet button.
+- On iOS 26, Apple Pay buttons are created with card art disabled. The default button paints that art after the rest of the sheet, which left an empty slot above the divider.
+- The example Apple Pay sample and `MerchantReadyGate` stay on the loader until the order is bound and the button has drawn. The button is laid out under the cover so PassKit can paint before the gate opens.
+
 ## [1.0.1] - 2026-09-24
 
 ### Fixed

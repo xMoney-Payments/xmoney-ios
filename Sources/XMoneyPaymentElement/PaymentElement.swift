@@ -46,19 +46,17 @@ public final class PaymentElement: UIView {
         showLoader()
         try await payment.prepare(intent: intent) { [weak self] event in
             Task { @MainActor in
-                guard let self, self.prepareGeneration == generation else { return }
-                self.onEvent(event)
-                switch event {
-                case .ready:
-                    break
-                case let .processing(isProcessing):
-                    self.formView?.setProcessing(isProcessing)
-                    self.formView?.setOrderConsumed(self.payment.isOrderConsumed)
-                }
+                self?.forward(event, generation: generation)
             }
         }
         guard !Task.isCancelled, prepareGeneration == generation else { return }
         renderForm()
+        guard formView != nil else { return }
+        layoutIfNeeded()
+        await formView?.waitUntilSurfaceDrawn()
+        guard !Task.isCancelled, prepareGeneration == generation else { return }
+        revealForm()
+        onEvent(.ready)
     }
 
     /// Rebinds a new signed order in place. The form stays mounted; Pay is
@@ -76,15 +74,7 @@ public final class PaymentElement: UIView {
         do {
             try await payment.updateOrder(intent: intent) { [weak self] event in
                 Task { @MainActor in
-                    guard let self, self.prepareGeneration == generation else { return }
-                    self.onEvent(event)
-                    switch event {
-                    case .ready:
-                        break
-                    case let .processing(isProcessing):
-                        self.formView?.setProcessing(isProcessing)
-                        self.formView?.setOrderConsumed(self.payment.isOrderConsumed)
-                    }
+                    self?.forward(event, generation: generation)
                 }
             }
             guard !Task.isCancelled, prepareGeneration == generation else { return }
@@ -94,8 +84,12 @@ public final class PaymentElement: UIView {
             formView?.setUpdatingOrder(false)
             formView?.setProcessing(payment.isProcessing)
             formView?.setOrderConsumed(payment.isOrderConsumed)
+            layoutIfNeeded()
+            await formView?.waitUntilSurfaceDrawn()
+            guard !Task.isCancelled, prepareGeneration == generation else { return }
             invalidateIntrinsicContentSize()
             onContentSizeChange?()
+            onEvent(.ready)
         } catch {
             guard prepareGeneration == generation else { throw error }
             formView?.setUpdatingOrder(false)
@@ -133,6 +127,20 @@ public final class PaymentElement: UIView {
 
     public var isOrderConsumed: Bool { payment.isOrderConsumed }
 
+    /// Bind emits `.ready` only after the form has drawn. Processing still
+    /// forwards immediately.
+    private func forward(_ event: EmbeddedEvent, generation: Int) {
+        guard prepareGeneration == generation else { return }
+        switch event {
+        case .ready:
+            break
+        case let .processing(isProcessing):
+            onEvent(event)
+            formView?.setProcessing(isProcessing)
+            formView?.setOrderConsumed(payment.isOrderConsumed)
+        }
+    }
+
     private func setupLoader() {
         loaderHost.translatesAutoresizingMaskIntoConstraints = false
         addSubview(loaderHost)
@@ -165,11 +173,6 @@ public final class PaymentElement: UIView {
     private func renderForm() {
         let controller = payment._controller
         guard let config = controller.paymentConfig, let state = controller.sheetState else { return }
-
-        loader?.stopAnimating()
-        loader?.removeFromSuperview()
-        loader = nil
-        loaderHost.isHidden = true
 
         formView?.removeFromSuperview()
         let form = PaymentFormView(config: config, state: state)
@@ -208,9 +211,24 @@ public final class PaymentElement: UIView {
             form.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
         formView = form
+        bringSubviewToFront(loaderHost)
+        let theme = CheckoutTheme.resolve(
+            config: config,
+            isDark: UIHelpers.isDarkMode(config: config, traitCollection: traitCollection)
+        )
+        loaderHost.backgroundColor = theme.background
+        loaderHost.isHidden = false
         invalidateIntrinsicContentSize()
         setNeedsLayout()
         onContentSizeChange?()
+    }
+
+    private func revealForm() {
+        loader?.stopAnimating()
+        loader?.removeFromSuperview()
+        loader = nil
+        loaderHost.backgroundColor = .clear
+        loaderHost.isHidden = true
     }
 
     private func applyLiveConfig() {

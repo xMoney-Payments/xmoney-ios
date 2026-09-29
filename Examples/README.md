@@ -45,7 +45,8 @@ Integrations and name-check include a **Test cards** sheet with the four xMoney 
 - Integrations samples **inline** `PaymentConfig` (`publicKey`, Apple Pay, saved cards, optional `options.appearance`). Do not copy `defaultPaymentConfig()` — that helper is for the stores and playground.
 - After `complete`, `failed`, or post-submit `canceled`, the order checksum is **consumed**. Create a new intent before paying again.
 - Closing Payment Sheet **before** pay does not consume; present the same intent (**Continue**).
-- Embedded / Apple Pay: keep merchant loading until `.ready`. Branch on `isOrderConsumed` after that. Pre-auth Apple Pay dismiss delivers `canceled` and does not consume — present or tap again with the same intent.
+- Embedded: keep merchant loading until `.ready` (the form has laid out, and the Apple Pay button has drawn when it is offered). Branch on `isOrderConsumed` after that.
+- Standalone Apple Pay: keep merchant loading until `updateOrder` has finished and `ApplePayButton.onFirstDraw` has fired. Pre-auth dismiss delivers `canceled` and does not consume — present or tap again with the same intent.
 - Payment Sheet: keep the merchant Pay button loading until `.ready`. Samples use `PaymentSheetEvent.processing` to tell pre-pay cancel apart from post-submit cancel.
 - After a consumed result, samples hide the payment UI and show **New payment**.
 - To change the amount on a mounted Element, `updateOrder` with a new `PaymentIntent`. Do **not** set the intent to `nil` or hide the form. Hearth, Pulse, and Update order do this; `PaymentElementHost` calls `updateOrder` when the payload/checksum changes. Pay stays locked (`isInteractionEnabled`) with its current title — `Processing` is an in-flight charge only. The form stays on screen. Playground Sheet mints a new intent when the amount stepper changes so Pay matches.

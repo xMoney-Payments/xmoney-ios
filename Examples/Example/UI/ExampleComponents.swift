@@ -385,13 +385,17 @@ private struct SkeletonBone: View {
 }
 
 /// Merchant loading chrome for the **initial** bind. Always keeps `content`
-/// in the tree so `PaymentElement` / `ApplePayButton` can emit `.ready`. After
-/// the first Ready, the surface stays visible — `updateOrder` must not hide it.
+/// in the tree so `PaymentElement` / `ApplePayButton` can emit `.ready`. The
+/// child is laid out at its intrinsic size while hidden, so PassKit can draw
+/// before the gate opens. After the first Ready, the surface stays visible —
+/// `updateOrder` must not hide it.
 struct MerchantReadyGate<Content: View, Placeholder: View>: View {
     let ready: Bool
     private let placeholder: () -> Placeholder
     private let content: () -> Content
     @State private var hasBound = false
+    @State private var placeholderHeight: CGFloat = 160
+    @EnvironmentObject private var theme: ExampleThemeState
 
     init(
         ready: Bool,
@@ -404,25 +408,48 @@ struct MerchantReadyGate<Content: View, Placeholder: View>: View {
     }
 
     var body: some View {
+        let cover = theme.isDark ? ExampleColors.darkBg : ExampleColors.lightBg
         ZStack(alignment: .top) {
             content()
                 .frame(maxWidth: .infinity)
-                .frame(height: hasBound ? nil : 0, alignment: .top)
-                .clipped()
-                .opacity(hasBound ? 1 : 0)
+                .fixedSize(horizontal: false, vertical: true)
                 .accessibilityHidden(!hasBound)
                 .allowsHitTesting(hasBound)
             if !hasBound {
+                cover
+                    .frame(maxWidth: .infinity)
+                    .frame(height: placeholderHeight)
                 placeholder()
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: GateHeightKey.self,
+                                value: proxy.size.height
+                            )
+                        }
+                    )
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .top)
+        .frame(height: hasBound ? nil : placeholderHeight, alignment: .top)
+        .clipped()
+        .onPreferenceChange(GateHeightKey.self) { height in
+            if height > 1 { placeholderHeight = height }
+        }
         .onAppear {
             if ready { hasBound = true }
         }
         .onChange(of: ready) { isReady in
             if isReady { hasBound = true }
         }
+    }
+}
+
+private struct GateHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 160
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

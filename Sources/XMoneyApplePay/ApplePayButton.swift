@@ -7,11 +7,15 @@ import XMoneyCore
 
 public final class ApplePayButton: UIView {
     public var onTap: (() -> Void)?
+    /// Fires once the PassKit button has drawn, or after a short cap if it never does.
+    public var onFirstDraw: (() -> Void)?
 
     private var paymentButton: PKPaymentButton
     private var heightConstraint: NSLayoutConstraint
     private var appearance: PaymentConfig.WalletAppearance
     private var isDarkBackground: Bool
+    private var didNotifyDraw = false
+    private var drawWatch: Task<Void, Never>?
 
     public init(
         appearance: PaymentConfig.WalletAppearance = .init(),
@@ -20,12 +24,9 @@ public final class ApplePayButton: UIView {
     ) {
         self.appearance = appearance
         self.isDarkBackground = isDarkBackground
-        let button = PKPaymentButton(
-            paymentButtonType: Self.buttonType(from: appearance.type),
-            paymentButtonStyle: Self.buttonStyle(
-                appearance: appearance,
-                isDarkBackground: isDarkBackground
-            )
+        let button = Self.makeButton(
+            type: Self.buttonType(from: appearance.type),
+            style: Self.buttonStyle(appearance: appearance, isDarkBackground: isDarkBackground)
         )
         paymentButton = button
         heightConstraint = button.heightAnchor.constraint(equalToConstant: height)
@@ -41,6 +42,16 @@ public final class ApplePayButton: UIView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    public override func didMoveToWindow() {
+        super.didMoveToWindow()
+        scheduleDrawWatch()
+    }
+
+    public override func layoutSubviews() {
+        super.layoutSubviews()
+        scheduleDrawWatch()
+    }
 
     public var isEnabled: Bool {
         get { paymentButton.isEnabled }
@@ -74,16 +85,16 @@ public final class ApplePayButton: UIView {
     }
 
     private func rebuildButton() {
+        didNotifyDraw = false
+        drawWatch?.cancel()
+        drawWatch = nil
         let wasEnabled = paymentButton.isEnabled
         let height = heightConstraint.constant
         paymentButton.removeFromSuperview()
 
-        let button = PKPaymentButton(
-            paymentButtonType: Self.buttonType(from: appearance.type),
-            paymentButtonStyle: Self.buttonStyle(
-                appearance: appearance,
-                isDarkBackground: isDarkBackground
-            )
+        let button = Self.makeButton(
+            type: Self.buttonType(from: appearance.type),
+            style: Self.buttonStyle(appearance: appearance, isDarkBackground: isDarkBackground)
         )
         button.translatesAutoresizingMaskIntoConstraints = false
         button.addTarget(self, action: #selector(tapped), for: .touchUpInside)
@@ -94,6 +105,20 @@ public final class ApplePayButton: UIView {
         applyCornerRadius(height: height)
         addSubview(button)
         installConstraints(for: button, height: newHeight)
+        scheduleDrawWatch()
+    }
+
+    private func scheduleDrawWatch() {
+        guard !didNotifyDraw, drawWatch == nil else { return }
+        guard window != nil, bounds.width > 1, bounds.height > 1 else { return }
+        drawWatch = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await SurfacePaint.waitUntilButtonDrawn(self.paymentButton)
+            guard !Task.isCancelled, !self.didNotifyDraw else { return }
+            self.didNotifyDraw = true
+            self.drawWatch = nil
+            self.onFirstDraw?()
+        }
     }
 
     private func installConstraints(for button: PKPaymentButton, height: NSLayoutConstraint) {
@@ -116,6 +141,15 @@ public final class ApplePayButton: UIView {
 
     @objc private func tapped() {
         onTap?()
+    }
+
+    /// iOS 26 paints card art onto the default button after the rest of the form.
+    /// `disableCardArt` restores the mark that is ready on the first frame.
+    private static func makeButton(type: PKPaymentButtonType, style: PKPaymentButtonStyle) -> PKPaymentButton {
+        if #available(iOS 26.0, *) {
+            return PKPaymentButton(type: type, style: style, disableCardArt: true)
+        }
+        return PKPaymentButton(paymentButtonType: type, paymentButtonStyle: style)
     }
 
     private static func buttonStyle(
@@ -153,19 +187,22 @@ public struct ApplePayButtonView: UIViewRepresentable {
     public var isEnabled: Bool
     public var isDarkBackground: Bool
     public var onTap: () -> Void
+    public var onFirstDraw: () -> Void
 
     public init(
         appearance: PaymentConfig.WalletAppearance = .init(),
         height: CGFloat = 56,
         isEnabled: Bool = true,
         isDarkBackground: Bool = false,
-        onTap: @escaping () -> Void
+        onTap: @escaping () -> Void,
+        onFirstDraw: @escaping () -> Void = {}
     ) {
         self.appearance = appearance
         self.height = height
         self.isEnabled = isEnabled
         self.isDarkBackground = isDarkBackground
         self.onTap = onTap
+        self.onFirstDraw = onFirstDraw
     }
 
     public func makeUIView(context: Context) -> ApplePayButton {
@@ -175,12 +212,14 @@ public struct ApplePayButtonView: UIViewRepresentable {
             isDarkBackground: isDarkBackground
         )
         button.onTap = onTap
+        button.onFirstDraw = onFirstDraw
         button.isEnabled = isEnabled
         return button
     }
 
     public func updateUIView(_ uiView: ApplePayButton, context: Context) {
         uiView.onTap = onTap
+        uiView.onFirstDraw = onFirstDraw
         uiView.isEnabled = isEnabled
         uiView.buttonHeight = height
         uiView.apply(appearance: appearance, isDarkBackground: isDarkBackground)
