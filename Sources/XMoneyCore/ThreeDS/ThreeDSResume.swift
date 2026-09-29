@@ -1,26 +1,26 @@
 import Foundation
 
-/// One-shot 3DS continuation. Poll-win + WebView completion cannot double-resume.
-package final class ThreeDSResume: @unchecked Sendable {
-    private var continuation: CheckedContinuation<Bool, Never>?
+/// One-shot 3DS continuation. Poll-win and session completion cannot double-resume.
+package final class ThreeDSResume<Value>: @unchecked Sendable {
+    private var continuation: CheckedContinuation<Value, Never>?
     private let lock = NSLock()
 
     package init() {}
 
-    package func arm(_ continuation: CheckedContinuation<Bool, Never>) {
+    package func arm(_ continuation: CheckedContinuation<Value, Never>) {
         lock.lock()
         self.continuation = continuation
         lock.unlock()
     }
 
     @discardableResult
-    package func resume(_ success: Bool) -> Bool {
+    package func resume(_ value: Value) -> Bool {
         lock.lock()
         let pending = continuation
         continuation = nil
         lock.unlock()
         guard let pending else { return false }
-        pending.resume(returning: success)
+        pending.resume(returning: value)
         return true
     }
 }

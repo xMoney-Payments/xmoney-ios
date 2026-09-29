@@ -98,7 +98,6 @@ package struct OrderInput {
     package let invoiceEmail: String?
     package let saveCard: Bool
     package let cardId: String?
-    package let backUrl: String?
     package let customData: String?
     package let customer: OrderInputCustomer?
     package let order: OrderInputOrder?
@@ -109,7 +108,6 @@ package struct OrderInput {
         invoiceEmail: String? = nil,
         saveCard: Bool = false,
         cardId: String? = nil,
-        backUrl: String? = nil,
         customData: String? = nil,
         customer: OrderInputCustomer? = nil,
         order: OrderInputOrder? = nil
@@ -119,7 +117,6 @@ package struct OrderInput {
         self.invoiceEmail = invoiceEmail
         self.saveCard = saveCard
         self.cardId = cardId
-        self.backUrl = backUrl
         self.customData = customData
         self.customer = customer
         self.order = order
@@ -142,7 +139,6 @@ package struct OrderInput {
         invoiceEmail = map["invoiceEmail"] as? String
         saveCard = APIMap.parseBoolean(map["saveCard"])
         cardId = APIMap.stringOrNumber(map["cardId"])
-        backUrl = map["backUrl"] as? String
         customData = map["customData"] as? String
         customer = (map["customer"] as? [String: Any]).map { OrderInputCustomer(apiMap: $0) }
         order = (map["order"] as? [String: Any]).map { OrderInputOrder(apiMap: $0) }

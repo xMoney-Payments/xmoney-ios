@@ -180,7 +180,6 @@ final class ApiResponseModelsTests: XCTestCase {
         XCTAssertEqual(input.invoiceEmail, "merchant@test.com")
         XCTAssertTrue(input.saveCard)
         XCTAssertEqual(input.cardId, "141973")
-        XCTAssertEqual(input.backUrl, "https://merchant.example/return")
         XCTAssertEqual(input.customData, "{\"foo\":1}")
 
         let customer = input.customer

@@ -15,13 +15,12 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
     private weak var presenter: UIViewController?
     private weak var sheetVC: PaymentSheetViewController?
     private weak var presentedNav: UINavigationController?
-    private weak var threeDSController: UIViewController?
+    private var threeDSSession: ThreeDSSafariController?
     private var didComplete = false
     private var isClosing = false
     private var sheetTransitioningDelegate: PaymentSheetTransitioningDelegate?
     private var loadTask: Task<Void, Never>?
     private var paymentTask: Task<Void, Never>?
-    private let threeDSResume = ThreeDSResume()
 
     package var isProcessing: Bool { session.isProcessing }
 
@@ -192,35 +191,16 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
 
     // MARK: - ThreeDSPresenter
 
-    package func presentThreeDS(url: URL, returnURLMatcher: @escaping (URL) -> Bool) async -> Bool {
-        await withCheckedContinuation { continuation in
-            Task { @MainActor in
-                guard let top = self.sheetVC else {
-                    continuation.resume(returning: false)
-                    return
-                }
-                self.threeDSResume.arm(continuation)
-                let threeDS = ThreeDSViewController(
-                    url: url,
-                    returnURLMatcher: returnURLMatcher,
-                    completion: { [weak self] success in
-                        self?.threeDSResume.resume(success)
-                        self?.threeDSController = nil
-                    },
-                    locale: self.config.options.locale
-                )
-                threeDS.modalPresentationStyle = .fullScreen
-                self.threeDSController = threeDS
-                top.present(threeDS, animated: true)
-            }
-        }
+    package func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd {
+        let session = ThreeDSSafariController()
+        threeDSSession = session
+        return await session.present(url: url, from: sheetVC)
     }
 
     package func dismissThreeDS() {
         Task { @MainActor in
-            self.threeDSController?.dismiss(animated: true)
-            self.threeDSController = nil
-            self.threeDSResume.resume(true)
+            self.threeDSSession?.dismiss()
+            self.threeDSSession = nil
         }
     }
 }

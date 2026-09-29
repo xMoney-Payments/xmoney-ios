@@ -11,8 +11,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     private(set) var paymentConfig: PaymentConfig?
     private var session: PaymentSession?
     private var onEvent: (EmbeddedEvent) -> Void = { _ in }
-    private var threeDSController: UIViewController?
-    private let threeDSResume = ThreeDSResume()
+    private var threeDSSession: ThreeDSSafariController?
     private weak var hostView: UIView?
     private var prepareGeneration = 0
     private var operationTask: Task<Void, Never>?
@@ -169,35 +168,16 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
 
     // MARK: - ThreeDSPresenter
 
-    func presentThreeDS(url: URL, returnURLMatcher: @escaping (URL) -> Bool) async -> Bool {
-        await withCheckedContinuation { continuation in
-            Task { @MainActor in
-                guard let presenter = self.topViewController() else {
-                    continuation.resume(returning: false)
-                    return
-                }
-                self.threeDSResume.arm(continuation)
-                let locale = self.paymentConfig?.options.locale ?? "en-US"
-                let threeDS = ThreeDSViewController(
-                    url: url,
-                    returnURLMatcher: returnURLMatcher,
-                    completion: { [weak self] success in
-                        self?.threeDSResume.resume(success)
-                        self?.threeDSController = nil
-                    },
-                    locale: locale
-                )
-                self.threeDSController = threeDS
-                presenter.present(threeDS, animated: true)
-            }
-        }
+    func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd {
+        let session = ThreeDSSafariController()
+        threeDSSession = session
+        return await session.present(url: url, from: topViewController())
     }
 
     func dismissThreeDS() {
         Task { @MainActor in
-            self.threeDSController?.dismiss(animated: true)
-            self.threeDSController = nil
-            self.threeDSResume.resume(true)
+            self.threeDSSession?.dismiss()
+            self.threeDSSession = nil
         }
     }
 
