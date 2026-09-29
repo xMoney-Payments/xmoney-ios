@@ -43,6 +43,7 @@ final class HTTPClient {
     ) async throws -> [String: Any] {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        applyBrowserHeaders(&request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let bearer {
             request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
@@ -57,6 +58,7 @@ final class HTTPClient {
     ) async throws -> [String: Any] {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        applyBrowserHeaders(&request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let bearer {
             request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
@@ -68,6 +70,7 @@ final class HTTPClient {
     func delete(url: URL, bearer: String?) async throws {
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
+        applyBrowserHeaders(&request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let bearer {
             request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
@@ -82,6 +85,7 @@ final class HTTPClient {
         let boundary = "xmoney-\(UUID().uuidString)"
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        applyBrowserHeaders(&request)
         request.setValue(
             "multipart/form-data; boundary=\(boundary)",
             forHTTPHeaderField: "Content-Type"
@@ -184,6 +188,12 @@ final class HTTPClient {
             return array.compactMap { redactSensitiveValues(in: $0) }
         default:
             return value
+        }
+    }
+
+    private func applyBrowserHeaders(_ request: inout URLRequest) {
+        for (name, value) in DeviceMetadata.httpHeaders() {
+            request.setValue(value, forHTTPHeaderField: name)
         }
     }
 

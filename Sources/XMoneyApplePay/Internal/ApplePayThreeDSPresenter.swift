@@ -5,40 +5,31 @@ import XMoneyCore
 
 final class ApplePayThreeDSPresenter: ThreeDSPresenter {
     private weak var host: UIViewController?
-    private var threeDSController: UIViewController?
-    private let resume = ThreeDSResume()
+    private weak var handoff: ApplePayHandler?
+    private var threeDSSession: ThreeDSSafariController?
 
     init(host: UIViewController) {
         self.host = host
     }
 
-    func presentThreeDS(url: URL, returnURLMatcher: @escaping (URL) -> Bool) async -> Bool {
-        await withCheckedContinuation { continuation in
-            Task { @MainActor in
-                guard let host = self.host else {
-                    continuation.resume(returning: false)
-                    return
-                }
-                self.resume.arm(continuation)
-                let threeDS = ThreeDSViewController(
-                    url: url,
-                    returnURLMatcher: returnURLMatcher,
-                    completion: { [weak self] success in
-                        self?.resume.resume(success)
-                        self?.threeDSController = nil
-                    }
-                )
-                self.threeDSController = threeDS
-                host.present(threeDS, animated: true)
-            }
+    func attach(_ handler: ApplePayHandler) {
+        handoff = handler
+    }
+
+    func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd {
+        let (session, host): (ThreeDSSafariController, UIViewController?) = await MainActor.run {
+            let session = ThreeDSSafariController()
+            self.threeDSSession = session
+            return (session, self.host)
         }
+        await handoff?.relinquishSheetForChallenge()
+        return await session.present(url: url, from: host)
     }
 
     func dismissThreeDS() {
         Task { @MainActor in
-            self.threeDSController?.dismiss(animated: true)
-            self.threeDSController = nil
-            self.resume.resume(true)
+            self.threeDSSession?.dismiss()
+            self.threeDSSession = nil
         }
     }
 }

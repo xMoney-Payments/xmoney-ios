@@ -22,6 +22,5 @@ final class PaymentSheetAssetsTests: XCTestCase {
             XCTAssertNotNil(EmbeddedAssets.image(named: name), "Missing asset: \(name)")
         }
         XCTAssertNotNil(EmbeddedAssets.image(named: "xmoney-xmark"), "Missing asset: xmoney-xmark")
-        XCTAssertNotNil(EmbeddedAssets.image(named: "xmoney-3ds-brand"), "Missing asset: xmoney-3ds-brand")
     }
 }

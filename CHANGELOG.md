@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Card 3DS now runs in an `SFSafariViewController` instead of an in-app web view, and stays open until the payment result is known, including when the bank app takes over.
+- Apple Pay authentication stays in the Apple Pay sheet.
+
+### Fixed
+
+- The payment sheet stays above the keyboard and scrolls the focused field into view.
+
 ## [1.0.1] - 2026-09-24
 
 ### Fixed

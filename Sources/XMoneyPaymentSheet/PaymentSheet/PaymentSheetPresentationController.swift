@@ -75,11 +75,15 @@ final class PaymentSheetPresentationController: UIPresentationController {
     override var frameOfPresentedViewInContainerView: CGRect {
         guard let containerView else { return .zero }
         let bounds = containerView.bounds
-        let maxHeight = bounds.height * 0.95
+        // Keep the sheet in the space above the keyboard. A tall form used to
+        // stay full height and slide under the keys.
+        let topInset = keyboardHeight > 0 ? containerView.safeAreaInsets.top : 0
+        let available = max(bounds.height - keyboardHeight - topInset, 120)
+        let maxHeight = min(bounds.height * 0.95, available)
         let contentHeight = heightProvider?.preferredSheetHeight ?? bounds.height * 0.5
         let height = min(max(contentHeight, 100), maxHeight)
-        let y = bounds.height - height - keyboardHeight
-        return CGRect(x: 0, y: max(0, y), width: bounds.width, height: height)
+        let y = bounds.height - keyboardHeight - height
+        return CGRect(x: 0, y: max(topInset, y), width: bounds.width, height: height)
     }
 
     override func presentationTransitionWillBegin() {

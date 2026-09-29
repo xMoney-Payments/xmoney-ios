@@ -23,6 +23,7 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
     private var closeButton: UIButton!
     private var lastReportedHeight: CGFloat = 0
     private var isInvalidatingHeight = false
+    private var keyboardObservers: [NSObjectProtocol] = []
 
     package var onContentSizeChange: (() -> Void)?
 
@@ -46,6 +47,11 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         super.viewDidLoad()
         applyTheme()
         buildLayout()
+        observeKeyboardForScrolling()
+    }
+
+    deinit {
+        keyboardObservers.forEach(NotificationCenter.default.removeObserver)
     }
 
     package override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -180,5 +186,69 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
 
     @objc private func closeTapped() {
         delegate?.sheetDidCancel()
+    }
+
+    private func observeKeyboardForScrolling() {
+        let center = NotificationCenter.default
+        keyboardObservers = [
+            center.addObserver(
+                forName: UIResponder.keyboardWillChangeFrameNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] note in
+                self?.scheduleFieldScroll(note)
+            },
+            center.addObserver(
+                forName: UITextField.textDidBeginEditingNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] note in
+                guard let self,
+                      let field = note.object as? UIView,
+                      field.isDescendant(of: self.view) else { return }
+                self.scrollFocusedField(animated: true)
+            },
+        ]
+    }
+
+    private func scheduleFieldScroll(_ note: Notification) {
+        let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
+        let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
+        let hiding: Bool
+        if let end, let window = view.window {
+            let frame = window.convert(end, from: window.screen.coordinateSpace)
+            hiding = frame.minY >= window.bounds.maxY - 1
+        } else {
+            hiding = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard let self else { return }
+            if hiding {
+                self.scrollView.setContentOffset(.zero, animated: true)
+            } else {
+                self.scrollFocusedField(animated: true)
+            }
+        }
+    }
+
+    private func scrollFocusedField(animated: Bool) {
+        view.layoutIfNeeded()
+        let overflows = scrollView.contentSize.height > scrollView.bounds.height + 1
+        scrollView.isScrollEnabled = overflows
+        scrollView.bounces = overflows
+        scrollView.alwaysBounceVertical = overflows
+        guard overflows, let field = view.deepestFirstResponder else { return }
+        let rect = field.convert(field.bounds, to: scrollView).insetBy(dx: 0, dy: -20)
+        scrollView.scrollRectToVisible(rect, animated: animated)
+    }
+}
+
+private extension UIView {
+    var deepestFirstResponder: UIView? {
+        if isFirstResponder { return self }
+        for subview in subviews {
+            if let found = subview.deepestFirstResponder { return found }
+        }
+        return nil
     }
 }
