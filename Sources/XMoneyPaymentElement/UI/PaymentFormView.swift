@@ -520,10 +520,13 @@ package final class PaymentFormView: UIView {
 
     /// iOS 26 paints card art onto the default button after the rest of the form.
     /// `disableCardArt` restores the mark that is ready on the first frame.
+    /// The initializer is only in the iOS 26 SDK, so Xcode 16 (iOS 18 SDK) must not see the call.
     private static func makeApplePayButton(type: PKPaymentButtonType, style: PKPaymentButtonStyle) -> PKPaymentButton {
+        #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             return PKPaymentButton(type: type, style: style, disableCardArt: true)
         }
+        #endif
         return PKPaymentButton(paymentButtonType: type, paymentButtonStyle: style)
     }
 
