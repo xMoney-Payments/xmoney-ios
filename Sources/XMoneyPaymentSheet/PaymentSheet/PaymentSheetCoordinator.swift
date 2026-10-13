@@ -192,7 +192,7 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
     // MARK: - ThreeDSPresenter
 
     package func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd {
-        let session = ThreeDSSafariController()
+        let session = ThreeDSSafariController(locale: config.options.locale)
         threeDSSession = session
         return await session.present(url: url, from: sheetVC)
     }

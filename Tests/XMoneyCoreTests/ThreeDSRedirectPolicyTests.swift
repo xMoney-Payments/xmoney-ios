@@ -24,6 +24,15 @@ final class ThreeDSRedirectPolicyTests: XCTestCase {
             "facetime-audio:user@bank",
             "maps://place",
             "itms-apps://apps.apple.com",
+            "itms-services://?action=download-manifest&url=https://evil.example/app.plist",
+            "itmss://apps.apple.com",
+            "itms-appss://apps.apple.com",
+            "prefs:root=General",
+            "App-Prefs:root=General",
+            "shoebox://",
+            "wallet://",
+            "x-apple-reminder://",
+            "X-Apple-Health://",
             "shortcuts://run",
         ]
         for raw in schemes {

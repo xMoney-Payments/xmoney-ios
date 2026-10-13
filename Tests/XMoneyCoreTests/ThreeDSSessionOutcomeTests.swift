@@ -22,4 +22,22 @@ final class ThreeDSSessionOutcomeTests: XCTestCase {
             .closedByPoll
         )
     }
+
+    func testCloseAfterBackgroundCountsAsBankHandoff() {
+        XCTAssertEqual(
+            ThreeDSSessionOutcome.resolve(programmaticDismiss: false, backgrounded: true),
+            .userCanceled(bankHandoff: true)
+        )
+        XCTAssertEqual(
+            threeDSChallengeFollowUp(ThreeDSSessionOutcome.resolve(programmaticDismiss: false, backgrounded: true)),
+            .reconcileCancel(graceNanoseconds: threeDSBankHandoffCancelGraceNanoseconds)
+        )
+    }
+
+    func testProgrammaticDismissWinsOverBackground() {
+        XCTAssertEqual(
+            ThreeDSSessionOutcome.resolve(programmaticDismiss: true, backgrounded: true),
+            .closedByPoll
+        )
+    }
 }

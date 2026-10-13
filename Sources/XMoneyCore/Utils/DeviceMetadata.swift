@@ -10,7 +10,7 @@ enum DeviceMetadata {
         let zone = TimeZone.current
         return [
             "browserAcceptHeader": "*/*",
-            "browserLanguage": browserLanguage(Locale.current),
+            "browserLanguage": preferredBrowserLanguage(),
             "browserColorDepth": "24",
             "browserScreenHeight": String(Int(screen.height * scale)),
             "browserScreenWidth": String(Int(screen.width * scale)),
@@ -25,12 +25,13 @@ enum DeviceMetadata {
     static func httpHeaders() -> [String: String] {
         [
             "Accept": "*/*",
-            "Accept-Language": browserLanguage(Locale.current),
+            "Accept-Language": preferredBrowserLanguage(),
             "User-Agent": browserUserAgent(),
         ]
     }
 
     /// BPC reads the OS from this header. It has to contain iPhone, iPad, or iPod and a `CPU OS` version.
+    /// The tail is Safari's, because `SFSafariViewController` shows the challenge and sends this same string.
     static func browserUserAgent() -> String {
         let device = UIDevice.current
         return browserUserAgent(model: device.model, systemVersion: device.systemVersion)
@@ -40,7 +41,7 @@ enum DeviceMetadata {
         let version = systemVersion.replacingOccurrences(of: ".", with: "_")
         let osToken = model.contains("iPad") ? "OS" : "iPhone OS"
         return "Mozilla/5.0 (\(model); CPU \(osToken) \(version) like Mac OS X) "
-            + "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile XMoneySDK/iOS"
+            + "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/\(systemVersion) Mobile/15E148 Safari/604.1"
     }
 
     /// The secure API accepts at most 8 characters. Prefer the full tag, then language-country, then language.
@@ -49,6 +50,14 @@ enum DeviceMetadata {
         let languageCountry = country.isEmpty ? language : "\(language)-\(country)"
         if languageCountry.count <= 8 { return languageCountry }
         return String(language.prefix(8))
+    }
+
+    /// The shopper's first device language, which is what Safari sends as `Accept-Language`.
+    /// `Locale.current` follows the app's localizations, so an English-only app on a Romanian phone reports `en-RO`.
+    static func preferredBrowserLanguage(
+        preferredLanguages: [String] = Locale.preferredLanguages
+    ) -> String {
+        browserLanguage(Locale(identifier: preferredLanguages.first ?? "en-US"))
     }
 
     static func browserLanguage(_ locale: Locale) -> String {

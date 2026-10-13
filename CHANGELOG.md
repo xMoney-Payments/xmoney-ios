@@ -10,10 +10,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Card 3DS now runs in an `SFSafariViewController` instead of an in-app web view, and stays open until the payment result is known, including when the bank app takes over.
 - Apple Pay authentication stays in the Apple Pay sheet.
+- The SDK asks the shopper before opening a bank app from the challenge. Redirects to the App Store, enterprise app installs, Settings, and other system links are blocked while the challenge loads.
 
 ### Fixed
 
+- 3DS browser data now reports Safari's user agent, matching the browser that shows the challenge.
 - The payment sheet stays above the keyboard and scrolls the focused field into view.
+- An approval in the bank app could be reported as a failure when iOS dropped the status check while the app was in the background. The SDK now retries and checks the payment once more before reporting an error or timeout.
+- Closing the challenge after switching to the bank app now waits for the bank's answer instead of reporting a cancel after a few seconds.
+- The bank-app waiting screen could be swiped away, leaving the payment stuck with nothing on screen.
+- The challenge could fail to appear when the app was already showing another screen, leaving the payment waiting until timeout.
 
 ## [1.0.1] - 2026-09-24
 

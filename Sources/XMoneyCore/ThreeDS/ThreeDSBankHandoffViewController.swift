@@ -6,13 +6,24 @@ import UIKit
 /// would look like a cancel while the bank app is still approving.
 package final class ThreeDSBankHandoffViewController: UIViewController {
     package var onCancel: (() -> Void)?
+    private let locale: String
+
+    /// UIKit reads the presentation style when `present` is called, so it is set here, not in `viewDidLoad`.
+    /// Full screen and modal: a swipe would close the screen without `onCancel`.
+    package init(locale: String) {
+        self.locale = locale
+        super.init(nibName: nil, bundle: nil)
+        modalPresentationStyle = .fullScreen
+        isModalInPresentation = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     package override func viewDidLoad() {
         super.viewDidLoad()
-        modalPresentationStyle = .fullScreen
         view.backgroundColor = .systemBackground
 
-        let locale = Locale.preferredLanguages.first ?? "en"
         let titleLabel = UILabel()
         titleLabel.text = Strings.text("threeds.bankHandoff.title", locale: locale)
         titleLabel.font = .preferredFont(forTextStyle: .title2)

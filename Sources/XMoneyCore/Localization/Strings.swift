@@ -117,6 +117,9 @@ package enum Strings {
         "button.deposit": "Deposit {{amount}}",
         "threeds.bankHandoff.title": "Confirm in your bank app",
         "threeds.bankHandoff.message": "Approve this payment in your banking app, then return here.",
+        "threeds.openBankApp.title": "Open your bank app?",
+        "threeds.openBankApp.message": "Your bank wants to continue the payment confirmation in its app.",
+        "threeds.openBankApp.open": "Open",
     ]
 
     private static let el: [String: String] = [
@@ -181,6 +184,9 @@ package enum Strings {
         "button.deposit": "Κατάθεση {{amount}}",
         "threeds.bankHandoff.title": "Επιβεβαίωση στην εφαρμογή της τράπεζας",
         "threeds.bankHandoff.message": "Εγκρίνετε αυτή την πληρωμή στην εφαρμογή της τράπεζας και επιστρέψτε εδώ.",
+        "threeds.openBankApp.title": "Άνοιγμα της εφαρμογής της τράπεζας;",
+        "threeds.openBankApp.message": "Η τράπεζά σας θέλει να συνεχίσει την επιβεβαίωση της πληρωμής στην εφαρμογή της.",
+        "threeds.openBankApp.open": "Άνοιγμα",
     ]
 
     private static let ro: [String: String] = [
@@ -245,6 +251,9 @@ package enum Strings {
         "button.deposit": "Depune {{amount}}",
         "threeds.bankHandoff.title": "Confirmați în aplicația băncii",
         "threeds.bankHandoff.message": "Aprobați această plată în aplicația băncii, apoi reveniți aici.",
+        "threeds.openBankApp.title": "Deschideți aplicația băncii?",
+        "threeds.openBankApp.message": "Banca dorește să continue confirmarea plății în aplicația sa.",
+        "threeds.openBankApp.open": "Deschide",
     ]
 
     private static let bg: [String: String] = [
@@ -309,6 +318,9 @@ package enum Strings {
         "button.deposit": "Депозирай {{amount}}",
         "threeds.bankHandoff.title": "Потвърдете в приложението на банката",
         "threeds.bankHandoff.message": "Одобрете това плащане в банковото приложение и се върнете тук.",
+        "threeds.openBankApp.title": "Да се отвори ли приложението на банката?",
+        "threeds.openBankApp.message": "Банката ви иска да продължи потвърждението на плащането в своето приложение.",
+        "threeds.openBankApp.open": "Отвори",
     ]
 
     private static let hu: [String: String] = [
@@ -373,6 +385,9 @@ package enum Strings {
         "button.deposit": "Befizetés {{amount}}",
         "threeds.bankHandoff.title": "Erősítse meg a banki alkalmazásban",
         "threeds.bankHandoff.message": "Hagyja jóvá a fizetést a banki alkalmazásban, majd térjen vissza ide.",
+        "threeds.openBankApp.title": "Megnyitja a banki alkalmazást?",
+        "threeds.openBankApp.message": "A bankja az alkalmazásában szeretné folytatni a fizetés megerősítését.",
+        "threeds.openBankApp.open": "Megnyitás",
     ]
 
     private static let pl: [String: String] = [
@@ -437,5 +452,8 @@ package enum Strings {
         "button.deposit": "Wpłać {{amount}}",
         "threeds.bankHandoff.title": "Potwierdź w aplikacji banku",
         "threeds.bankHandoff.message": "Zatwierdź tę płatność w aplikacji banku, a następnie wróć tutaj.",
+        "threeds.openBankApp.title": "Otworzyć aplikację banku?",
+        "threeds.openBankApp.message": "Twój bank chce kontynuować potwierdzenie płatności w swojej aplikacji.",
+        "threeds.openBankApp.open": "Otwórz",
     ]
 }

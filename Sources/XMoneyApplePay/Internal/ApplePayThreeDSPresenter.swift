@@ -7,9 +7,11 @@ final class ApplePayThreeDSPresenter: ThreeDSPresenter {
     private weak var host: UIViewController?
     private weak var handoff: ApplePayHandler?
     private var threeDSSession: ThreeDSSafariController?
+    private let locale: String
 
-    init(host: UIViewController) {
+    init(host: UIViewController, locale: String) {
         self.host = host
+        self.locale = locale
     }
 
     func attach(_ handler: ApplePayHandler) {
@@ -18,7 +20,7 @@ final class ApplePayThreeDSPresenter: ThreeDSPresenter {
 
     func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd {
         let (session, host): (ThreeDSSafariController, UIViewController?) = await MainActor.run {
-            let session = ThreeDSSafariController()
+            let session = ThreeDSSafariController(locale: self.locale)
             self.threeDSSession = session
             return (session, self.host)
         }

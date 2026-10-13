@@ -169,7 +169,8 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     // MARK: - ThreeDSPresenter
 
     func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd {
-        let session = ThreeDSSafariController()
+        let locale = paymentConfig?.options.locale ?? liveConfiguration.options.locale
+        let session = ThreeDSSafariController(locale: locale)
         threeDSSession = session
         return await session.present(url: url, from: topViewController())
     }

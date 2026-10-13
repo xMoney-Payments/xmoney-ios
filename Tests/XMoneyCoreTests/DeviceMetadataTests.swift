@@ -26,6 +26,12 @@ final class DeviceMetadataTests: XCTestCase {
         )
     }
 
+    func testPreferredBrowserLanguageUsesTheDeviceLanguage() {
+        XCTAssertEqual(DeviceMetadata.preferredBrowserLanguage(preferredLanguages: ["ro-RO", "en-US"]), "ro-RO")
+        XCTAssertEqual(DeviceMetadata.preferredBrowserLanguage(preferredLanguages: ["zh-Hans-CN"]), "zh-CN")
+        XCTAssertEqual(DeviceMetadata.preferredBrowserLanguage(preferredLanguages: []), "en-US")
+    }
+
     func testTimeZoneOffsetUsesJavaScriptSign() {
         XCTAssertEqual(DeviceMetadata.timeZoneOffsetMinutes(secondsFromGMT: 10_800), -180)
         XCTAssertEqual(DeviceMetadata.timeZoneOffsetMinutes(secondsFromGMT: -25_200), 420)
@@ -35,12 +41,14 @@ final class DeviceMetadataTests: XCTestCase {
         let iphone = DeviceMetadata.browserUserAgent(model: "iPhone", systemVersion: "18.6")
         XCTAssertEqual(
             iphone,
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile XMoneySDK/iOS"
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1"
         )
 
         let ipad = DeviceMetadata.browserUserAgent(model: "iPad", systemVersion: "17.4.1")
-        XCTAssertTrue(ipad.contains("iPad"))
-        XCTAssertTrue(ipad.contains("CPU OS 17_4_1"))
+        XCTAssertEqual(
+            ipad,
+            "Mozilla/5.0 (iPad; CPU OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1"
+        )
     }
 
     func testFieldsMatchSecureThreeDSBrowserData() {
@@ -61,7 +69,7 @@ final class DeviceMetadataTests: XCTestCase {
             "browserUserAgent",
         ])
         XCTAssertEqual(fields["browserAcceptHeader"], "*/*")
-        XCTAssertEqual(fields["browserLanguage"], DeviceMetadata.browserLanguage(Locale.current))
+        XCTAssertEqual(fields["browserLanguage"], DeviceMetadata.preferredBrowserLanguage())
         XCTAssertLessThanOrEqual(fields["browserLanguage"]?.count ?? 9, 8)
         XCTAssertEqual(fields["browserColorDepth"], "24")
         XCTAssertEqual(fields["browserScreenHeight"], String(Int(screen.height * scale)))
@@ -81,7 +89,7 @@ final class DeviceMetadataTests: XCTestCase {
     func testHTTPHeadersMatchTheBrowserFields() {
         let headers = DeviceMetadata.httpHeaders()
         XCTAssertEqual(headers["Accept"], "*/*")
-        XCTAssertEqual(headers["Accept-Language"], DeviceMetadata.browserLanguage(Locale.current))
+        XCTAssertEqual(headers["Accept-Language"], DeviceMetadata.preferredBrowserLanguage())
         XCTAssertLessThanOrEqual(headers["Accept-Language"]?.count ?? 9, 8)
         XCTAssertEqual(headers["User-Agent"], DeviceMetadata.browserUserAgent())
         XCTAssertTrue(headers["User-Agent"]?.hasPrefix("Mozilla/5.0") ?? false)
