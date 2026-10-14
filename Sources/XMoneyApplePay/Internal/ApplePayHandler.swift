@@ -242,6 +242,7 @@ final class SheetHandoffPresenter: ThreeDSPresenter {
 
     func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd {
         await handler?.relinquishSheetForChallenge()
+        if Task.isCancelled { return .closedByPoll }
         return await inner.presentThreeDS(url: url)
     }
 

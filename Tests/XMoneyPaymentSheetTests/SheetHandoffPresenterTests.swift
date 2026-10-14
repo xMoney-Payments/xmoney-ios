@@ -14,6 +14,20 @@ final class SheetHandoffPresenterTests: XCTestCase {
         XCTAssertEqual(inner.presentedURLs, [url])
     }
 
+    @MainActor
+    func testSkipsTheChallengeWhenThePollAlreadyFinished() async {
+        let inner = RecordingPresenter()
+        let presenter = SheetHandoffPresenter(inner: inner, handler: nil)
+        let task = Task { @MainActor in
+            await presenter.presentThreeDS(url: URL(string: "https://acs.example/challenge")!)
+        }
+        task.cancel()
+
+        let end = await task.value
+        XCTAssertEqual(end, .closedByPoll)
+        XCTAssertTrue(inner.presentedURLs.isEmpty)
+    }
+
     func testForwardsDismiss() {
         let inner = RecordingPresenter()
         let presenter = SheetHandoffPresenter(inner: inner, handler: nil)

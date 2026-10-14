@@ -23,6 +23,25 @@ final class ThreeDSSafariControllerTests: XCTestCase {
         XCTAssertEqual(challenge.dismissCount, 1)
     }
 
+    /// The engine cancels the challenge task when the poll wins, possibly before any dismiss can reach this controller.
+    func testCancelledTaskDoesNotPresentTheChallenge() async {
+        let host = UIViewController()
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true }
+
+        let controller = ThreeDSSafariController(locale: "en")
+        let task = Task { @MainActor in
+            await controller.present(url: URL(string: "https://acs.example/challenge")!, from: host)
+        }
+        task.cancel()
+
+        let end = await task.value
+        XCTAssertEqual(end, .closedByPoll)
+        XCTAssertNil(host.presentedViewController)
+    }
+
     func testBankHandoffScreenUsesTheGivenLocale() {
         let screen = ThreeDSBankHandoffViewController(locale: "ro-RO")
         screen.loadViewIfNeeded()

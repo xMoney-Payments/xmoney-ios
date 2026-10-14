@@ -58,36 +58,41 @@ package final class ThreeDSSafariController: NSObject, SFSafariViewControllerDel
         }
     }
 
+    /// Cancelling the calling task acts as `dismiss()`, even before a dismiss could find this controller.
     package func present(url: URL, from host: UIViewController?) async -> ThreeDSChallengeEnd {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.main.async {
-                guard let host, host.view.window != nil, !host.isBeingDismissed else {
-                    continuation.resume(returning: .unavailable)
-                    return
-                }
-                guard !self.didStart else {
-                    continuation.resume(returning: .unavailable)
-                    return
-                }
-                self.didStart = true
-                self.host = host
-                self.resume.arm(continuation)
-                if self.isProgrammaticDismiss() {
-                    self.resume.resume(.closedByPoll)
-                    return
-                }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.main.async {
+                    guard let host, host.view.window != nil, !host.isBeingDismissed else {
+                        continuation.resume(returning: .unavailable)
+                        return
+                    }
+                    guard !self.didStart else {
+                        continuation.resume(returning: .unavailable)
+                        return
+                    }
+                    self.didStart = true
+                    self.host = host
+                    self.resume.arm(continuation)
+                    if self.isProgrammaticDismiss() {
+                        self.resume.resume(.closedByPoll)
+                        return
+                    }
 
-                let safari = SFSafariViewController(url: url)
-                safari.delegate = self
-                safari.dismissButtonStyle = .close
-                safari.modalPresentationStyle = .fullScreen
-                guard Self.present(safari, over: host) else {
-                    self.resume.resume(.unavailable)
-                    return
+                    let safari = SFSafariViewController(url: url)
+                    safari.delegate = self
+                    safari.dismissButtonStyle = .close
+                    safari.modalPresentationStyle = .fullScreen
+                    guard Self.present(safari, over: host) else {
+                        self.resume.resume(.unavailable)
+                        return
+                    }
+                    self.safari = safari
+                    self.observeBackground()
                 }
-                self.safari = safari
-                self.observeBackground()
             }
+        } onCancel: {
+            self.dismiss()
         }
     }
 
