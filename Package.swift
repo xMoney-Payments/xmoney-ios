@@ -24,7 +24,7 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedFramework("UIKit"),
-                .linkedFramework("WebKit"),
+                .linkedFramework("SafariServices"),
             ]
         ),
         .target(
@@ -38,7 +38,6 @@ let package = Package(
             path: "Sources/XMoneyApplePay",
             linkerSettings: [
                 .linkedFramework("PassKit"),
-                .linkedFramework("WebKit"),
             ]
         ),
         .target(
@@ -50,7 +49,6 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedFramework("PassKit"),
-                .linkedFramework("WebKit"),
             ]
         ),
         .target(
@@ -59,7 +57,6 @@ let package = Package(
             path: "Sources/XMoneyPaymentSheet",
             linkerSettings: [
                 .linkedFramework("PassKit"),
-                .linkedFramework("WebKit"),
             ]
         ),
         .testTarget(

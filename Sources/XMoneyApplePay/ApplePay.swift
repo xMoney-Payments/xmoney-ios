@@ -119,7 +119,10 @@ public final class ApplePay {
 
                 onEvent?(.ready)
 
-                let threeDS = ApplePayThreeDSPresenter(host: PresentationAnchor.resolve(from: presenter))
+                let threeDS = ApplePayThreeDSPresenter(
+                    host: PresentationAnchor.resolve(from: presenter),
+                    locale: configuration.options.locale
+                )
                 self.threeDSPresenter = threeDS
                 guard let authorizer = session.makeWalletAuthorizer(presenter: threeDS) else {
                     deliverLoadOrSetupFailure(

@@ -76,7 +76,6 @@ package enum Strings {
         "sheet.remove": "Remove",
         "sheet.keepIt": "Keep it",
         "sheet.default": "Default",
-        "sheet.authentication": "Authentication",
         "sheet.processingPayment": "Processing your payment...",
         "elements.cardNumber": "Card Number",
         "elements.cardholderName": "Cardholder Name",
@@ -116,6 +115,11 @@ package enum Strings {
         "button.subscribe": "Subscribe for {{amount}}",
         "button.topUp": "Top up {{amount}}",
         "button.deposit": "Deposit {{amount}}",
+        "threeds.bankHandoff.title": "Confirm in your bank app",
+        "threeds.bankHandoff.message": "Approve this payment in your banking app, then return here.",
+        "threeds.openBankApp.title": "Open your bank app?",
+        "threeds.openBankApp.message": "Your bank wants to continue the payment confirmation in its app.",
+        "threeds.openBankApp.open": "Open",
     ]
 
     private static let el: [String: String] = [
@@ -140,7 +144,6 @@ package enum Strings {
         "sheet.remove": "Αφαίρεση",
         "sheet.keepIt": "Διατήρηση",
         "sheet.default": "Προεπιλογή",
-        "sheet.authentication": "Ταυτοποίηση",
         "sheet.processingPayment": "Επεξεργασία πληρωμής...",
         "elements.cardNumber": "Αριθμός κάρτας",
         "elements.cardholderName": "Όνομα κατόχου",
@@ -179,6 +182,11 @@ package enum Strings {
         "button.subscribe": "Συνδρομή {{amount}}",
         "button.topUp": "Φόρτιση {{amount}}",
         "button.deposit": "Κατάθεση {{amount}}",
+        "threeds.bankHandoff.title": "Επιβεβαίωση στην εφαρμογή της τράπεζας",
+        "threeds.bankHandoff.message": "Εγκρίνετε αυτή την πληρωμή στην εφαρμογή της τράπεζας και επιστρέψτε εδώ.",
+        "threeds.openBankApp.title": "Άνοιγμα της εφαρμογής της τράπεζας;",
+        "threeds.openBankApp.message": "Η τράπεζά σας θέλει να συνεχίσει την επιβεβαίωση της πληρωμής στην εφαρμογή της.",
+        "threeds.openBankApp.open": "Άνοιγμα",
     ]
 
     private static let ro: [String: String] = [
@@ -203,7 +211,6 @@ package enum Strings {
         "sheet.remove": "Elimină",
         "sheet.keepIt": "Păstrează",
         "sheet.default": "Implicit",
-        "sheet.authentication": "Autentificare",
         "sheet.processingPayment": "Se procesează plata...",
         "elements.cardNumber": "Număr card",
         "elements.cardholderName": "Numele titularului",
@@ -242,6 +249,11 @@ package enum Strings {
         "button.subscribe": "Abonare {{amount}}",
         "button.topUp": "Alimentează {{amount}}",
         "button.deposit": "Depune {{amount}}",
+        "threeds.bankHandoff.title": "Confirmați în aplicația băncii",
+        "threeds.bankHandoff.message": "Aprobați această plată în aplicația băncii, apoi reveniți aici.",
+        "threeds.openBankApp.title": "Deschideți aplicația băncii?",
+        "threeds.openBankApp.message": "Banca dorește să continue confirmarea plății în aplicația sa.",
+        "threeds.openBankApp.open": "Deschide",
     ]
 
     private static let bg: [String: String] = [
@@ -266,7 +278,6 @@ package enum Strings {
         "sheet.remove": "Премахни",
         "sheet.keepIt": "Запази я",
         "sheet.default": "По подразбиране",
-        "sheet.authentication": "Удостоверяване",
         "sheet.processingPayment": "Обработка на плащането...",
         "elements.cardNumber": "Номер на картата",
         "elements.cardholderName": "Име на картодържателя",
@@ -305,6 +316,11 @@ package enum Strings {
         "button.subscribe": "Абонирай се за {{amount}}",
         "button.topUp": "Зареди {{amount}}",
         "button.deposit": "Депозирай {{amount}}",
+        "threeds.bankHandoff.title": "Потвърдете в приложението на банката",
+        "threeds.bankHandoff.message": "Одобрете това плащане в банковото приложение и се върнете тук.",
+        "threeds.openBankApp.title": "Да се отвори ли приложението на банката?",
+        "threeds.openBankApp.message": "Банката ви иска да продължи потвърждението на плащането в своето приложение.",
+        "threeds.openBankApp.open": "Отвори",
     ]
 
     private static let hu: [String: String] = [
@@ -329,7 +345,6 @@ package enum Strings {
         "sheet.remove": "Eltávolítás",
         "sheet.keepIt": "Megtartás",
         "sheet.default": "Alapértelmezett",
-        "sheet.authentication": "Hitelesítés",
         "sheet.processingPayment": "Fizetés feldolgozása...",
         "elements.cardNumber": "Kártyaszám",
         "elements.cardholderName": "Kártyabirtokos neve",
@@ -368,6 +383,11 @@ package enum Strings {
         "button.subscribe": "Előfizetés {{amount}} összegre",
         "button.topUp": "Feltöltés {{amount}}",
         "button.deposit": "Befizetés {{amount}}",
+        "threeds.bankHandoff.title": "Erősítse meg a banki alkalmazásban",
+        "threeds.bankHandoff.message": "Hagyja jóvá a fizetést a banki alkalmazásban, majd térjen vissza ide.",
+        "threeds.openBankApp.title": "Megnyitja a banki alkalmazást?",
+        "threeds.openBankApp.message": "A bankja az alkalmazásában szeretné folytatni a fizetés megerősítését.",
+        "threeds.openBankApp.open": "Megnyitás",
     ]
 
     private static let pl: [String: String] = [
@@ -392,7 +412,6 @@ package enum Strings {
         "sheet.remove": "Usuń",
         "sheet.keepIt": "Zachowaj",
         "sheet.default": "Domyślna",
-        "sheet.authentication": "Uwierzytelnianie",
         "sheet.processingPayment": "Przetwarzanie płatności...",
         "elements.cardNumber": "Numer karty",
         "elements.cardholderName": "Imię i nazwisko posiadacza karty",
@@ -431,5 +450,10 @@ package enum Strings {
         "button.subscribe": "Subskrybuj za {{amount}}",
         "button.topUp": "Doładuj {{amount}}",
         "button.deposit": "Wpłać {{amount}}",
+        "threeds.bankHandoff.title": "Potwierdź w aplikacji banku",
+        "threeds.bankHandoff.message": "Zatwierdź tę płatność w aplikacji banku, a następnie wróć tutaj.",
+        "threeds.openBankApp.title": "Otworzyć aplikację banku?",
+        "threeds.openBankApp.message": "Twój bank chce kontynuować potwierdzenie płatności w swojej aplikacji.",
+        "threeds.openBankApp.open": "Otwórz",
     ]
 }

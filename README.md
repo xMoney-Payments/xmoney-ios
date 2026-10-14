@@ -51,7 +51,7 @@ Put only a **publishable** `publicKey` (`pk_test_…` / `pk_live_…`) in the ap
 1. Your backend creates an order and returns `payload` + `checksum`.
 2. The app builds a `PaymentIntent` from those two values.
 3. You present Sheet, mount Element, or show Apple Pay.
-4. The SDK fetches the session token, collects payment, and runs 3DS if needed.
+4. The SDK fetches the session token and collects payment. A card 3DS challenge stays open in an `SFSafariViewController` until polling sees a completed payment. The merchant return URL is not used. Apple Pay authentication stays in the Apple Pay sheet.
 5. You handle `PaymentResult`. Session tokens are never passed by the merchant.
 
 ```swift

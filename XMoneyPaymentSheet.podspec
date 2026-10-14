@@ -24,14 +24,14 @@ Pod::Spec.new do |s|
     core.source_files = 'Sources/XMoneyCore/**/*.swift'
     core.resources    = 'Resources/**/*', 'Sources/XMoneyCore/Resources/**/*'
     core.resource_bundles = { 'XMoneyCore' => 'PrivacyInfo.xcprivacy' }
-    core.frameworks   = 'UIKit', 'WebKit'
+    core.frameworks   = 'UIKit', 'SafariServices'
     core.pod_target_xcconfig = pod_swift_xcconfig
   end
 
   s.subspec 'ApplePay' do |apple|
     apple.source_files = 'Sources/XMoneyApplePay/**/*.swift', 'Sources/XMoneyApplePayObjC/**/*.{h,m}'
     apple.dependency 'XMoneyPaymentSheet/Core'
-    apple.frameworks   = 'PassKit', 'WebKit'
+    apple.frameworks   = 'PassKit'
     apple.pod_target_xcconfig = pod_swift_xcconfig
   end
 
@@ -42,7 +42,7 @@ Pod::Spec.new do |s|
       'Sources/XMoneyPaymentElement/Resources/XMoneyAssets.xcassets',
       'Sources/XMoneyPaymentElement/Resources/Fonts/*',
     ]
-    emb.frameworks   = 'PassKit', 'WebKit'
+    emb.frameworks   = 'PassKit'
     emb.pod_target_xcconfig = pod_swift_xcconfig
   end
 
@@ -51,7 +51,7 @@ Pod::Spec.new do |s|
     sheet.dependency 'XMoneyPaymentSheet/Core'
     sheet.dependency 'XMoneyPaymentSheet/PaymentElement'
     sheet.dependency 'XMoneyPaymentSheet/ApplePay'
-    sheet.frameworks   = 'PassKit', 'WebKit'
+    sheet.frameworks   = 'PassKit'
     sheet.pod_target_xcconfig = pod_swift_xcconfig
   end
 end

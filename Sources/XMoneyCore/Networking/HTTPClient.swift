@@ -37,9 +37,11 @@ final class HTTPClient {
         self.execute = execute
     }
 
+    /// With `exposingStatus`, a non-2xx response throws `HTTPStatusFailure` instead of `PaymentError`.
     func getJSON(
         url: URL,
-        bearer: String? = nil
+        bearer: String? = nil,
+        exposingStatus: Bool = false
     ) async throws -> [String: Any] {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -47,7 +49,7 @@ final class HTTPClient {
         if let bearer {
             request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
         }
-        return try await sendExpectingJSON(request)
+        return try await sendExpectingJSON(request, exposingStatus: exposingStatus)
     }
 
     func postJSON(
@@ -82,6 +84,7 @@ final class HTTPClient {
         let boundary = "xmoney-\(UUID().uuidString)"
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        applyBrowserHeaders(&request)
         request.setValue(
             "multipart/form-data; boundary=\(boundary)",
             forHTTPHeaderField: "Content-Type"
@@ -101,7 +104,10 @@ final class HTTPClient {
         return try await sendExpectingJSON(request)
     }
 
-    private func sendExpectingJSON(_ request: URLRequest) async throws -> [String: Any] {
+    private func sendExpectingJSON(
+        _ request: URLRequest,
+        exposingStatus: Bool = false
+    ) async throws -> [String: Any] {
         let (data, response): (Data, URLResponse)
         do {
             if let execute {
@@ -121,7 +127,11 @@ final class HTTPClient {
             let message = (json["message"] as? String)
                 ?? (json["error"] as? String)
                 ?? "Request failed with status \(http.statusCode)"
-            throw PaymentError.network(message)
+            let error = PaymentError.network(message)
+            if exposingStatus {
+                throw HTTPStatusFailure(statusCode: http.statusCode, error: error)
+            }
+            throw error
         }
         return json
     }
@@ -187,6 +197,13 @@ final class HTTPClient {
         }
     }
 
+    /// The secure API copies these into the 3DS browser data, so only the payment request needs them.
+    private func applyBrowserHeaders(_ request: inout URLRequest) {
+        for (name, value) in DeviceMetadata.httpHeaders() {
+            request.setValue(value, forHTTPHeaderField: name)
+        }
+    }
+
     private static func sanitizedMultipartToken(
         _ value: String,
         boundary: String,
@@ -197,6 +214,11 @@ final class HTTPClient {
         }
         return value
     }
+}
+
+struct HTTPStatusFailure: Error {
+    let statusCode: Int
+    let error: PaymentError
 }
 
 private extension Data {
