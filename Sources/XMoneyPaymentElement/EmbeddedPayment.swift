@@ -60,16 +60,17 @@ public final class EmbeddedPayment {
     ///
     /// Pay, `confirm()`, and Apple Pay are no-ops from this call until the new
     /// order is bound, including while `createOrder` talks to your server. If
-    /// `createOrder` throws, the previous order stays bound and payable.
+    /// `createOrder` throws, the previous order stays bound and payable. A
+    /// newer update cooperatively cancels the in-flight creation task.
     public func updateOrder(
-        createOrder: () async throws -> PaymentIntent
+        createOrder: @escaping () async throws -> PaymentIntent
     ) async throws {
         try await controller.updateOrder(createOrder: createOrder)
     }
 
     public func updateOrder(
         onEvent: @escaping (EmbeddedEvent) -> Void,
-        createOrder: () async throws -> PaymentIntent
+        createOrder: @escaping () async throws -> PaymentIntent
     ) async throws {
         try await controller.updateOrder(onEvent: onEvent, createOrder: createOrder)
     }

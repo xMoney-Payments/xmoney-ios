@@ -31,6 +31,11 @@ package final class PaymentSession {
     }
 
     package func bind(intent: PaymentIntent) async throws -> SheetState {
+        #if DEBUG
+        if let testingBindError {
+            throw testingBindError
+        }
+        #endif
         let key = Self.key(for: intent)
         if boundKey == key, let state {
             return state
@@ -61,6 +66,15 @@ package final class PaymentSession {
         isProcessing = false
         return loaded
     }
+
+    #if DEBUG
+    package var testingBindError: Error?
+
+    package func testingInstall(state: SheetState, processing: Bool = false) {
+        self.state = state
+        self.isProcessing = processing
+    }
+    #endif
 
     package func submitNewCard(_ input: CardInput, presenter: ThreeDSPresenter) async -> EngineResult {
         await submit(didAuthorize: true) {

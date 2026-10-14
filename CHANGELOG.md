@@ -14,14 +14,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - `EmbeddedPayment.prepare` and `EmbeddedPayment.updateOrder` no longer emit `.ready`. A mounted `PaymentElement` emits it once, after the surface first draws; later order updates do not emit it again. `isInteractionEnabled` still unlocks when the bind finishes.
-- A superseded `EmbeddedPayment.prepare` or `updateOrder` throws `CancellationError`.
+- A newer closure-based Element or Apple Pay update cooperatively cancels the previous order-creation task. A superseded `prepare` or `updateOrder` throws `CancellationError`.
+- Calling `EmbeddedPayment.updateOrder(intent:)` without an `onEvent` closure keeps the existing event handler instead of replacing it.
 - Card 3DS now runs in an `SFSafariViewController` instead of an in-app web view, and stays open until the payment result is known, including when the bank app takes over.
 - Apple Pay authentication stays in the Apple Pay sheet.
 - The SDK asks the shopper before opening a bank app from the challenge. Redirects to the App Store, enterprise app installs, Settings, and other system links are blocked while the challenge loads.
 
 ### Fixed
 
-- Payment Element and Payment Sheet keep their loading cover in place until the card form has a real size and, when Apple Pay is offered, the PassKit button has visible pixels. A blank iOS 26 placeholder image does not count.
+- Payment Element and Payment Sheet keep their loading cover in place until the card form is in a window with a real size and, when Apple Pay is offered, the PassKit button has committed its backing store plus one display interval. The wait is capped at two seconds.
 - In the example app, a fast Pay tap after an amount change could charge the previous order before the new order was bound.
 - On iOS 26, Apple Pay buttons are created with card art disabled. The default button paints that art after the rest of the sheet, which left an empty slot above the divider.
 - The example Apple Pay sample and `MerchantReadyGate` stay on the loader until the order is bound and the button has drawn. The button is laid out under the cover so PassKit can paint before the gate opens.
@@ -33,6 +34,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Closing the challenge after switching to the bank app now waits for the bank's answer instead of reporting a cancel after a few seconds.
 - The bank-app waiting screen could be swiped away, leaving the payment stuck with nothing on screen.
 - The challenge could fail to appear when the app was already showing another screen, leaving the payment waiting until timeout.
+- Payment Element initial bind failures now replace the loading cover with an SDK-authored failure state. A later bind failure throws and does not call the result handler. Rebinding the currently bound intent is a no-op, including during payment, and does not cancel an in-flight order creation.
+
+### Breaking changes
+
+- `.ready` is scoped to a mounted surface and is no longer an update-completion signal.
+
+### Migration
+
+- Keep Element and Apple Pay views mounted at their real size until `.ready`; a remount emits `.ready` again.
+- Treat the async return as update completion and gate controls with `isInteractionEnabled`.
+- Handle `CancellationError` when a newer update supersedes an older one, and keep order-creation endpoints idempotent.
+- A failed `updateOrder` after an order is already bound throws and does not call the result handler. The previous order stays payable.
 
 ## [1.0.1] - 2026-09-24
 

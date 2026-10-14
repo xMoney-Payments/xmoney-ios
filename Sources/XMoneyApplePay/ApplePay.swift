@@ -17,6 +17,8 @@ public final class ApplePay {
     private var payableIntent: PaymentIntent?
     private var isUpdatingOrder = false
     private var bindGeneration = 0
+    private var createOrderTask: Task<PaymentIntent, Error>?
+    private var activeOrderKey: String?
 
     /// True after COMPLETE, FAILED, or post-submit CANCELED for the current order.
     /// Binding a new order via ``present(from:intent:onEvent:)`` clears this.
@@ -62,11 +64,16 @@ public final class ApplePay {
     /// This does not lock Pay while your server creates `intent`; use the
     /// `createOrder` overload when the shopper changes the cart.
     public func updateOrder(intent: PaymentIntent) async throws {
-        guard !isProcessing else {
-            throw PaymentError.payment("Payment in progress")
+        if payableIntent == intent, !isOrderConsumed {
+            return
         }
         bindGeneration += 1
         let generation = bindGeneration
+        createOrderTask?.cancel()
+        createOrderTask = nil
+        guard !isProcessing else {
+            throw PaymentError.payment("Payment in progress")
+        }
         isUpdatingOrder = true
         defer {
             if generation == bindGeneration {
@@ -80,9 +87,10 @@ public final class ApplePay {
     ///
     /// `present` is a no-op from this call until the new order is bound,
     /// including while `createOrder` talks to your server. If `createOrder`
-    /// throws, the previous order stays bound and payable.
+    /// throws, the previous order stays bound and payable. A newer update
+    /// cooperatively cancels the in-flight creation task.
     public func updateOrder(
-        createOrder: () async throws -> PaymentIntent
+        createOrder: @escaping () async throws -> PaymentIntent
     ) async throws {
         guard !isProcessing else {
             throw PaymentError.payment("Payment in progress")
@@ -95,9 +103,27 @@ public final class ApplePay {
                 isUpdatingOrder = false
             }
         }
-        let intent = try await createOrder()
+        createOrderTask?.cancel()
+        let task = Task { try await createOrder() }
+        createOrderTask = task
+        let intent: PaymentIntent
+        do {
+            intent = try await task.value
+        } catch {
+            if generation == bindGeneration {
+                createOrderTask = nil
+            }
+            guard generation == bindGeneration else {
+                throw CancellationError()
+            }
+            throw error
+        }
         guard generation == bindGeneration else {
             throw CancellationError()
+        }
+        createOrderTask = nil
+        if payableIntent == intent, !isOrderConsumed {
+            return
         }
         try await bindPayableIntent(intent, generation: generation)
     }
@@ -120,17 +146,19 @@ public final class ApplePay {
         intent: PaymentIntent,
         onEvent: ((ApplePayEvent) -> Void)? = nil
     ) {
-        guard !isProcessing, !isUpdatingOrder else { return }
         Self.register()
-        dismissRequested = false
         let payable = payableIntent ?? intent
         let key = "\(payable.orderPayload):\(payable.orderChecksum)"
+        if isProcessing, activeOrderKey == key { return }
+        guard !isProcessing, !isUpdatingOrder else { return }
+        dismissRequested = false
         if consumedOrderKey == key, isOrderConsumed { return }
         if consumedOrderKey != key {
             isOrderConsumed = false
         }
 
         isProcessing = true
+        activeOrderKey = key
         onEvent?(.processing(true))
 
         Task { @MainActor in
@@ -236,6 +264,7 @@ public final class ApplePay {
         onEvent: ((ApplePayEvent) -> Void)?
     ) {
         isProcessing = false
+        activeOrderKey = nil
         // Load / capability failures do not consume the order.
         onEvent?(.processing(false))
         onResult(.failed(error.merchantFacing()))
@@ -248,6 +277,7 @@ public final class ApplePay {
         onEvent: ((ApplePayEvent) -> Void)?
     ) {
         isProcessing = false
+        activeOrderKey = nil
         defer {
             threeDSPresenter = nil
             applePayHandler = nil
@@ -256,4 +286,11 @@ public final class ApplePay {
         onEvent?(.processing(false))
         onResult(OrderConsumption.merchantResult(result))
     }
+
+    #if DEBUG
+    func testingInstallPayable(_ intent: PaymentIntent, processing: Bool = false) {
+        payableIntent = intent
+        isProcessing = processing
+    }
+    #endif
 }

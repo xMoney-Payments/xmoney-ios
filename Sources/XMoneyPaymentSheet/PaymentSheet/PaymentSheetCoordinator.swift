@@ -89,6 +89,7 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
                     transitioning?.presentationController?.updateLayout(animated: true)
                 }
                 nav.setViewControllers([sheet], animated: false)
+                sheet.view.accessibilityElementsHidden = true
                 let cover = UIView()
                 cover.translatesAutoresizingMaskIntoConstraints = false
                 cover.backgroundColor = theme.background
@@ -115,6 +116,7 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
                     return
                 }
                 surfaceRevealed = true
+                sheet.view.accessibilityElementsHidden = false
                 transitioning.heightProvider = sheet
                 NSLayoutConstraint.deactivate(coverPins)
                 cover.removeFromSuperview()

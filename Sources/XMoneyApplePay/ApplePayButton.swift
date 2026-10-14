@@ -46,6 +46,11 @@ public final class ApplePayButton: UIView {
 
     public override func didMoveToWindow() {
         super.didMoveToWindow()
+        guard window != nil else {
+            drawWatch?.cancel()
+            drawWatch = nil
+            return
+        }
         scheduleDrawWatch()
     }
 
@@ -112,10 +117,10 @@ public final class ApplePayButton: UIView {
     private func scheduleDrawWatch() {
         guard !didNotifyDraw, drawWatch == nil else { return }
         guard window != nil, bounds.width > 1, bounds.height > 1 else { return }
+        let button = paymentButton
         drawWatch = Task { @MainActor [weak self] in
-            guard let self else { return }
-            await SurfacePaint.waitUntilButtonDrawn(self.paymentButton)
-            guard !Task.isCancelled, !self.didNotifyDraw else { return }
+            await SurfacePaint.waitUntilButtonDrawn(button)
+            guard !Task.isCancelled, let self, !self.didNotifyDraw, self.window != nil else { return }
             self.didNotifyDraw = true
             self.drawWatch = nil
             self.onFirstDraw?()

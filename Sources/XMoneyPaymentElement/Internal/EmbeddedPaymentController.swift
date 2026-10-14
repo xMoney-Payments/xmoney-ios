@@ -14,6 +14,8 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     private var threeDSSession: ThreeDSSafariController?
     private weak var hostView: UIView?
     private var prepareGeneration = 0
+    private var boundIntent: PaymentIntent?
+    private var createOrderTask: Task<PaymentIntent, Error>?
     private var operationTask: Task<Void, Never>?
     private var submitHandler: (() -> Void)?
     private var onLiveConfigChange: (() -> Void)?
@@ -100,15 +102,20 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     }
 
     func prepare(intent: PaymentIntent, onEvent: ((EmbeddedEvent) -> Void)? = nil) async throws {
-        guard !(session?.isProcessing ?? false) else {
-            throw PaymentError.payment("Payment in progress")
-        }
         if let onEvent {
             self.onEvent = onEvent
         }
         paymentConfig = liveConfiguration
+        if boundIntent == intent, session?.state != nil, session?.isOrderConsumed == false {
+            return
+        }
         prepareGeneration += 1
         let generation = prepareGeneration
+        createOrderTask?.cancel()
+        createOrderTask = nil
+        guard !(session?.isProcessing ?? false) else {
+            throw PaymentError.payment("Payment in progress")
+        }
         isUpdatingOrder = true
 
         try await bindLocked(intent: intent, generation: generation)
@@ -116,7 +123,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
 
     func updateOrder(
         onEvent: ((EmbeddedEvent) -> Void)? = nil,
-        createOrder: () async throws -> PaymentIntent
+        createOrder: @escaping () async throws -> PaymentIntent
     ) async throws {
         guard !(session?.isProcessing ?? false) else {
             throw PaymentError.payment("Payment in progress")
@@ -129,23 +136,36 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         let generation = prepareGeneration
         isUpdatingOrder = true
 
+        createOrderTask?.cancel()
+        let task = Task { try await createOrder() }
+        createOrderTask = task
         let intent: PaymentIntent
         do {
-            intent = try await createOrder()
+            intent = try await task.value
         } catch {
             if generation == prepareGeneration {
-                isUpdatingOrder = false
+                createOrderTask = nil
             }
+            guard generation == prepareGeneration else {
+                throw CancellationError()
+            }
+            isUpdatingOrder = false
             throw error
         }
 
         guard generation == prepareGeneration else {
             throw CancellationError()
         }
+        createOrderTask = nil
+        if boundIntent == intent, session?.state != nil, session?.isOrderConsumed == false {
+            isUpdatingOrder = false
+            return
+        }
         try await bindLocked(intent: intent, generation: generation)
     }
 
     private func bindLocked(intent: PaymentIntent, generation: Int) async throws {
+        let initial = boundIntent == nil
         do {
             if session == nil {
                 session = try PaymentSession(configuration: liveConfiguration, intent: intent)
@@ -160,6 +180,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
             guard generation == prepareGeneration else {
                 throw CancellationError()
             }
+            boundIntent = intent
             isUpdatingOrder = false
             onOrderBound?(state)
         } catch is CancellationError {
@@ -172,15 +193,19 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
                 throw CancellationError()
             }
             isUpdatingOrder = false
-            onResult(.failed(error.merchantFacing()))
+            if initial {
+                onResult(.failed(error.merchantFacing()))
+            }
             throw error
         } catch {
             guard generation == prepareGeneration else {
                 throw CancellationError()
             }
             isUpdatingOrder = false
-            let mapped = PaymentError.load(error.localizedDescription)
-            onResult(.failed(mapped.merchantFacing()))
+            if initial {
+                let mapped = PaymentError.load(error.localizedDescription)
+                onResult(.failed(mapped.merchantFacing()))
+            }
             throw error
         }
     }
@@ -275,4 +300,22 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         }
         return root
     }
+
+    #if DEBUG
+    func testingInstallBound(
+        _ intent: PaymentIntent,
+        state: SheetState,
+        processing: Bool = false
+    ) throws {
+        if session == nil {
+            session = try PaymentSession(configuration: liveConfiguration, intent: intent)
+        }
+        session?.testingInstall(state: state, processing: processing)
+        boundIntent = intent
+    }
+
+    func testingFailNextBind(_ error: Error) {
+        session?.testingBindError = error
+    }
+    #endif
 }

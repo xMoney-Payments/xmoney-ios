@@ -77,6 +77,35 @@ case .canceled:                  // user dismissed; no error payload
 
 Interim events (`.ready`, `.processing`) are optional and do not replace the result callback.
 
+## Surface lifecycle contract
+
+- `.ready` is emitted once per mounted checkout surface, after its initial
+  layout and wallet-button draw (or the documented draw timeout). Remounting
+  creates a new surface; later `updateOrder` calls on the same surface do not
+  emit `.ready`.
+- `updateOrder` completion is the async return. Gate merchant controls with
+  `isInteractionEnabled`; rebinding the already-bound intent is a no-op, while a
+  different intent during payment fails with `PaymentError.payment`.
+- Declarative Element / wallet hosts retain a newer intent received during a
+  payment and bind it after processing ends.
+- Initial bind failures on Element deliver `.failed`, replace SDK loading with an
+  SDK-authored failure state, and throw to direct callers. A later bind failure
+  throws only: the previous order stays payable and the result callback is not
+  called. UIKit Apple Pay reports load failure from `present`.
+- Rebinding the already-bound intent returns immediately and does not cancel an
+  in-flight order creation.
+- `updateOrder { createOrder() }` locks interaction before merchant order
+  creation. A newer call cooperatively cancels the previous creation task;
+  merchant order endpoints must remain idempotent.
+
+## Surface behavior
+
+| Surface | Ready | Initial failure | Later update failure | Same intent while paying |
+| --- | --- | --- | --- | --- |
+| Payment Element | After layout and, when offered, the PassKit button has painted, or after two seconds | Failure label, `.failed`, and `.ready` | Throws; the previous order stays payable | No-op, and an in-flight order creation keeps running |
+| Payment Sheet | After the first draw of that presentation | `.failed` and the sheet closes | No `updateOrder` | No `updateOrder` |
+| UIKit Apple Pay | `present` emits `.ready` after the wallet session binds. The button's own signal is `onFirstDraw` | `present` delivers `.failed` | Throws; the previous order stays payable | No-op, and an in-flight order creation keeps running |
+
 ## Order lifecycle
 
 Order checksums are **one-shot**. After a consumed result the bound order cannot be charged again.
