@@ -7,7 +7,8 @@ import XMoneyCore
 
 public final class ApplePayButton: UIView {
     public var onTap: (() -> Void)?
-    /// Fires once the PassKit button has drawn, or after a short cap if it never does.
+    /// Fires after the PassKit button first draws, or after a short cap if it
+    /// never does. Fires again when an appearance change rebuilds the button.
     public var onFirstDraw: (() -> Void)?
 
     private var paymentButton: PKPaymentButton

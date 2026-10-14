@@ -89,8 +89,12 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
                     transitioning?.presentationController?.updateLayout(animated: true)
                 }
                 nav.setViewControllers([sheet], animated: false)
-                let cover = loading.view!
+                let cover = UIView()
                 cover.translatesAutoresizingMaskIntoConstraints = false
+                cover.backgroundColor = theme.background
+                let coverLoader = XCoinFlipLoaderView(color: CheckoutTheme.brandPrimary, size: 72)
+                coverLoader.translatesAutoresizingMaskIntoConstraints = false
+                cover.addSubview(coverLoader)
                 nav.view.addSubview(cover)
                 let coverPins = [
                     cover.topAnchor.constraint(equalTo: nav.view.topAnchor),
@@ -99,6 +103,10 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
                     cover.bottomAnchor.constraint(equalTo: nav.view.bottomAnchor),
                 ]
                 NSLayoutConstraint.activate(coverPins)
+                NSLayoutConstraint.activate([
+                    coverLoader.centerXAnchor.constraint(equalTo: cover.centerXAnchor),
+                    coverLoader.centerYAnchor.constraint(equalTo: cover.safeAreaLayoutGuide.centerYAnchor),
+                ])
                 // Full width at the loader height is enough for PassKit to paint.
                 nav.view.layoutIfNeeded()
                 sheet.view.layoutIfNeeded()

@@ -25,6 +25,9 @@ package enum SurfacePaint {
                 return
             }
         }
+        #if DEBUG
+        NSLog("XMoney: Apple Pay button did not paint within %.1f seconds; continuing.", timeout)
+        #endif
     }
 
     package static func waitUntilLaidOut(_ view: UIView, maxTurns: Int = 30) async {
