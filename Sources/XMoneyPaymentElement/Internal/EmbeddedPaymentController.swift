@@ -17,7 +17,14 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     private var operationTask: Task<Void, Never>?
     private var submitHandler: (() -> Void)?
     private var onLiveConfigChange: (() -> Void)?
-    private(set) var isUpdatingOrder = false
+    private var onUpdatingOrderChange: ((Bool) -> Void)?
+    private var onOrderBound: ((SheetState) -> Void)?
+    private(set) var isUpdatingOrder = false {
+        didSet {
+            guard isUpdatingOrder != oldValue else { return }
+            onUpdatingOrderChange?(isUpdatingOrder)
+        }
+    }
 
     var sheetState: SheetState? { session?.state }
     /// In-flight charge only. Order rebind uses `isUpdatingOrder`, not this flag.
@@ -41,6 +48,19 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
 
     func setOnLiveConfigChange(_ handler: (() -> Void)?) {
         onLiveConfigChange = handler
+    }
+
+    func setOnUpdatingOrderChange(_ handler: ((Bool) -> Void)?) {
+        onUpdatingOrderChange = handler
+        handler?(isUpdatingOrder)
+    }
+
+    func setOnOrderBound(_ handler: ((SheetState) -> Void)?) {
+        onOrderBound = handler
+    }
+
+    func emit(_ event: EmbeddedEvent) {
+        onEvent(event)
     }
 
     /// Submit the currently selected method (new card or saved card).
@@ -79,36 +99,85 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         onLiveConfigChange?()
     }
 
-    func prepare(intent: PaymentIntent, onEvent: @escaping (EmbeddedEvent) -> Void = { _ in }) async throws {
+    func prepare(intent: PaymentIntent, onEvent: ((EmbeddedEvent) -> Void)? = nil) async throws {
         guard !(session?.isProcessing ?? false) else {
             throw PaymentError.payment("Payment in progress")
         }
-        self.onEvent = onEvent
+        if let onEvent {
+            self.onEvent = onEvent
+        }
         paymentConfig = liveConfiguration
         prepareGeneration += 1
         let generation = prepareGeneration
         isUpdatingOrder = true
 
+        try await bindLocked(intent: intent, generation: generation)
+    }
+
+    func updateOrder(
+        onEvent: ((EmbeddedEvent) -> Void)? = nil,
+        createOrder: () async throws -> PaymentIntent
+    ) async throws {
+        guard !(session?.isProcessing ?? false) else {
+            throw PaymentError.payment("Payment in progress")
+        }
+        if let onEvent {
+            self.onEvent = onEvent
+        }
+        paymentConfig = liveConfiguration
+        prepareGeneration += 1
+        let generation = prepareGeneration
+        isUpdatingOrder = true
+
+        let intent: PaymentIntent
+        do {
+            intent = try await createOrder()
+        } catch {
+            if generation == prepareGeneration {
+                isUpdatingOrder = false
+            }
+            throw error
+        }
+
+        guard generation == prepareGeneration else {
+            throw CancellationError()
+        }
+        try await bindLocked(intent: intent, generation: generation)
+    }
+
+    private func bindLocked(intent: PaymentIntent, generation: Int) async throws {
         do {
             if session == nil {
                 session = try PaymentSession(configuration: liveConfiguration, intent: intent)
             }
-            guard let session else { return }
+            guard let session else {
+                if generation == prepareGeneration {
+                    isUpdatingOrder = false
+                }
+                return
+            }
             let state = try await session.bind(intent: intent)
-            guard generation == prepareGeneration else { return }
-            _ = state
+            guard generation == prepareGeneration else {
+                throw CancellationError()
+            }
             isUpdatingOrder = false
+            onOrderBound?(state)
         } catch is CancellationError {
-            guard generation == prepareGeneration else { return }
-            isUpdatingOrder = false
+            if generation == prepareGeneration {
+                isUpdatingOrder = false
+            }
             throw CancellationError()
         } catch let error as PaymentError {
-            guard generation == prepareGeneration else { return }
+            guard generation == prepareGeneration else {
+                throw CancellationError()
+            }
             isUpdatingOrder = false
             onResult(.failed(error.merchantFacing()))
             throw error
         } catch {
-            guard generation == prepareGeneration else { return }
+            guard generation == prepareGeneration else {
+                throw CancellationError()
+            }
             isUpdatingOrder = false
             let mapped = PaymentError.load(error.localizedDescription)
             onResult(.failed(mapped.merchantFacing()))
@@ -119,7 +188,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     func startApplePay() {
         guard isInteractionEnabled, let session,
               let authorizer = session.makeWalletAuthorizer(presenter: self) else { return }
-        onEvent(.processing(true))
+        emit(.processing(true))
         operationTask?.cancel()
         operationTask = Task { @MainActor in
             let result = await session.startWallet(authorizer)
@@ -136,7 +205,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         let holderInvalid = CardFieldValidators.validateHolderName(input.holderName) != nil
         if numberInvalid || expiryInvalid || cvvInvalid || holderInvalid { return }
 
-        onEvent(.processing(true))
+        emit(.processing(true))
         operationTask?.cancel()
         operationTask = Task { @MainActor in
             let result = await session.submitNewCard(input, presenter: self)
@@ -146,7 +215,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
 
     func paySavedCard(_ card: SavedCard) {
         guard isInteractionEnabled, let session else { return }
-        onEvent(.processing(true))
+        emit(.processing(true))
         operationTask?.cancel()
         operationTask = Task { @MainActor in
             let result = await session.submitSavedCard(cardId: card.id, presenter: self)
@@ -161,7 +230,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     }
 
     private func deliver(_ result: EngineResult) {
-        onEvent(.processing(false))
+        emit(.processing(false))
         onResult(OrderConsumption.merchantResult(result))
     }
 

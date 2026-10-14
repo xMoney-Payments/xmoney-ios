@@ -9,17 +9,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - `ApplePayButton.onFirstDraw` and `ApplePayButtonView.onFirstDraw` run once the PassKit button has painted, or after a short wait if it never does. Use this to keep merchant loading up until the wallet mark is visible.
+- `EmbeddedPayment.updateOrder { }`, `PaymentElement.updateOrder { }`, and `ApplePay.updateOrder { }` lock Pay while the closure creates the next order and until that order is bound.
 
 ### Changed
 
-- `EmbeddedPayment.prepare` and `EmbeddedPayment.updateOrder` no longer emit `.ready`. A mounted `PaymentElement` emits it after the surface has drawn. `isInteractionEnabled` still unlocks when the bind finishes.
+- `EmbeddedPayment.prepare` and `EmbeddedPayment.updateOrder` no longer emit `.ready`. A mounted `PaymentElement` emits it once, after the surface first draws; later order updates do not emit it again. `isInteractionEnabled` still unlocks when the bind finishes.
+- A superseded `EmbeddedPayment.prepare` or `updateOrder` throws `CancellationError`.
 - Card 3DS now runs in an `SFSafariViewController` instead of an in-app web view, and stays open until the payment result is known, including when the bank app takes over.
 - Apple Pay authentication stays in the Apple Pay sheet.
 - The SDK asks the shopper before opening a bank app from the challenge. Redirects to the App Store, enterprise app installs, Settings, and other system links are blocked while the challenge loads.
 
 ### Fixed
 
-- Payment Element and Payment Sheet keep their loading cover in place until the card form has a real size and, when Apple Pay is offered, the PassKit button has visible pixels. A blank iOS 26 placeholder image does not count. `.ready` is emitted then, including again after `PaymentElement.updateOrder`, so checkout does not flash an empty wallet button.
+- Payment Element and Payment Sheet keep their loading cover in place until the card form has a real size and, when Apple Pay is offered, the PassKit button has visible pixels. A blank iOS 26 placeholder image does not count.
+- In the example app, a fast Pay tap after an amount change could charge the previous order before the new order was bound.
 - On iOS 26, Apple Pay buttons are created with card art disabled. The default button paints that art after the rest of the sheet, which left an empty slot above the divider.
 - The example Apple Pay sample and `MerchantReadyGate` stay on the loader until the order is bound and the button has drawn. The button is laid out under the cover so PassKit can paint before the gate opens.
 - 3DS browser data now reports Safari's user agent, matching the browser that shows the challenge.

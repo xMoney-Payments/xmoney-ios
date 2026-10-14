@@ -42,6 +42,8 @@ public final class EmbeddedPayment {
     /// (`isInteractionEnabled` is false). The Pay button keeps its current
     /// title — this does not emit ``EmbeddedEvent/processing(_:)``. A newer
     /// `updateOrder` cancels the in-flight bind. Throws while a charge is in flight.
+    /// This does not lock Pay while your server creates `intent`; use the
+    /// `createOrder` overload when the shopper changes the cart.
     public func updateOrder(intent: PaymentIntent) async throws {
         try await controller.prepare(intent: intent)
     }
@@ -51,6 +53,25 @@ public final class EmbeddedPayment {
         onEvent: @escaping (EmbeddedEvent) -> Void
     ) async throws {
         try await controller.prepare(intent: intent, onEvent: onEvent)
+    }
+
+    /// Locks Pay, creates the next signed order, and binds it without tearing
+    /// down the embedded surface.
+    ///
+    /// Pay, `confirm()`, and Apple Pay are no-ops from this call until the new
+    /// order is bound, including while `createOrder` talks to your server. If
+    /// `createOrder` throws, the previous order stays bound and payable.
+    public func updateOrder(
+        createOrder: () async throws -> PaymentIntent
+    ) async throws {
+        try await controller.updateOrder(createOrder: createOrder)
+    }
+
+    public func updateOrder(
+        onEvent: @escaping (EmbeddedEvent) -> Void,
+        createOrder: () async throws -> PaymentIntent
+    ) async throws {
+        try await controller.updateOrder(onEvent: onEvent, createOrder: createOrder)
     }
 
     public func updateAppearance(_ appearance: PaymentConfig.AppearanceConfig) {

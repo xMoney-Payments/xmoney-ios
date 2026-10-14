@@ -168,7 +168,19 @@ SwiftUI: `PaymentElementView(payment:intent:onEvent:)`.
 try await embedded.updateOrder(intent: next)
 ```
 
-`PaymentElement` / `PaymentElementView` call `updateOrder` when `intent` changes. Keep the surface mounted; do not set the intent to `nil` or swap the form for a loader. `.ready` fires after the form has laid out and, when Apple Pay is offered, the wallet button has drawn — including again after `updateOrder`. Pay stays locked (`isInteractionEnabled`) until that event. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`.
+When the shopper changes the cart, pass the server call instead. Pay is locked immediately, including while your server creates the order, so a fast tap cannot charge the previous order. If the closure throws, the previous order stays bound and payable:
+
+```swift
+try await embedded.updateOrder {
+    let (payload, checksum) = try await backend.createOrder(cart)
+    return PaymentIntent(
+        orderPayload: OrderPayload(payload),
+        orderChecksum: OrderChecksum(checksum)
+    )
+}
+```
+
+`PaymentElement` / `PaymentElementView` call `updateOrder` when `intent` changes. Keep the surface mounted; do not set the intent to `nil` or swap the form for a loader. `.ready` fires once, after the form has laid out and, when Apple Pay is offered, the wallet button has drawn. Until then, Payment Element covers partial paint with `CheckoutTheme.background`. A later `updateOrder` does not emit it again. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`.
 
 Copy-paste sample: [`UpdateOrderSampleView.swift`](Examples/Example/Advanced/UpdateOrderSampleView.swift)
 
@@ -252,6 +264,8 @@ applePay.isReady      // PassKit can make payments on this device
 applePay.isInteractionEnabled  // false during updateOrder and while paying
 applePay.isOrderConsumed
 ```
+
+When the cart changes, call `applePay.updateOrder { try await backend.createOrder(cart) }` so the wallet button is locked while your server creates and binds the next order.
 
 Pre-auth dismiss delivers `.canceled` and does **not** consume. Present or tap again with the same intent.
 

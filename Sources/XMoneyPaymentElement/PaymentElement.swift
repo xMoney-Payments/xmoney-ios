@@ -12,6 +12,7 @@ public final class PaymentElement: UIView {
     private var formView: PaymentFormView?
     /// Bumps on each ``prepare(intent:)`` so overlapping async prepares discard stale results.
     private var prepareGeneration = 0
+    private var readyEmitted = false
 
     /// Fired when the form’s measured height changes (saved-card expand, errors, locale).
     public var onContentSizeChange: (() -> Void)?
@@ -28,6 +29,12 @@ public final class PaymentElement: UIView {
         payment._controller.attachHostView(self)
         payment._controller.setOnLiveConfigChange { [weak self] in
             self?.applyLiveConfig()
+        }
+        payment._controller.setOnUpdatingOrderChange { [weak self] updating in
+            self?.formView?.setUpdatingOrder(updating)
+        }
+        payment._controller.setOnOrderBound { [weak self] state in
+            self?.formView?.update(state: state)
         }
         setupLoader()
     }
@@ -55,8 +62,7 @@ public final class PaymentElement: UIView {
         layoutIfNeeded()
         await formView?.waitUntilSurfaceDrawn()
         guard !Task.isCancelled, prepareGeneration == generation else { return }
-        revealForm()
-        onEvent(.ready)
+        revealIfNeeded()
     }
 
     /// Rebinds a new signed order in place. The form stays mounted; Pay is
@@ -77,19 +83,38 @@ public final class PaymentElement: UIView {
                     self?.forward(event, generation: generation)
                 }
             }
-            guard !Task.isCancelled, prepareGeneration == generation else { return }
-            if let state = payment._controller.sheetState {
-                formView?.update(state: state)
-            }
+            await refreshForm(generation: generation)
+        } catch {
+            guard prepareGeneration == generation else { throw error }
             formView?.setUpdatingOrder(false)
-            formView?.setProcessing(payment.isProcessing)
-            formView?.setOrderConsumed(payment.isOrderConsumed)
-            layoutIfNeeded()
-            await formView?.waitUntilSurfaceDrawn()
-            guard !Task.isCancelled, prepareGeneration == generation else { return }
-            invalidateIntrinsicContentSize()
-            onContentSizeChange?()
-            onEvent(.ready)
+            throw error
+        }
+    }
+
+    /// Locks Pay immediately, creates the next signed order, and binds it in
+    /// place. If `createOrder` throws, the previous order remains payable.
+    @MainActor
+    public func updateOrder(
+        createOrder: () async throws -> PaymentIntent
+    ) async throws {
+        if formView == nil {
+            let intent = try await createOrder()
+            try await prepare(intent: intent)
+            return
+        }
+        prepareGeneration += 1
+        let generation = prepareGeneration
+        formView?.setUpdatingOrder(true)
+        do {
+            try await payment.updateOrder(
+                onEvent: { [weak self] event in
+                    Task { @MainActor in
+                        self?.forward(event, generation: generation)
+                    }
+                },
+                createOrder: createOrder
+            )
+            await refreshForm(generation: generation)
         } catch {
             guard prepareGeneration == generation else { throw error }
             formView?.setUpdatingOrder(false)
@@ -139,6 +164,22 @@ public final class PaymentElement: UIView {
             formView?.setProcessing(isProcessing)
             formView?.setOrderConsumed(payment.isOrderConsumed)
         }
+    }
+
+    private func refreshForm(generation: Int) async {
+        guard !Task.isCancelled, prepareGeneration == generation else { return }
+        if let state = payment._controller.sheetState {
+            formView?.update(state: state)
+        }
+        formView?.setUpdatingOrder(false)
+        formView?.setProcessing(payment.isProcessing)
+        formView?.setOrderConsumed(payment.isOrderConsumed)
+        layoutIfNeeded()
+        await formView?.waitUntilSurfaceDrawn()
+        guard !Task.isCancelled, prepareGeneration == generation else { return }
+        revealIfNeeded()
+        invalidateIntrinsicContentSize()
+        onContentSizeChange?()
     }
 
     private func setupLoader() {
@@ -202,6 +243,7 @@ public final class PaymentElement: UIView {
         form.setProcessing(controller.isProcessing)
         form.setUpdatingOrder(controller.isUpdatingOrder)
         form.setOrderConsumed(controller.isOrderConsumed)
+        form.accessibilityElementsHidden = true
         overrideUserInterfaceStyle = UIHelpers.overrideStyle(for: config)
         addSubview(form)
         NSLayoutConstraint.activate([
@@ -224,11 +266,21 @@ public final class PaymentElement: UIView {
     }
 
     private func revealForm() {
+        formView?.accessibilityElementsHidden = false
         loader?.stopAnimating()
         loader?.removeFromSuperview()
         loader = nil
         loaderHost.backgroundColor = .clear
         loaderHost.isHidden = true
+    }
+
+    func revealIfNeeded() {
+        guard !loaderHost.isHidden else { return }
+        revealForm()
+        if !readyEmitted {
+            readyEmitted = true
+            onEvent(.ready)
+        }
     }
 
     private func applyLiveConfig() {

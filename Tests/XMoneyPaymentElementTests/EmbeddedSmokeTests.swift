@@ -2,6 +2,23 @@ import XCTest
 @testable import XMoneyPaymentElement
 import XMoneyCore
 
+private actor EmbeddedOrderGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func open() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
+private enum EmbeddedOrderError: Error {
+    case failed
+}
+
 final class EmbeddedSmokeTests: XCTestCase {
     func testCheckoutThemeResolvesPrimary() {
         let config = PaymentConfig(publicKey: "pk_test_x")
@@ -51,6 +68,90 @@ final class EmbeddedSmokeTests: XCTestCase {
         let embedded = EmbeddedPayment(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in }
         XCTAssertFalse(embedded.isInteractionEnabled)
         embedded.confirm()
+    }
+
+    @MainActor
+    func testCreateOrderLocksImmediatelyAndRestoresStateAfterFailure() async {
+        let started = expectation(description: "create order started")
+        let gate = EmbeddedOrderGate()
+        var resultCount = 0
+        let embedded = EmbeddedPayment(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in
+            resultCount += 1
+        }
+
+        let update = Task { @MainActor in
+            try await embedded.updateOrder {
+                started.fulfill()
+                await gate.wait()
+                throw EmbeddedOrderError.failed
+            }
+        }
+
+        await fulfillment(of: [started], timeout: 1)
+        XCTAssertTrue(embedded._controller.isUpdatingOrder)
+        XCTAssertFalse(embedded.isInteractionEnabled)
+
+        await gate.open()
+        do {
+            try await update.value
+            XCTFail("Expected createOrder to throw")
+        } catch {
+            XCTAssertTrue(error is EmbeddedOrderError)
+        }
+
+        XCTAssertFalse(embedded._controller.isUpdatingOrder)
+        XCTAssertEqual(resultCount, 0)
+    }
+
+    @MainActor
+    func testCreateOrderWithoutEventHandlerKeepsExistingHandler() async {
+        let embedded = EmbeddedPayment(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in }
+        var processingEvents: [Bool] = []
+
+        do {
+            try await embedded.updateOrder(
+                onEvent: { event in
+                    if case let .processing(value) = event {
+                        processingEvents.append(value)
+                    }
+                },
+                createOrder: { throw EmbeddedOrderError.failed }
+            )
+            XCTFail("Expected createOrder to throw")
+        } catch {
+            XCTAssertTrue(error is EmbeddedOrderError)
+        }
+
+        do {
+            try await embedded.updateOrder {
+                throw EmbeddedOrderError.failed
+            }
+            XCTFail("Expected createOrder to throw")
+        } catch {
+            XCTAssertTrue(error is EmbeddedOrderError)
+        }
+
+        embedded._controller.emit(.processing(true))
+        XCTAssertEqual(processingEvents, [true])
+    }
+
+    @MainActor
+    func testRevealWhileLoaderVisibleHidesCoverAndEmitsReadyOnce() {
+        let embedded = EmbeddedPayment(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in }
+        var readyCount = 0
+        let element = PaymentElement(payment: embedded) { event in
+            if case .ready = event { readyCount += 1 }
+        }
+        guard let loaderHost = element.subviews.first else {
+            return XCTFail("Expected loader host")
+        }
+
+        XCTAssertFalse(loaderHost.isHidden)
+        element.revealIfNeeded()
+        element.revealIfNeeded()
+
+        XCTAssertTrue(loaderHost.isHidden)
+        XCTAssertEqual(readyCount, 1)
     }
 
     func testEmbeddedContentInsetsAreZero() {

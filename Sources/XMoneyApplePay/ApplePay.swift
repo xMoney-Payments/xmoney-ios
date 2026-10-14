@@ -59,6 +59,8 @@ public final class ApplePay {
     }
 
     /// Validates and stores `intent` as the next payable order. Pay is locked until this returns.
+    /// This does not lock Pay while your server creates `intent`; use the
+    /// `createOrder` overload when the shopper changes the cart.
     public func updateOrder(intent: PaymentIntent) async throws {
         guard !isProcessing else {
             throw PaymentError.payment("Payment in progress")
@@ -71,6 +73,36 @@ public final class ApplePay {
                 isUpdatingOrder = false
             }
         }
+        try await bindPayableIntent(intent, generation: generation)
+    }
+
+    /// Locks the wallet button, creates the next signed order, and binds it.
+    ///
+    /// `present` is a no-op from this call until the new order is bound,
+    /// including while `createOrder` talks to your server. If `createOrder`
+    /// throws, the previous order stays bound and payable.
+    public func updateOrder(
+        createOrder: () async throws -> PaymentIntent
+    ) async throws {
+        guard !isProcessing else {
+            throw PaymentError.payment("Payment in progress")
+        }
+        bindGeneration += 1
+        let generation = bindGeneration
+        isUpdatingOrder = true
+        defer {
+            if generation == bindGeneration {
+                isUpdatingOrder = false
+            }
+        }
+        let intent = try await createOrder()
+        guard generation == bindGeneration else {
+            throw CancellationError()
+        }
+        try await bindPayableIntent(intent, generation: generation)
+    }
+
+    private func bindPayableIntent(_ intent: PaymentIntent, generation: Int) async throws {
         let state = try await bindWalletSession(intent: intent)
         guard generation == bindGeneration else {
             throw CancellationError()
