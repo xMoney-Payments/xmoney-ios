@@ -51,24 +51,24 @@ struct TransactionService {
         )
     }
 
+    /// Only a real 4xx or a malformed request stops the poll early. Returning from the background,
+    /// iOS reports errors such as `NSPOSIXErrorDomain` 53 that are not `URLError`s at all.
     static func isTransient(_ error: Error) -> Bool {
         if let failure = error as? HTTPStatusFailure {
-            return failure.statusCode == 429 || (500...599).contains(failure.statusCode)
+            return failure.statusCode == 408
+                || failure.statusCode == 429
+                || !(400...499).contains(failure.statusCode)
         }
         if let urlError = error as? URLError {
-            return transientURLErrorCodes.contains(urlError.code)
+            return !permanentURLErrorCodes.contains(urlError.code)
         }
-        return false
+        return true
     }
 
-    private static let transientURLErrorCodes: Set<URLError.Code> = [
-        .networkConnectionLost,
-        .notConnectedToInternet,
-        .timedOut,
-        .cannotConnectToHost,
-        .cannotFindHost,
-        .dnsLookupFailed,
-        .dataNotAllowed,
+    private static let permanentURLErrorCodes: Set<URLError.Code> = [
+        .badURL,
+        .unsupportedURL,
+        .appTransportSecurityRequiresSecureConnection,
     ]
 
     private static func surfaced(_ error: Error) -> Error {

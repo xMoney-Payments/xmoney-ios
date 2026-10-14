@@ -104,13 +104,30 @@ final class TransactionPollTests: XCTestCase {
         }
     }
 
+    func testRetriesConnectionAbortAfterReturningFromBackground() async throws {
+        let calls = CallCounter()
+        let service = makeService { _ in
+            if calls.increment() == 1 { throw NSError(domain: NSPOSIXErrorDomain, code: 53) }
+            return (200, ["status": "complete-ok"])
+        }
+        let tx = try await service.poll(transactionId: "tx-1", sessionToken: "s", interval: 0.01, timeout: 5)
+        XCTAssertEqual(tx.status, "complete-ok")
+        XCTAssertEqual(calls.value, 2)
+    }
+
     func testTransientClassification() {
         XCTAssertTrue(TransactionService.isTransient(URLError(.networkConnectionLost)))
         XCTAssertTrue(TransactionService.isTransient(URLError(.notConnectedToInternet)))
+        XCTAssertTrue(TransactionService.isTransient(URLError(.secureConnectionFailed)))
+        XCTAssertTrue(TransactionService.isTransient(NSError(domain: NSPOSIXErrorDomain, code: 53)))
+        XCTAssertTrue(TransactionService.isTransient(PaymentError.network("x")))
         XCTAssertFalse(TransactionService.isTransient(URLError(.badURL)))
         XCTAssertTrue(TransactionService.isTransient(HTTPStatusFailure(statusCode: 502, error: .network("x"))))
+        XCTAssertTrue(TransactionService.isTransient(HTTPStatusFailure(statusCode: 408, error: .network("x"))))
+        XCTAssertTrue(TransactionService.isTransient(HTTPStatusFailure(statusCode: 429, error: .network("x"))))
+        XCTAssertFalse(TransactionService.isTransient(HTTPStatusFailure(statusCode: 401, error: .network("x"))))
         XCTAssertFalse(TransactionService.isTransient(HTTPStatusFailure(statusCode: 403, error: .network("x"))))
-        XCTAssertFalse(TransactionService.isTransient(PaymentError.network("x")))
+        XCTAssertFalse(TransactionService.isTransient(HTTPStatusFailure(statusCode: 404, error: .network("x"))))
     }
 
     private func makeService(

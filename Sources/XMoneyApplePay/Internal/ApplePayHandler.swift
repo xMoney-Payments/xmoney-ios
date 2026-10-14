@@ -33,7 +33,6 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
         self.presenter = presenter
         self.orderInfo = orderInfo
         super.init()
-        (presenter as? ApplePayThreeDSPresenter)?.attach(self)
     }
 
     package func start() async -> EngineResult {
@@ -168,7 +167,7 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
                 let result = try await self.engine.submitWallet(
                     walletType: "applePay",
                     token: token,
-                    presenter: self.presenter
+                    presenter: SheetHandoffPresenter(inner: self.presenter, handler: self)
                 )
                 self.completePassKit(with: result)
                 self.resolve(result)
@@ -227,5 +226,26 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
         if handingOffToThreeDS { return }
         guard !didProduceResult else { return }
         resolve(.init(status: .canceled, transaction: nil, errorCode: nil, errorMessage: nil))
+    }
+}
+
+/// Closes the Apple Pay sheet before the surface's presenter shows the challenge.
+/// PassKit draws above the app, so without this the challenge opens behind the sheet.
+final class SheetHandoffPresenter: ThreeDSPresenter {
+    private let inner: ThreeDSPresenter
+    private weak var handler: ApplePayHandler?
+
+    init(inner: ThreeDSPresenter, handler: ApplePayHandler?) {
+        self.inner = inner
+        self.handler = handler
+    }
+
+    func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd {
+        await handler?.relinquishSheetForChallenge()
+        return await inner.presentThreeDS(url: url)
+    }
+
+    func dismissThreeDS() {
+        inner.dismissThreeDS()
     }
 }
