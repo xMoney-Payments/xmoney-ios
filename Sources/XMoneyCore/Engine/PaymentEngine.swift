@@ -1,7 +1,7 @@
 import Foundation
 
 package protocol ThreeDSPresenter: AnyObject {
-    func presentThreeDS(url: URL, returnURLMatcher: @escaping (URL) -> Bool) async -> Bool
+    func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd
     func dismissThreeDS()
 }
 
@@ -218,16 +218,10 @@ package final class PaymentEngine {
         switch parsed.submission {
         case let .needs3DS(url):
             let transactionId = try requireTransactionIdForThreeDS(parsed.transactionId)
-            let backURL = OrderPayloadDecoder.backURL(from: intent.orderPayload)
-            let matcher: (URL) -> Bool = { returnURL in
-                guard let backURL else { return false }
-                return OrderPayloadDecoder.matchesReturnURL(returnURL, backURL: backURL)
-            }
             return try await handleThreeDSWithBackgroundRefresh(
                 url: url,
                 transactionId: transactionId,
-                presenter: presenter,
-                returnURLMatcher: matcher
+                presenter: presenter
             )
 
         case .redirect:
@@ -248,20 +242,19 @@ package final class PaymentEngine {
 
     private enum ThreeDSEvent {
         case pollResult(Result<EngineResult, Error>)
-        case challengeFinished(Bool)
+        case challengeFinished(ThreeDSChallengeEnd)
     }
 
     private func handleThreeDSWithBackgroundRefresh(
         url: URL,
         transactionId: String,
-        presenter: ThreeDSPresenter,
-        returnURLMatcher: @escaping (URL) -> Bool
+        presenter: ThreeDSPresenter
     ) async throws -> EngineResult {
         let pollTask = Task {
             try await self.resolveByPolling(transactionId: transactionId)
         }
         let challengeTask = Task {
-            await presenter.presentThreeDS(url: url, returnURLMatcher: returnURLMatcher)
+            await presenter.presentThreeDS(url: url)
         }
 
         defer {
@@ -292,11 +285,15 @@ package final class PaymentEngine {
                     return result
                 case .pollResult(.failure(let error)):
                     if error is CancellationError { continue }
+                    presenter.dismissThreeDS()
                     challengeTask.cancel()
                     group.cancelAll()
                     throw error
-                case .challengeFinished(let completed):
-                    if !completed {
+                case .challengeFinished(let end):
+                    switch threeDSChallengeFollowUp(end) {
+                    case .waitForPoll:
+                        break
+                    case .reconcileCancel(let grace):
                         return await reconcileCanceledThreeDS(
                             fetchTransaction: {
                                 try await self.transactions.getTransaction(
@@ -304,8 +301,27 @@ package final class PaymentEngine {
                                     sessionToken: self.sessionToken
                                 )
                             },
-                            pollTask: pollTask
+                            pollTask: pollTask,
+                            graceNanoseconds: grace
                         )
+                    case .throwThreeDS(let message):
+                        presenter.dismissThreeDS()
+                        challengeTask.cancel()
+                        group.cancelAll()
+                        throw PaymentError.threeDS(message)
+                    case .throwThreeDSUnlessComplete(let message):
+                        presenter.dismissThreeDS()
+                        challengeTask.cancel()
+                        group.cancelAll()
+                        if let tx = try? await self.transactions.getTransaction(
+                            id: transactionId,
+                            sessionToken: self.sessionToken
+                        ), isTransactionComplete(tx) {
+                            pollTask.cancel()
+                            return resultFromTransaction(tx)
+                        }
+                        pollTask.cancel()
+                        throw PaymentError.threeDS(message)
                     }
                 }
             }

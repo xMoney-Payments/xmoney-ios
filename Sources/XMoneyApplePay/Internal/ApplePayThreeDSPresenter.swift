@@ -5,40 +5,27 @@ import XMoneyCore
 
 final class ApplePayThreeDSPresenter: ThreeDSPresenter {
     private weak var host: UIViewController?
-    private var threeDSController: UIViewController?
-    private let resume = ThreeDSResume()
+    private var threeDSSession: ThreeDSSafariController?
+    private let locale: String
 
-    init(host: UIViewController) {
+    init(host: UIViewController, locale: String) {
         self.host = host
+        self.locale = locale
     }
 
-    func presentThreeDS(url: URL, returnURLMatcher: @escaping (URL) -> Bool) async -> Bool {
-        await withCheckedContinuation { continuation in
-            Task { @MainActor in
-                guard let host = self.host else {
-                    continuation.resume(returning: false)
-                    return
-                }
-                self.resume.arm(continuation)
-                let threeDS = ThreeDSViewController(
-                    url: url,
-                    returnURLMatcher: returnURLMatcher,
-                    completion: { [weak self] success in
-                        self?.resume.resume(success)
-                        self?.threeDSController = nil
-                    }
-                )
-                self.threeDSController = threeDS
-                host.present(threeDS, animated: true)
-            }
+    func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd {
+        let (session, host): (ThreeDSSafariController, UIViewController?) = await MainActor.run {
+            let session = ThreeDSSafariController(locale: self.locale)
+            self.threeDSSession = session
+            return (session, self.host)
         }
+        return await session.present(url: url, from: host)
     }
 
     func dismissThreeDS() {
         Task { @MainActor in
-            self.threeDSController?.dismiss(animated: true)
-            self.threeDSController = nil
-            self.resume.resume(true)
+            self.threeDSSession?.dismiss()
+            self.threeDSSession = nil
         }
     }
 }

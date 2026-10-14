@@ -11,6 +11,9 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
 
     private var controller: PKPaymentAuthorizationController?
     private var continuation: CheckedContinuation<EngineResult, Never>?
+    private var authorizationCompletion: ((PKPaymentAuthorizationResult) -> Void)?
+    private var challengeReady: (() -> Void)?
+    private var handingOffToThreeDS = false
     private var didProduceResult = false
 
     /// PassKit holds its delegate weakly, and the surfaces release their
@@ -29,6 +32,7 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
         self.engine = engine
         self.presenter = presenter
         self.orderInfo = orderInfo
+        super.init()
     }
 
     package func start() async -> EngineResult {
@@ -154,6 +158,7 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
         handler completion: @escaping (PKPaymentAuthorizationResult) -> Void
     ) {
         didAuthorizePayment = true
+        authorizationCompletion = completion
         let tokenData = payment.token.paymentData
         let token = String(data: tokenData, encoding: .utf8) ?? ""
 
@@ -162,21 +167,47 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
                 let result = try await self.engine.submitWallet(
                     walletType: "applePay",
                     token: token,
-                    presenter: self.presenter
+                    presenter: SheetHandoffPresenter(inner: self.presenter, handler: self)
                 )
-                completion(PKPaymentAuthorizationResult(
-                    status: result.status == .complete ? .success : .failure,
-                    errors: nil
-                ))
+                self.completePassKit(with: result)
                 self.resolve(result)
             } catch let error as PaymentError {
-                completion(PKPaymentAuthorizationResult(status: .failure, errors: [error]))
-                self.resolve(.failed(error))
+                let failed = EngineResult.failed(error)
+                self.completePassKit(with: failed)
+                self.resolve(failed)
             } catch {
-                completion(PKPaymentAuthorizationResult(status: .failure, errors: [error]))
-                self.resolve(failureResult(message: error.localizedDescription))
+                let failed = self.failureResult(message: error.localizedDescription)
+                self.completePassKit(with: failed)
+                self.resolve(failed)
             }
         }
+    }
+
+    /// Closes the Apple Pay sheet before the challenge is shown.
+    ///
+    /// PassKit has no "challenge required" status and draws above the app, so the
+    /// sheet is closed with success. That checkmark is wallet authorization.
+    /// The SDK result is still the charge result, delivered after the poll.
+    func relinquishSheetForChallenge() async {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            DispatchQueue.main.async {
+                self.handingOffToThreeDS = true
+                guard let completion = self.authorizationCompletion else {
+                    cont.resume()
+                    return
+                }
+                self.authorizationCompletion = nil
+                self.challengeReady = { cont.resume() }
+                completion(PKPaymentAuthorizationResult(status: .success, errors: nil))
+            }
+        }
+    }
+
+    private func completePassKit(with result: EngineResult) {
+        guard let completion = authorizationCompletion else { return }
+        authorizationCompletion = nil
+        let status: PKPaymentAuthorizationStatus = result.status == .complete ? .success : .failure
+        completion(PKPaymentAuthorizationResult(status: status, errors: nil))
     }
 
     package func paymentAuthorizationControllerDidRequestMerchantSessionUpdate(
@@ -186,10 +217,36 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
     }
 
     package func paymentAuthorizationControllerDidFinish(_ controller: PKPaymentAuthorizationController) {
+        let ready = challengeReady
+        challengeReady = nil
         controller.dismiss { [self] in
             releasePresentation()
+            ready?()
         }
+        if handingOffToThreeDS { return }
         guard !didProduceResult else { return }
         resolve(.init(status: .canceled, transaction: nil, errorCode: nil, errorMessage: nil))
+    }
+}
+
+/// Closes the Apple Pay sheet before the surface's presenter shows the challenge.
+/// PassKit draws above the app, so without this the challenge opens behind the sheet.
+final class SheetHandoffPresenter: ThreeDSPresenter {
+    private let inner: ThreeDSPresenter
+    private weak var handler: ApplePayHandler?
+
+    init(inner: ThreeDSPresenter, handler: ApplePayHandler?) {
+        self.inner = inner
+        self.handler = handler
+    }
+
+    func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd {
+        await handler?.relinquishSheetForChallenge()
+        if Task.isCancelled { return .closedByPoll }
+        return await inner.presentThreeDS(url: url)
+    }
+
+    func dismissThreeDS() {
+        inner.dismissThreeDS()
     }
 }

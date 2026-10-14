@@ -1,7 +1,34 @@
 import Foundation
 
-/// Soft-cancel grace after the user dismisses the 3DS WebView (~1–2 poll intervals).
+/// Soft-cancel grace after the user closes the ACS page (~1–2 poll intervals).
 let threeDSCancelReconcileGraceNanoseconds: UInt64 = 4_000_000_000
+
+/// Soft-cancel grace after the shopper cancels the bank-app waiting screen.
+/// Long enough for an approval that just landed, short of the 10 minute ACS poll.
+let threeDSBankHandoffCancelGraceNanoseconds: UInt64 = 30_000_000_000
+
+package enum ThreeDSChallengeFollowUp: Equatable {
+    case waitForPoll
+    case reconcileCancel(graceNanoseconds: UInt64)
+    case throwThreeDS(String)
+    case throwThreeDSUnlessComplete(String)
+}
+
+func threeDSChallengeFollowUp(_ end: ThreeDSChallengeEnd) -> ThreeDSChallengeFollowUp {
+    switch end {
+    case .closedByPoll:
+        return .waitForPoll
+    case .userCanceled(let bankHandoff):
+        let grace = bankHandoff
+            ? threeDSBankHandoffCancelGraceNanoseconds
+            : threeDSCancelReconcileGraceNanoseconds
+        return .reconcileCancel(graceNanoseconds: grace)
+    case .unavailable:
+        return .throwThreeDS("Unable to present the authentication challenge")
+    case .rejectedRedirect:
+        return .throwThreeDSUnlessComplete("Insecure authentication redirect")
+    }
+}
 
 private struct ThreeDSGraceTimeout: Error {}
 
