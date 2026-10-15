@@ -85,6 +85,9 @@ package enum Strings {
         "elements.cvv": "CVV",
         "elements.saveCard": "Save Card for Future Use",
         "elements.saveCardShort": "Save card for next time",
+        "elements.savedCardNoticeTitle": "Card saved for future payments",
+        "elements.savedCardNoticeBody":
+            "Your card will be securely saved and may be used for future payments by this merchant per agreed terms.",
         "placeholder.cardNumber": "Card number",
         "placeholder.cardNumber.spaced": "1234 1234 1234 1234",
         "placeholder.expDate": "MM / YY",
@@ -155,6 +158,9 @@ package enum Strings {
         "elements.cvv": "CVV",
         "elements.saveCard": "Αποθήκευση κάρτας για μελλοντική χρήση",
         "elements.saveCardShort": "Αποθήκευση κάρτας για επόμενη φορά",
+        "elements.savedCardNoticeTitle": "Η κάρτα αποθηκεύεται για μελλοντικές πληρωμές",
+        "elements.savedCardNoticeBody":
+            "Η κάρτα σας θα αποθηκευτεί με ασφάλεια και μπορεί να χρησιμοποιηθεί από αυτόν τον έμπορο για μελλοντικές πληρωμές σύμφωνα με τους συμφωνημένους όρους.",
         "placeholder.cardNumber": "Αριθμός κάρτας",
         "placeholder.cardNumber.spaced": "1234 1234 1234 1234",
         "placeholder.expDate": "ΜΜ / ΕΕ",
@@ -224,6 +230,9 @@ package enum Strings {
         "elements.cvv": "CVV",
         "elements.saveCard": "Salvează cardul pentru utilizări viitoare",
         "elements.saveCardShort": "Salvează cardul pentru data viitoare",
+        "elements.savedCardNoticeTitle": "Card salvat pentru plăți viitoare",
+        "elements.savedCardNoticeBody":
+            "Cardul tău va fi salvat în siguranță și poate fi folosit de acest comerciant pentru plăți viitoare, conform termenilor agreați.",
         "placeholder.cardNumber": "Număr card",
         "placeholder.cardNumber.spaced": "1234 1234 1234 1234",
         "placeholder.expDate": "LL / AA",
@@ -293,6 +302,9 @@ package enum Strings {
         "elements.cvv": "CVV",
         "elements.saveCard": "Запази картата за бъдеща употреба",
         "elements.saveCardShort": "Запази картата за следващия път",
+        "elements.savedCardNoticeTitle": "Картата се запазва за бъдещи плащания",
+        "elements.savedCardNoticeBody":
+            "Картата ви ще бъде запазена сигурно и може да се използва от този търговец за бъдещи плащания съгласно договорените условия.",
         "placeholder.cardNumber": "Номер на картата",
         "placeholder.cardNumber.spaced": "1234 1234 1234 1234",
         "placeholder.expDate": "ММ / ГГ",
@@ -362,6 +374,9 @@ package enum Strings {
         "elements.cvv": "CVV",
         "elements.saveCard": "Kártya mentése későbbi használatra",
         "elements.saveCardShort": "Kártya mentése a következő alkalomra",
+        "elements.savedCardNoticeTitle": "Kártya mentve a jövőbeli fizetésekhez",
+        "elements.savedCardNoticeBody":
+            "Kártyáját biztonságosan mentjük, és ez a kereskedő a megállapodott feltételek szerint jövőbeli fizetésekhez használhatja.",
         "placeholder.cardNumber": "Kártyaszám",
         "placeholder.cardNumber.spaced": "1234 1234 1234 1234",
         "placeholder.expDate": "HH / ÉÉ",
@@ -431,6 +446,9 @@ package enum Strings {
         "elements.cvv": "CVV",
         "elements.saveCard": "Zapisz kartę do późniejszego użycia",
         "elements.saveCardShort": "Zapisz kartę na następnym razem",
+        "elements.savedCardNoticeTitle": "Karta zapisana do przyszłych płatności",
+        "elements.savedCardNoticeBody":
+            "Twoja karta zostanie bezpiecznie zapisana i może być używana przez tego sprzedawcę do przyszłych płatności zgodnie z uzgodnionymi warunkami.",
         "placeholder.cardNumber": "Numer karty",
         "placeholder.cardNumber.spaced": "1234 1234 1234 1234",
         "placeholder.expDate": "MM / RR",

@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- The card form reads `saveCard` from the order payload. `true`, `"true"`, `1`, and `"force"` replace the save checkbox with a notice that the card will be saved, and a new card always submits `saveCard=true`. `"not"` hides saving and does not submit it. Any other value keeps the optional checkbox.
 - `ApplePayButton.onFirstDraw` and `ApplePayButtonView.onFirstDraw` run once the PassKit button has painted, or after a short wait if it never does. They run again after an appearance change rebuilds the button, or when the button moves to a new window.
 - `EmbeddedPayment.updateOrder { }`, `PaymentElement.updateOrder { }`, and `ApplePay.updateOrder { }` lock Pay while the closure creates the next order and until that order is bound. They return the bound `PaymentIntent` (`@discardableResult`), run the closure on the main actor, and cancel it when the calling task is cancelled.
 - `EmbeddedEvent.updateFailed(PaymentError)`: binding a new order failed after an order was already bound.
@@ -17,6 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- In the spaced card form, field labels use the same text color and side inset as the save notice. The notice keeps that alignment, and the same gap above it, when a validation error is showing. In the grouped form, the notice lines up with the error badge and keeps the same gap when the error is hidden.
 - `EmbeddedPayment.prepare` and `EmbeddedPayment.updateOrder` no longer emit `.ready`. A mounted `PaymentElement` emits it once, after the surface first draws; later order updates do not emit it again. `isInteractionEnabled` still unlocks when the bind finishes.
 - The newest merchant `prepare` / `updateOrder` call always wins, including when it passes the order that is already bound. It cancels any in-flight order creation or bind. A superseded call throws `CancellationError`. `PaymentElementView` re-asserting the bound intent is a no-op that cancels nothing.
 - Order binding is two-phase: a superseded bind never changes the order that Pay charges.
