@@ -725,29 +725,149 @@ final class EmbeddedSmokeTests: XCTestCase {
     }
 
     @MainActor
-    func testSurfaceRebindOfTheBoundIntentDoesNotCancelInFlightCreation() async throws {
-        let embedded = EmbeddedPayment(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in }
-        let bound = Self.sampleIntent("bound")
-        try embedded._controller.testingInstallBound(bound, state: Self.sampleState())
-        embedded._controller.testingLoad = { _ in Self.sampleState() }
-        let started = expectation(description: "create order started")
-        let gate = EmbeddedOrderGate()
-        let update = Task { @MainActor in
-            try await embedded.updateOrder {
-                started.fulfill()
-                await gate.wait()
-                return Self.sampleIntent("next")
+    func testSurfaceUpdateDoesNotCancelInFlightMerchantUpdate() async throws {
+        for origin in [BindOrigin.surfaceMount, .surfaceUpdate] {
+            let embedded = EmbeddedPayment(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in }
+            let bound = Self.sampleIntent("bound")
+            try embedded._controller.testingInstallBound(bound, state: Self.sampleState())
+            embedded._controller.testingLoad = { _ in Self.sampleState() }
+            let started = expectation(description: "create order started")
+            let gate = EmbeddedOrderGate()
+            let update = Task { @MainActor in
+                try await embedded.updateOrder {
+                    started.fulfill()
+                    await gate.wait()
+                    return Self.sampleIntent("next")
+                }
+            }
+            await fulfillment(of: [started], timeout: 1)
+
+            try await embedded._controller.prepare(intent: bound, origin: origin)
+            XCTAssertTrue(embedded._controller.isUpdatingOrder)
+            XCTAssertFalse(embedded.isInteractionEnabled)
+
+            await gate.open()
+            let next = try await update.value
+            XCTAssertEqual(next, Self.sampleIntent("next"))
+            XCTAssertEqual(embedded.boundIntent, next)
+        }
+    }
+
+    @MainActor
+    func testSurfaceUpdateBackToBoundIntentClearsStaleLock() async throws {
+        let (embedded, element, window) = try await Self.staleElement()
+        let coordinator = PaymentElementView.Coordinator()
+        coordinator.element = element
+        let intent = Self.sampleIntent("a")
+
+        coordinator.bind(intent: intent, key: PaymentElementView.key(for: intent), origin: .surfaceUpdate, to: element)
+        await coordinator.prepareTask?.value
+
+        XCTAssertFalse(embedded._controller.isStaleOrder)
+        XCTAssertTrue(embedded.isInteractionEnabled)
+        XCTAssertFalse(element.isPayLockedForTesting)
+        withExtendedLifetime(window) {}
+    }
+
+    @MainActor
+    func testSurfaceMountWithBoundIntentKeepsStaleLock() async throws {
+        let (embedded, element, window) = try await Self.staleElement()
+        let coordinator = PaymentElementView.Coordinator()
+        coordinator.element = element
+        let intent = Self.sampleIntent("a")
+
+        coordinator.bind(intent: intent, key: PaymentElementView.key(for: intent), origin: .surfaceMount, to: element)
+        await coordinator.prepareTask?.value
+
+        XCTAssertTrue(embedded._controller.isStaleOrder)
+        XCTAssertFalse(embedded.isInteractionEnabled)
+        XCTAssertTrue(element.isPayLockedForTesting)
+        withExtendedLifetime(window) {}
+    }
+
+    @MainActor
+    func testAppearanceChangeDuringRevealStillRevealsAndEmitsReadyOnce() async throws {
+        try await assertRevealSurvivesRebuild { embedded, _ in
+            embedded.updateAppearance(.init())
+        }
+    }
+
+    @MainActor
+    func testBindDuringRevealStillReveals() async throws {
+        let embedded = try await assertRevealSurvivesRebuild { embedded, _ in
+            try? await embedded.updateOrder(intent: Self.sampleIntent("b"))
+        }
+        XCTAssertEqual(embedded.boundIntent, Self.sampleIntent("b"))
+    }
+
+    @MainActor
+    func testTraitChangeDuringRevealStillReveals() async throws {
+        try await assertRevealSurvivesRebuild { _, element in
+            element.overrideUserInterfaceStyle = element.traitCollection.userInterfaceStyle == .dark ? .light : .dark
+            element.layoutIfNeeded()
+        }
+    }
+
+    /// Mounts an Element whose order offers Apple Pay, rebuilds the form while
+    /// the reveal waits on the wallet button, and expects the cover to lift.
+    @MainActor
+    @discardableResult
+    private func assertRevealSurvivesRebuild(
+        _ rebuild: @escaping @MainActor (EmbeddedPayment, PaymentElement) async -> Void,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws -> EmbeddedPayment {
+        var config = PaymentConfig(publicKey: "pk_test_x")
+        config.paymentMethods.applePay.enabled = false
+        let embedded = EmbeddedPayment(configuration: config) { _ in }
+        embedded._controller.testingLoad = { _ in Self.applePayState() }
+        var readyCount = 0
+        let element = PaymentElement(payment: embedded) { event in
+            if case .ready = event { readyCount += 1 }
+        }
+        let window = Self.host(element)
+        let rebuilt = expectation(description: "rebuilt during reveal")
+        var buttonBefore: UIView?
+        var buttonAfter: UIView?
+        element.testingOnRevealWaitStarted = {
+            Task { @MainActor in
+                buttonBefore = element.walletButtonForTesting
+                await rebuild(embedded, element)
+                buttonAfter = element.walletButtonForTesting
+                rebuilt.fulfill()
             }
         }
-        await fulfillment(of: [started], timeout: 1)
 
-        try await embedded._controller.prepare(intent: bound, origin: .surface)
-        XCTAssertTrue(embedded._controller.isUpdatingOrder)
+        try await element.prepare(intent: Self.sampleIntent("a"))
+        await fulfillment(of: [rebuilt], timeout: 1)
+        try await Self.waitUntil { element.isFormVisible }
 
-        await gate.open()
-        let next = try await update.value
-        XCTAssertEqual(next, Self.sampleIntent("next"))
-        XCTAssertEqual(embedded.boundIntent, next)
+        XCTAssertNotNil(buttonBefore, file: file, line: line)
+        XCTAssertFalse(buttonBefore === buttonAfter, "the wallet button was rebuilt", file: file, line: line)
+        XCTAssertTrue(element.isFormVisible, file: file, line: line)
+        XCTAssertEqual(readyCount, 1, file: file, line: line)
+        withExtendedLifetime(window) {}
+        return embedded
+    }
+
+    /// Element bound to A whose bind of B failed: Pay is locked on A.
+    @MainActor
+    private static func staleElement() async throws -> (EmbeddedPayment, PaymentElement, UIWindow) {
+        let embedded = EmbeddedPayment(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in }
+        embedded._controller.testingLoad = { intent in
+            if intent == Self.sampleIntent("b") { throw PaymentError.load("raw server response") }
+            return Self.sampleState()
+        }
+        let element = PaymentElement(payment: embedded)
+        let window = Self.host(element)
+        try await element.prepare(intent: Self.sampleIntent("a"))
+        do {
+            try await element.updateOrder(intent: Self.sampleIntent("b"))
+            XCTFail("Expected bind to throw")
+        } catch {}
+        XCTAssertTrue(embedded._controller.isStaleOrder)
+        XCTAssertTrue(element.isPayLockedForTesting)
+        return (embedded, element, window)
     }
 
     @MainActor
@@ -912,6 +1032,23 @@ final class EmbeddedSmokeTests: XCTestCase {
             if let element = findElement(in: subview) { return element }
         }
         return nil
+    }
+
+    private static func applePayState() -> SheetState {
+        SheetState(
+            sessionToken: "tok",
+            orderInfo: OrderPayloadInfo(
+                cardTransactionMode: nil,
+                isVerifyCard: false,
+                amount: 19.99,
+                currency: "EUR",
+                externalOrderId: "order-1",
+                isRecurring: false
+            ),
+            savedCards: [],
+            applePayAvailable: true,
+            applePayReady: true
+        )
     }
 
     private static func sampleIntent(_ suffix: String) -> PaymentIntent {

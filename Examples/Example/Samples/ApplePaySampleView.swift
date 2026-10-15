@@ -18,6 +18,7 @@ struct ApplePaySampleView: View {
     @State private var error: String?
     @State private var loading = true
     @State private var orderBound = false
+    @State private var bindFailed = false
     @State private var buttonDrawn = false
     @State private var presenter: UIViewController?
     @State private var applePay: ApplePay?
@@ -61,7 +62,7 @@ struct ApplePaySampleView: View {
             } else if loading && intent == nil {
                 ExampleLoader(message: "Preparing Apple Pay…")
             } else if let intent {
-                MerchantReadyGate(ready: surfaceReady, message: "Preparing Apple Pay…") {
+                MerchantReadyGate(ready: surfaceReady || bindFailed, message: "Preparing Apple Pay…") {
                     if applePay?.isAvailable == true, applePay?.isReady == true {
                         ApplePayButtonView(
                             appearance: wallet,
@@ -73,7 +74,9 @@ struct ApplePaySampleView: View {
                         .frame(height: 56)
                     }
                 }
-                if surfaceReady, applePay?.isReady != true {
+                if bindFailed {
+                    ExampleButton(label: "Try again", variant: .secondary, action: loadOrder)
+                } else if surfaceReady, applePay?.isReady != true {
                     ExampleStatusChip("Apple Pay isn’t available on this device.", .neutral)
                 }
                 if lastResult == .canceled && !consumed {
@@ -97,6 +100,7 @@ struct ApplePaySampleView: View {
                         orderBound = true
                     } catch {
                         guard !isCancellation(error) else { return }
+                        bindFailed = true
                         self.error = error.localizedDescription
                     }
                 }
@@ -110,7 +114,10 @@ struct ApplePaySampleView: View {
                 await MainActor.run { orderBound = true }
             } catch {
                 guard !isCancellation(error) else { return }
-                await MainActor.run { self.error = error.localizedDescription }
+                await MainActor.run {
+                    bindFailed = true
+                    self.error = error.localizedDescription
+                }
             }
         }
     }
@@ -140,6 +147,7 @@ struct ApplePaySampleView: View {
         error = nil
         lastResult = nil
         orderBound = false
+        bindFailed = false
         buttonDrawn = false
         intent = nil
         Task {

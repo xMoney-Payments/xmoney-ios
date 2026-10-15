@@ -196,6 +196,8 @@ struct PlaygroundView: View {
                 lastResult = nil
                 return
             }
+            // A failed first load emits no `.ready`: open the gate onto the SDK failure label.
+            if case .failed = result { ready = true }
             inlineConsumed = payment?.isOrderConsumed ?? true
         }
         applePay = ApplePay(configuration: configuration) { result in

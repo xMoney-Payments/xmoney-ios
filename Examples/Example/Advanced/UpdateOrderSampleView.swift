@@ -22,6 +22,8 @@ struct UpdateOrderSampleView: View {
     @State private var error: String?
     @State private var payment: EmbeddedPayment?
     @State private var ready = false
+    @State private var loadFailed = false
+    @State private var retryKey = 0
     @State private var processing = false
 
     var body: some View {
@@ -47,6 +49,7 @@ struct UpdateOrderSampleView: View {
                     self.lastResult = nil
                     hostIntent = nil
                     ready = false
+                    loadFailed = false
                     processing = false
                     amountMinor = SAMPLE_AMOUNT_MINOR
                 }
@@ -58,11 +61,20 @@ struct UpdateOrderSampleView: View {
                         switch event {
                         case .ready:
                             ready = true
+                            loadFailed = false
                         case let .processing(isProcessing):
                             processing = isProcessing
                         case let .updateFailed(failure):
                             error = failure.message
                         }
+                    }
+                }
+                if loadFailed {
+                    // Keep the gate open: a repeat failure in the same streak does not deliver `.failed` again.
+                    ExampleButton(label: "Try again", variant: .secondary) {
+                        lastResult = nil
+                        self.hostIntent = nil
+                        retryKey += 1
                     }
                 }
             }
@@ -77,7 +89,7 @@ struct UpdateOrderSampleView: View {
         .onChange(of: theme.isDark) { _ in
             applyLiveTheme(configuration)
         }
-        .task(id: "\(amountMinor)-\(consumed)-\(payment != nil)") {
+        .task(id: "\(amountMinor)-\(consumed)-\(payment != nil)-\(retryKey)") {
             guard !consumed, let payment else { return }
             error = nil
             do {
@@ -106,6 +118,11 @@ struct UpdateOrderSampleView: View {
         lastResult = result
         if result == .canceled, payment?.isOrderConsumed == false {
             lastResult = nil
+        }
+        // A failed first load emits no `.ready`: open the gate onto the SDK failure label.
+        if case .failed = result {
+            ready = true
+            loadFailed = true
         }
     }
 

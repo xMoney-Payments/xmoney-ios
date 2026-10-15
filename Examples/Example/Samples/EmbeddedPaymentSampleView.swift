@@ -21,6 +21,7 @@ struct EmbeddedPaymentSampleView: View {
     @State private var error: String?
     @State private var loading = true
     @State private var ready = false
+    @State private var loadFailed = false
     @State private var payment: EmbeddedPayment?
 
     var body: some View {
@@ -53,17 +54,21 @@ struct EmbeddedPaymentSampleView: View {
                     Group {
                         if useUIKit {
                             PaymentElementHost(payment: payment, intent: intent) { event in
-                                if case .ready = event { ready = true }
+                                if case .ready = event { markReady() }
                             }
                         } else {
                             PaymentElementView(payment: payment, intent: intent) { event in
-                                if case .ready = event { ready = true }
+                                if case .ready = event { markReady() }
                             }
                             .frame(maxWidth: .infinity)
                             .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                     .frame(maxWidth: .infinity)
+                }
+                if loadFailed {
+                    // Keep the gate open: a repeat failure in the same streak does not deliver `.failed` again.
+                    ExampleButton(label: "Try again", variant: .secondary, action: fetchOrder)
                 }
             }
             if let error { ExampleStatusChip(error, .error) }
@@ -100,13 +105,28 @@ struct EmbeddedPaymentSampleView: View {
         if result == .canceled, payment?.isOrderConsumed == false {
             lastResult = nil
         }
+        // A failed first load emits no `.ready`: open the gate onto the SDK failure label.
+        if case .failed = result {
+            ready = true
+            loadFailed = true
+        }
+    }
+
+    private func markReady() {
+        ready = true
+        loadFailed = false
     }
 
     private func loadOrder() {
+        ready = false
+        loadFailed = false
+        fetchOrder()
+    }
+
+    private func fetchOrder() {
         loading = true
         error = nil
         lastResult = nil
-        ready = false
         intent = nil
         Task {
             do {

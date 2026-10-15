@@ -7,7 +7,12 @@ import XMoneyCore
 /// the SDK's own declarative host re-asserting the bound intent does not.
 enum BindOrigin {
     case merchant
-    case surface
+    /// The host mounted with its current intent. It may be older than an
+    /// order the merchant bound directly, so it never clears the stale lock.
+    case surfaceMount
+    /// The host's intent changed. Switching back to the bound intent means
+    /// the cart matches it again, so the stale lock clears.
+    case surfaceUpdate
 }
 
 @MainActor
@@ -140,7 +145,10 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
             if session?.isBound(intent) == true { return }
             throw PaymentError.paymentInProgress
         }
-        if origin == .surface, isBoundAndPayable(intent) {
+        if origin != .merchant, isBoundAndPayable(intent) {
+            if origin == .surfaceUpdate {
+                isStaleOrder = false
+            }
             return
         }
         prepareGeneration += 1

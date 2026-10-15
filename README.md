@@ -89,10 +89,15 @@ The iOS and Android SDKs follow the same contract.
 2. **Initial failure.** The surface shows a themed, localized failure state.
    `.failed` is delivered once per failure streak, and direct callers get the
    error thrown. SwiftUI re-renders do not retry a failed bind.
+   A merchant loader that waits for Ready must also end on `.failed`. A failed
+   first load shows the SDK failure state and emits no Ready. To retry, call
+   `updateOrder` with a new or the same order, or remount the surface.
 3. **Later bind failure.** If an order is already bound and binding a new one
    fails, Pay stays locked on the stale order (`isInteractionEnabled` is false)
    until a later update succeeds. Element emits `.updateFailed(error)`, and the
    error is thrown to direct callers. The result callback is not called.
+   A declarative host that switches back to the bound intent clears the lock;
+   a remount does not.
 4. **`createOrder` failure.** If your closure throws, the previous order stays
    bound and payable. The error is thrown; no `.updateFailed` is emitted.
 5. **Supersession.** The newest merchant call always wins, even when it passes
@@ -222,7 +227,7 @@ let bound = try await embedded.updateOrder {
 }
 ```
 
-`PaymentElement` / `PaymentElementView` call `updateOrder` when `intent` changes. Keep the surface mounted; do not set the intent to `nil` or swap the form for a loader. `.ready` fires once, after the form has laid out and, when Apple Pay is offered, the wallet button has drawn. Until then, Payment Element covers partial paint with `CheckoutTheme.background`. A later `updateOrder` does not emit it again. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`.
+`PaymentElement` / `PaymentElementView` call `updateOrder` when `intent` changes. Keep the surface mounted; do not set the intent to `nil` or swap the form for a loader. Keep merchant loading until `.ready` or a `.failed` result; a failed first load shows the SDK failure label and emits no `.ready`. Do not bring the loader back when you retry: a repeat failure in the same streak does not deliver `.failed` again. `.ready` fires once, after the form has laid out and, when Apple Pay is offered, the wallet button has drawn. Until then, Payment Element covers partial paint with `CheckoutTheme.background`. A later `updateOrder` does not emit it again. Gate a merchant-owned Pay button with `embedded.isInteractionEnabled`.
 
 Copy-paste sample: [`UpdateOrderSampleView.swift`](Examples/Example/Advanced/UpdateOrderSampleView.swift)
 
@@ -241,7 +246,7 @@ embedded.updateLocale(locale)
 
 ### Merchant-owned Pay button
 
-Embedded only. Hide the SDK button and call `confirm()` after `.ready`:
+Embedded only. Hide the SDK button and call `confirm()` after `.ready`. End your loader on `.failed` too:
 
 ```swift
 let configuration = PaymentConfig(
@@ -250,7 +255,8 @@ let configuration = PaymentConfig(
 )
 
 let embedded = EmbeddedPayment(configuration: configuration) { result in
-    // PaymentResult
+    // First-load failure: show the SDK failure label.
+    if case .failed = result { ready = true }
 }
 
 let element = PaymentElement(payment: embedded) { event in

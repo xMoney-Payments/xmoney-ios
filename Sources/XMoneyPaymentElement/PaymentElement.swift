@@ -93,7 +93,7 @@ public final class PaymentElement: UIView {
         }
     }
 
-    /// Binds on behalf of `origin`. The SwiftUI host uses `.surface` so that
+    /// Binds on behalf of `origin`. The SwiftUI host uses a surface origin so that
     /// re-asserting the bound intent never cancels a merchant update.
     @MainActor
     func bind(intent: PaymentIntent, origin: BindOrigin) async throws {
@@ -232,14 +232,39 @@ public final class PaymentElement: UIView {
         pendingReveal = false
         layoutIfNeeded()
         revealTask = Task { @MainActor [weak self] in
-            let drawn = await form.waitUntilSurfaceDrawn()
+            guard let outcome = await self?.waitForSurface(form) else { return }
             guard let self, self.formView === form, !Task.isCancelled else { return }
             self.revealTask = nil
-            guard drawn else {
+            if outcome {
+                self.revealIfNeeded()
+            } else {
                 self.pendingReveal = true
-                return
             }
-            self.revealIfNeeded()
+        }
+    }
+
+    private static let revealTimeout: TimeInterval = 2
+
+    /// `true` once `form` has drawn or the cap passed; `false` when the Element
+    /// left its window; `nil` when the form was replaced or the task cancelled.
+    /// A rebuild that replaces the wallet button restarts the wait on the new
+    /// button, under the same deadline.
+    private func waitForSurface(_ form: PaymentFormView) async -> Bool? {
+        let deadline = ProcessInfo.processInfo.systemUptime + Self.revealTimeout
+        while true {
+            let remaining = max(deadline - ProcessInfo.processInfo.systemUptime, 0)
+            #if DEBUG
+            if let hook = testingOnRevealWaitStarted {
+                testingOnRevealWaitStarted = nil
+                Task { @MainActor in hook() }
+            }
+            #endif
+            let drawn = await form.waitUntilSurfaceDrawn(timeout: remaining)
+            guard formView === form, !Task.isCancelled else { return nil }
+            if drawn { return true }
+            guard window != nil, form.window != nil else { return false }
+            if ProcessInfo.processInfo.systemUptime >= deadline { return true }
+            try? await Task.sleep(nanoseconds: 16_000_000)
         }
     }
 
@@ -435,9 +460,13 @@ public final class PaymentElement: UIView {
     var isFailureVisible: Bool { failureLabel != nil && !loaderHost.isHidden }
     var isFormVisible: Bool { formView != nil && loaderHost.isHidden }
     var isPayLockedForTesting: Bool { formView?.isLockedForTesting ?? true }
+    var walletButtonForTesting: UIView? { formView?.walletButtonForTesting }
     var failureMessage: String? { failureLabel?.text }
 
     #if DEBUG
+    /// Runs once, at the first suspension of the next reveal wait.
+    var testingOnRevealWaitStarted: (() -> Void)?
+
     func _installFormForTesting(
         config: PaymentConfig,
         state: SheetState
@@ -497,7 +526,7 @@ public struct PaymentElementView: UIViewRepresentable {
             }
         }
         coordinator.element = element
-        coordinator.bind(intent: intent, key: orderKey, to: element)
+        coordinator.bind(intent: intent, key: orderKey, origin: .surfaceMount, to: element)
         return element
     }
 
@@ -505,7 +534,7 @@ public struct PaymentElementView: UIViewRepresentable {
         context.coordinator.onEvent = onEvent
         let key = orderKey
         guard context.coordinator.lastOrderKey != key else { return }
-        context.coordinator.bind(intent: intent, key: key, to: uiView)
+        context.coordinator.bind(intent: intent, key: key, origin: .surfaceUpdate, to: uiView)
     }
 
     @available(iOS 16.0, *)
@@ -547,14 +576,14 @@ public struct PaymentElementView: UIViewRepresentable {
         var onEvent: (EmbeddedEvent) -> Void = { _ in }
 
         @MainActor
-        func bind(intent: PaymentIntent, key: String, to element: PaymentElement) {
+        func bind(intent: PaymentIntent, key: String, origin: BindOrigin, to element: PaymentElement) {
             lastOrderKey = key
             pendingIntent = nil
             prepareTask?.cancel()
             prepareTask = Task { @MainActor [weak self, weak element] in
                 guard !Task.isCancelled, let element else { return }
                 do {
-                    try await element.bind(intent: intent, origin: .surface)
+                    try await element.bind(intent: intent, origin: origin)
                 } catch {
                     self?.handle(error, intent: intent, key: key)
                 }
@@ -572,7 +601,7 @@ public struct PaymentElementView: UIViewRepresentable {
         @MainActor
         func retryPendingOrder() {
             guard let element, let intent = pendingIntent else { return }
-            bind(intent: intent, key: PaymentElementView.key(for: intent), to: element)
+            bind(intent: intent, key: PaymentElementView.key(for: intent), origin: .surfaceUpdate, to: element)
         }
     }
 }

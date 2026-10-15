@@ -50,6 +50,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - A superseded initial `prepare` no longer shows “Failed to load” or emits `.ready`; the newer bind renders the form.
 - `PaymentElement.updateOrder { }` before the form exists now locks Pay and supports supersession.
 - A Payment Element that is not in a window no longer waits two seconds; the reveal resumes when it enters a window. Order updates on an already revealed form no longer wait for a redraw.
+- The Payment Element loading cover could stay up, with no `.ready`, when the form rebuilt its Apple Pay button during the first draw: after an appearance, locale, style or wallet-appearance update, an order bind, or a light/dark switch. The reveal now waits on the new button, under the same two-second cap.
+- `PaymentElementView` could not clear the stale-order lock. Switching the view back to the bound intent after a failed update now unlocks Pay; a remount with that intent keeps it locked.
 
 ### Breaking changes
 
@@ -61,6 +63,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Migration
 
+- End merchant loading on `.failed` as well as `.ready`; a failed first load no longer emits `.ready`.
 - Keep Element and Apple Pay views mounted at their real size until `.ready`; a remount emits `.ready` again. Handle `.failed` for the initial failure state instead of waiting for `.ready`.
 - Treat the async return as update completion and gate controls with `isInteractionEnabled`.
 - Handle `CancellationError` when a newer update supersedes an older one, and keep order-creation endpoints idempotent.

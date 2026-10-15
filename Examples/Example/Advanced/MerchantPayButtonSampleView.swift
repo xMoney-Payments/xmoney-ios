@@ -14,6 +14,7 @@ struct MerchantPayButtonSampleView: View {
     @State private var error: String?
     @State private var loading = true
     @State private var ready = false
+    @State private var loadFailed = false
     @State private var processing = false
     @State private var payment: EmbeddedPayment?
 
@@ -46,13 +47,18 @@ struct MerchantPayButtonSampleView: View {
                 MerchantReadyGate(ready: ready, message: "Preparing checkout…") {
                     PaymentElementHost(payment: payment, intent: intent) { event in
                         switch event {
-                        case .ready: ready = true
+                        case .ready:
+                            ready = true
+                            loadFailed = false
                         case let .processing(isProcessing): processing = isProcessing
                         case let .updateFailed(failure): error = failure.message
                         }
                     }
                 }
-                if ready {
+                if loadFailed {
+                    // Keep the gate open: a repeat failure in the same streak does not deliver `.failed` again.
+                    ExampleButton(label: "Try again", variant: .secondary, action: fetchOrder)
+                } else if ready {
                     ExampleButton(
                         label: "Pay",
                         enabled: payment.isInteractionEnabled,
@@ -84,6 +90,11 @@ struct MerchantPayButtonSampleView: View {
         if result == .canceled, payment?.isOrderConsumed == false {
             lastResult = nil
         }
+        // A failed first load emits no `.ready`: open the gate onto the SDK failure label.
+        if case .failed = result {
+            ready = true
+            loadFailed = true
+        }
     }
 
     private func applyLiveTheme(_ configuration: PaymentConfig) {
@@ -93,10 +104,15 @@ struct MerchantPayButtonSampleView: View {
     }
 
     private func loadOrder() {
+        ready = false
+        loadFailed = false
+        fetchOrder()
+    }
+
+    private func fetchOrder() {
         loading = true
         error = nil
         lastResult = nil
-        ready = false
         processing = false
         intent = nil
         Task {

@@ -153,17 +153,19 @@ package final class PaymentFormView: UIView {
 
     /// Card form has a real size, and the Apple Pay button has drawn when the
     /// order offers it. Returns after a short cap if PassKit never paints.
-    /// Returns `false` when the form is not in a window.
+    /// Returns `false` when the form or the wallet button is not in a window,
+    /// including when a rebuild replaced the button during the wait.
     @discardableResult
-    package func waitUntilSurfaceDrawn() async -> Bool {
+    package func waitUntilSurfaceDrawn(timeout: TimeInterval = 2) async -> Bool {
         layoutIfNeeded()
         if let walletButton {
-            return await SurfacePaint.waitUntilButtonDrawn(walletButton)
+            return await SurfacePaint.waitUntilButtonDrawn(walletButton, timeout: timeout)
         }
-        return await SurfacePaint.waitUntilLaidOut(self)
+        return await SurfacePaint.waitUntilLaidOut(self, timeout: timeout)
     }
 
     var isLockedForTesting: Bool { !interactionEnabled }
+    var walletButtonForTesting: UIView? { walletButton }
 
     package override var intrinsicContentSize: CGSize {
         CGSize(width: UIView.noIntrinsicMetric, height: cachedContentHeight)
