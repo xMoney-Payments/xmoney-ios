@@ -16,7 +16,8 @@ enum OrderPayloadDecoder {
             amount: nil,
             currency: nil,
             externalOrderId: nil,
-            isRecurring: false
+            isRecurring: false,
+            saveCardPolicy: .optional
         )
     }
 

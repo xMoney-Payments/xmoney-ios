@@ -363,8 +363,12 @@ package final class PaymentFormView: UIView {
             )
         }
 
+        let saveCardPolicy = state.orderInfo.saveCardPolicy
         let formConfig = CardFormView.Configuration(
-            showSaveOptIn: config.card.savedCards.optInVisible && !state.orderInfo.isVerifyCard,
+            showSaveOptIn: saveCardPolicy == .optional
+                && config.card.savedCards.optInVisible
+                && !state.orderInfo.isVerifyCard,
+            saveCardPolicy: saveCardPolicy,
             showCardDetailsCaption: !config.card.inputs.isSpaced,
             validationMode: config.card.validationMode,
             locale: config.options.locale,

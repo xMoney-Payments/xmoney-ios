@@ -97,6 +97,7 @@ package struct OrderInput {
     package let cardTransactionMode: String?
     package let invoiceEmail: String?
     package let saveCard: Bool
+    package let saveCardPolicy: SaveCardPolicy
     package let cardId: String?
     package let customData: String?
     package let customer: OrderInputCustomer?
@@ -107,6 +108,7 @@ package struct OrderInput {
         cardTransactionMode: String? = nil,
         invoiceEmail: String? = nil,
         saveCard: Bool = false,
+        saveCardPolicy: SaveCardPolicy = .optional,
         cardId: String? = nil,
         customData: String? = nil,
         customer: OrderInputCustomer? = nil,
@@ -116,6 +118,7 @@ package struct OrderInput {
         self.cardTransactionMode = cardTransactionMode
         self.invoiceEmail = invoiceEmail
         self.saveCard = saveCard
+        self.saveCardPolicy = saveCardPolicy
         self.cardId = cardId
         self.customData = customData
         self.customer = customer
@@ -129,7 +132,8 @@ package struct OrderInput {
             amount: order?.amount,
             currency: order?.currency,
             externalOrderId: order?.orderId,
-            isRecurring: order?.type == "recurring"
+            isRecurring: order?.type == "recurring",
+            saveCardPolicy: saveCard ? .force : saveCardPolicy
         )
     }
 
@@ -138,10 +142,32 @@ package struct OrderInput {
         cardTransactionMode = map["cardTransactionMode"] as? String
         invoiceEmail = map["invoiceEmail"] as? String
         saveCard = APIMap.parseBoolean(map["saveCard"])
+        saveCardPolicy = SaveCardPolicy.parse(map["saveCard"])
         cardId = APIMap.stringOrNumber(map["cardId"])
         customData = map["customData"] as? String
         customer = (map["customer"] as? [String: Any]).map { OrderInputCustomer(apiMap: $0) }
         order = (map["order"] as? [String: Any]).map { OrderInputOrder(apiMap: $0) }
+    }
+}
+
+package enum SaveCardPolicy: Equatable {
+    case optional
+    case force
+    /// Payload `saveCard` is `"not"`: do not offer or submit saving.
+    case not
+
+    package static func parse(_ value: Any?) -> SaveCardPolicy {
+        if let string = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            switch string {
+            case "force", "true", "1":
+                return .force
+            case "not":
+                return .not
+            default:
+                return .optional
+            }
+        }
+        return APIMap.parseBoolean(value) ? .force : .optional
     }
 }
 
@@ -152,6 +178,25 @@ package struct OrderPayloadInfo {
     package let currency: String?
     package let externalOrderId: String?
     package let isRecurring: Bool
+    package let saveCardPolicy: SaveCardPolicy
+
+    package init(
+        cardTransactionMode: String?,
+        isVerifyCard: Bool,
+        amount: Double?,
+        currency: String?,
+        externalOrderId: String?,
+        isRecurring: Bool,
+        saveCardPolicy: SaveCardPolicy = .optional
+    ) {
+        self.cardTransactionMode = cardTransactionMode
+        self.isVerifyCard = isVerifyCard
+        self.amount = amount
+        self.currency = currency
+        self.externalOrderId = externalOrderId
+        self.isRecurring = isRecurring
+        self.saveCardPolicy = saveCardPolicy
+    }
 }
 
 package struct SavedCard: Equatable {
