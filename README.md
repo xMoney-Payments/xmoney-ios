@@ -20,7 +20,7 @@ XMoneyPaymentSheet ──► XMoneyPaymentElement ──► XMoneyCore
 
 - iOS 15.0+
 - Swift 5.9+
-- Xcode 15+
+- Xcode 15+ builds the SDK. CI tests with Xcode 26 only; older toolchains compile the pre-iOS 26 Apple Pay button path, which is not tested in CI.
 
 ## Installation
 
@@ -79,32 +79,45 @@ Interim events (`.ready`, `.processing`) are optional and do not replace the res
 
 ## Surface lifecycle contract
 
-- `.ready` is emitted once per mounted checkout surface, after its initial
-  layout and wallet-button draw (or the documented draw timeout). Remounting
-  creates a new surface; later `updateOrder` calls on the same surface do not
-  emit `.ready`.
-- `updateOrder` completion is the async return. Gate merchant controls with
-  `isInteractionEnabled`; rebinding the already-bound intent is a no-op, while a
-  different intent during payment fails with `PaymentError.payment`.
-- Declarative Element / wallet hosts retain a newer intent received during a
-  payment and bind it after processing ends.
-- Initial bind failures on Element deliver `.failed`, replace SDK loading with an
-  SDK-authored failure state, and throw to direct callers. A later bind failure
-  throws only: the previous order stays payable and the result callback is not
-  called. UIKit Apple Pay reports load failure from `present`.
-- Rebinding the already-bound intent returns immediately and does not cancel an
-  in-flight order creation.
-- `updateOrder { createOrder() }` locks interaction before merchant order
-  creation. A newer call cooperatively cancels the previous creation task;
-  merchant order endpoints must remain idempotent.
+The iOS and Android SDKs follow the same contract.
+
+1. **Ready.** `.ready` fires once per mounted surface, when the form or wallet
+   button first draws, or after the two-second fallback. A wallet that is known
+   to be unavailable is a settled state, so `.ready` still fires. It never fires
+   on a failure state; if a later retry replaces the failure state with a form,
+   `.ready` fires then. Order updates never emit it. Remounting emits it again.
+2. **Initial failure.** The surface shows a themed, localized failure state.
+   `.failed` is delivered once per failure streak, and direct callers get the
+   error thrown. SwiftUI re-renders do not retry a failed bind.
+3. **Later bind failure.** If an order is already bound and binding a new one
+   fails, Pay stays locked on the stale order (`isInteractionEnabled` is false)
+   until a later update succeeds. Element emits `.updateFailed(error)`, and the
+   error is thrown to direct callers. The result callback is not called.
+4. **`createOrder` failure.** If your closure throws, the previous order stays
+   bound and payable. The error is thrown; no `.updateFailed` is emitted.
+5. **Supersession.** The newest merchant call always wins, even when it passes
+   the order that is already bound: it cancels any in-flight creation or bind.
+   `PaymentElementView` re-asserting the bound intent is a no-op that cancels
+   nothing. A superseded call throws `CancellationError`.
+6. **During a charge.** The same intent is a no-op. A different intent throws
+   `PaymentError.paymentInProgress` (compare with `==`). `PaymentElementView`
+   keeps that intent and binds it after `.processing(false)`.
+7. **`.processing`** events are never dropped because an update is pending.
+8. **`updateOrder { createOrder() }`** locks Pay immediately, runs the closure on
+   the main actor, cancels it when the calling task is cancelled, and returns
+   the bound intent. Keep order-creation endpoints idempotent.
+9. **Binding is two-phase.** A superseded bind never changes the order that Pay
+   charges.
+10. **Accessibility.** The loader has a localized "Loading" label and is
+    announced. Covered form controls are hidden from VoiceOver.
 
 ## Surface behavior
 
 | Surface | Ready | Initial failure | Later update failure | Same intent while paying |
 | --- | --- | --- | --- | --- |
-| Payment Element | After layout and, when offered, the PassKit button has painted, or after two seconds | Failure label, `.failed`, and `.ready` | Throws; the previous order stays payable | No-op, and an in-flight order creation keeps running |
-| Payment Sheet | After the first draw of that presentation | `.failed` and the sheet closes | No `updateOrder` | No `updateOrder` |
-| UIKit Apple Pay | `present` emits `.ready` after the wallet session binds. The button's own signal is `onFirstDraw` | `present` delivers `.failed` | Throws; the previous order stays payable | No-op, and an in-flight order creation keeps running |
+| Payment Element | After layout and, when offered, the PassKit button has painted, or after two seconds. Not on failure | Failure label and `.failed` (once per streak) | Throws, emits `.updateFailed`; Pay locked on the stale order | No-op |
+| Payment Sheet | When the sheet has settled at its form height | `.failed` and the sheet closes | No `updateOrder` | No `updateOrder` |
+| UIKit Apple Pay | `present` emits `.ready` after the wallet session binds. The button's own signal is `onFirstDraw` | `present` delivers `.failed` | Throws; `present` is a no-op on the stale order | No-op |
 
 ## Order lifecycle
 
@@ -191,16 +204,16 @@ SwiftUI: `PaymentElementView(payment:intent:onEvent:)`.
 
 ### Update the order
 
-`EmbeddedPayment.updateOrder` rebinds a new signed `PaymentIntent` on the mounted Element. Pay, `confirm()`, and Apple Pay are no-ops until it returns (`isInteractionEnabled` is false). A newer `updateOrder` cancels the in-flight one. The Pay button keeps its current title; it does not show “Processing...”.
+`EmbeddedPayment.updateOrder` rebinds a new signed `PaymentIntent` on the mounted Element. Pay, `confirm()`, and Apple Pay are no-ops until it returns (`isInteractionEnabled` is false). A newer `updateOrder` cancels the in-flight one. The Pay button keeps its current title; it does not show “Processing...”. If the bind fails, Pay stays locked on the stale order and the Element emits `.updateFailed`; call `updateOrder` again to recover.
 
 ```swift
 try await embedded.updateOrder(intent: next)
 ```
 
-When the shopper changes the cart, pass the server call instead. Pay is locked immediately, including while your server creates the order, so a fast tap cannot charge the previous order. If the closure throws, the previous order stays bound and payable:
+When the shopper changes the cart, pass the server call instead. Pay is locked immediately, including while your server creates the order, so a fast tap cannot charge the previous order. The closure runs on the main actor and returns the bound intent; pass it to your host. If the closure throws, the previous order stays bound and payable:
 
 ```swift
-try await embedded.updateOrder {
+let bound = try await embedded.updateOrder {
     let (payload, checksum) = try await backend.createOrder(cart)
     return PaymentIntent(
         orderPayload: OrderPayload(payload),
@@ -275,7 +288,7 @@ button.onTap = { applePay.present(from: self, intent: intent) }
 button.onFirstDraw = { /* PassKit mark is on screen */ }
 ```
 
-`onFirstDraw` also exists on `ApplePayButtonView`. It runs once the button has painted (or after a short wait if it never does). Keep your own loader up until then.
+`onFirstDraw` also exists on `ApplePayButtonView`. It runs once the button has painted (or after a short wait if it never does), and again after an appearance change rebuilds the button or the button moves to a new window. Keep your own loader up until the first call.
 
 **SwiftUI**
 
@@ -290,11 +303,11 @@ After `availability` or `updateOrder`, gate your own chrome with the same flags:
 ```swift
 applePay.isAvailable  // site / config allows Apple Pay
 applePay.isReady      // PassKit can make payments on this device
-applePay.isInteractionEnabled  // false during updateOrder and while paying
+applePay.isInteractionEnabled  // false during updateOrder, while paying, and on a stale order
 applePay.isOrderConsumed
 ```
 
-When the cart changes, call `applePay.updateOrder { try await backend.createOrder(cart) }` so the wallet button is locked while your server creates and binds the next order.
+When the cart changes, call `applePay.updateOrder { try await backend.createOrder(cart) }`. From that call until the new order is bound, `present` is a no-op. `ApplePay` is not observable, so the wallet button does not grey out on its own: read `isInteractionEnabled` when you render, and again after `updateOrder` returns.
 
 Pre-auth dismiss delivers `.canceled` and does **not** consume. Present or tap again with the same intent.
 

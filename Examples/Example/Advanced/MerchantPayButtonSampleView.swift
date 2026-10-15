@@ -48,6 +48,7 @@ struct MerchantPayButtonSampleView: View {
                         switch event {
                         case .ready: ready = true
                         case let .processing(isProcessing): processing = isProcessing
+                        case let .updateFailed(failure): error = failure.message
                         }
                     }
                 }

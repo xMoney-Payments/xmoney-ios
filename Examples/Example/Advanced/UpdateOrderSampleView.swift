@@ -40,7 +40,7 @@ struct UpdateOrderSampleView: View {
             scrollable: true,
             showTestCards: true
         ) {
-            UpdateOrderCard(amountMinor: amountMinor, enabled: !consumed && !processing) { amountMinor = $0 }
+            UpdateOrderCard(amountMinor: amountMinor, enabled: ready && !consumed && !processing) { amountMinor = $0 }
             if consumed, let lastResult {
                 ExampleResultPanel(result: lastResult)
                 ExampleButton(label: "New payment", variant: .secondary) {
@@ -60,6 +60,8 @@ struct UpdateOrderSampleView: View {
                             ready = true
                         case let .processing(isProcessing):
                             processing = isProcessing
+                        case let .updateFailed(failure):
+                            error = failure.message
                         }
                     }
                 }
@@ -83,14 +85,10 @@ struct UpdateOrderSampleView: View {
                     let next = try await DemoCheckoutBackend.createPaymentIntent(amountMinor: amountMinor)
                     await MainActor.run { hostIntent = next }
                 } else {
-                    var next: PaymentIntent?
-                    try await payment.updateOrder {
+                    let next = try await payment.updateOrder {
                         try await Task.sleep(nanoseconds: 300_000_000)
-                        let intent = try await DemoCheckoutBackend.createPaymentIntent(amountMinor: amountMinor)
-                        next = intent
-                        return intent
+                        return try await DemoCheckoutBackend.createPaymentIntent(amountMinor: amountMinor)
                     }
-                    guard let next else { return }
                     await MainActor.run { hostIntent = next }
                 }
             } catch {

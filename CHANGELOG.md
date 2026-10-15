@@ -8,13 +8,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- `ApplePayButton.onFirstDraw` and `ApplePayButtonView.onFirstDraw` run once the PassKit button has painted, or after a short wait if it never does. Use this to keep merchant loading up until the wallet mark is visible.
-- `EmbeddedPayment.updateOrder { }`, `PaymentElement.updateOrder { }`, and `ApplePay.updateOrder { }` lock Pay while the closure creates the next order and until that order is bound.
+- `ApplePayButton.onFirstDraw` and `ApplePayButtonView.onFirstDraw` run once the PassKit button has painted, or after a short wait if it never does. They run again after an appearance change rebuilds the button, or when the button moves to a new window.
+- `EmbeddedPayment.updateOrder { }`, `PaymentElement.updateOrder { }`, and `ApplePay.updateOrder { }` lock Pay while the closure creates the next order and until that order is bound. They return the bound `PaymentIntent` (`@discardableResult`), run the closure on the main actor, and cancel it when the calling task is cancelled.
+- `EmbeddedEvent.updateFailed(PaymentError)`: binding a new order failed after an order was already bound.
+- `EmbeddedPayment.boundIntent`, the order Pay charges. A custom host can skip re-binding an intent that is already bound.
+- `PaymentError.paymentInProgress`, thrown when a different order is requested during a charge. Compare with `==`.
+- A "Surface lifecycle contract" section in the README, shared with the Android SDK.
 
 ### Changed
 
 - `EmbeddedPayment.prepare` and `EmbeddedPayment.updateOrder` no longer emit `.ready`. A mounted `PaymentElement` emits it once, after the surface first draws; later order updates do not emit it again. `isInteractionEnabled` still unlocks when the bind finishes.
-- A newer closure-based Element or Apple Pay update cooperatively cancels the previous order-creation task. A superseded `prepare` or `updateOrder` throws `CancellationError`.
+- The newest merchant `prepare` / `updateOrder` call always wins, including when it passes the order that is already bound. It cancels any in-flight order creation or bind. A superseded call throws `CancellationError`. `PaymentElementView` re-asserting the bound intent is a no-op that cancels nothing.
+- Order binding is two-phase: a superseded bind never changes the order that Pay charges.
+- A later bind failure locks Pay on the stale order until a later update succeeds, and Element emits `.updateFailed`. A `createOrder` closure failure still keeps the previous order payable.
+- `.ready` is not emitted on the Element failure state. A later successful retry emits it.
+- The Element failure label is themed, follows Dynamic Type, and is localized. `.failed` for an initial bind is delivered once per failure streak, and SwiftUI re-renders no longer retry a failed bind.
+- The loading coin has a localized accessibility label and is announced to VoiceOver.
+- Payment Sheet emits `.ready` when the sheet has settled at its form height, instead of when the height animation starts.
 - Calling `EmbeddedPayment.updateOrder(intent:)` without an `onEvent` closure keeps the existing event handler instead of replacing it.
 - Card 3DS now runs in an `SFSafariViewController` instead of an in-app web view, and stays open until the payment result is known, including when the bank app takes over.
 - Apple Pay authentication stays in the Apple Pay sheet.
@@ -34,18 +44,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Closing the challenge after switching to the bank app now waits for the bank's answer instead of reporting a cancel after a few seconds.
 - The bank-app waiting screen could be swiped away, leaving the payment stuck with nothing on screen.
 - The challenge could fail to appear when the app was already showing another screen, leaving the payment waiting until timeout.
-- Payment Element initial bind failures now replace the loading cover with an SDK-authored failure state. A later bind failure throws and does not call the result handler. Rebinding the currently bound intent is a no-op, including during payment, and does not cancel an in-flight order creation.
+- Payment Element initial bind failures now replace the loading cover with an SDK-authored failure state. A later bind failure throws and does not call the result handler.
+- Payment Element could charge an order other than the one on screen when the shopper reverted the cart while an update was in flight.
+- `.processing(false)` could be dropped when `PaymentElement.updateOrder { }` was rejected during a charge, leaving the form on “Processing…”.
+- A superseded initial `prepare` no longer shows “Failed to load” or emits `.ready`; the newer bind renders the form.
+- `PaymentElement.updateOrder { }` before the form exists now locks Pay and supports supersession.
+- A Payment Element that is not in a window no longer waits two seconds; the reveal resumes when it enters a window. Order updates on an already revealed form no longer wait for a redraw.
 
 ### Breaking changes
 
-- `.ready` is scoped to a mounted surface and is no longer an update-completion signal.
+- `.ready` is scoped to a mounted surface and is no longer an update-completion signal. It is not emitted on the failure state.
+- `EmbeddedEvent` has a new case, `updateFailed`. Exhaustive `switch` statements must handle it.
+- A later bind failure locks Pay on the stale order instead of leaving the previous order payable.
+- A merchant call with the already-bound intent now supersedes an in-flight update instead of being ignored.
+- The `createOrder` closures are `@MainActor` and the methods return `PaymentIntent`.
 
 ### Migration
 
-- Keep Element and Apple Pay views mounted at their real size until `.ready`; a remount emits `.ready` again.
+- Keep Element and Apple Pay views mounted at their real size until `.ready`; a remount emits `.ready` again. Handle `.failed` for the initial failure state instead of waiting for `.ready`.
 - Treat the async return as update completion and gate controls with `isInteractionEnabled`.
 - Handle `CancellationError` when a newer update supersedes an older one, and keep order-creation endpoints idempotent.
-- A failed `updateOrder` after an order is already bound throws and does not call the result handler. The previous order stays payable.
+- Handle `.updateFailed`: tell the shopper, then call `updateOrder` again. Pay stays locked until a bind succeeds.
+- Replace `error.message == "Payment in progress"` checks with `error == .paymentInProgress`.
+- Use the intent returned by `updateOrder { }` instead of capturing it from inside the closure.
 
 ## [1.0.1] - 2026-09-24
 

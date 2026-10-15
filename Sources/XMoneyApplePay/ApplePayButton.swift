@@ -8,7 +8,8 @@ import XMoneyCore
 public final class ApplePayButton: UIView {
     public var onTap: (() -> Void)?
     /// Fires after the PassKit button first draws, or after a short cap if it
-    /// never does. Fires again when an appearance change rebuilds the button.
+    /// never does. Fires again when an appearance change rebuilds the button,
+    /// and when the button is moved into a new window.
     public var onFirstDraw: (() -> Void)?
 
     private var paymentButton: PKPaymentButton
@@ -49,6 +50,7 @@ public final class ApplePayButton: UIView {
         guard window != nil else {
             drawWatch?.cancel()
             drawWatch = nil
+            didNotifyDraw = false
             return
         }
         scheduleDrawWatch()
@@ -149,42 +151,19 @@ public final class ApplePayButton: UIView {
         onTap?()
     }
 
-    /// iOS 26 paints card art onto the default button after the rest of the form.
-    /// `disableCardArt` restores the mark that is ready on the first frame.
-    /// The initializer is only in the iOS 26 SDK, so Xcode 16 (iOS 18 SDK) must not see the call.
     private static func makeButton(type: PKPaymentButtonType, style: PKPaymentButtonStyle) -> PKPaymentButton {
-        #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
-            return PKPaymentButton(type: type, style: style, disableCardArt: true)
-        }
-        #endif
-        return PKPaymentButton(paymentButtonType: type, paymentButtonStyle: style)
+        ApplePayButtonFactory.make(type: type, style: style)
     }
 
     private static func buttonStyle(
         appearance: PaymentConfig.WalletAppearance,
         isDarkBackground: Bool
     ) -> PKPaymentButtonStyle {
-        switch appearance.color {
-        case .white: return .white
-        case .whiteOutline: return .whiteOutline
-        case .black: return .black
-        case nil: return isDarkBackground ? .white : .black
-        }
+        ApplePayButtonFactory.style(appearance: appearance, isDarkBackground: isDarkBackground)
     }
 
     private static func buttonType(from type: PaymentConfig.WalletButtonType?) -> PKPaymentButtonType {
-        switch type {
-        case .buy: return .buy
-        case .checkout: return .checkout
-        case .donate: return .donate
-        case .order: return .order
-        case .pay: return .inStore
-        case .subscribe: return .subscribe
-        case .book: return .book
-        case .topUp: return .topUp
-        case .plain, nil: return .plain
-        }
+        ApplePayButtonFactory.type(from: type)
     }
 }
 

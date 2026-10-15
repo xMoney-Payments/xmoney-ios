@@ -30,22 +30,37 @@ package final class PaymentSession {
         injectCardHolderVerification()
     }
 
-    package func bind(intent: PaymentIntent) async throws -> SheetState {
+    /// A loaded order that has not been applied to the session yet.
+    package struct BindCandidate {
+        fileprivate let key: String
+        fileprivate let engine: PaymentEngine
+        package let state: SheetState
+        fileprivate let alreadyBound: Bool
+    }
+
+    /// True once an order has been committed and `intent` is the order that pay paths charge.
+    package var isBound: Bool { boundKey != nil && state != nil }
+
+    package func isBound(_ intent: PaymentIntent) -> Bool {
+        isBound && boundKey == Self.key(for: intent)
+    }
+
+    /// Loads `intent` without changing what the session charges. Hosts check
+    /// their own supersession, then call ``commit(_:)``.
+    package func load(intent: PaymentIntent) async throws -> BindCandidate {
         #if DEBUG
         if let testingBindError {
+            self.testingBindError = nil
             throw testingBindError
         }
         #endif
         let key = Self.key(for: intent)
         if boundKey == key, let state {
-            return state
+            return BindCandidate(key: key, engine: engine, state: state, alreadyBound: true)
         }
 
-        bindGeneration += 1
-        let generation = bindGeneration
-
         let engineToLoad: PaymentEngine
-        if Self.key(for: engine.intent) == key {
+        if boundKey == nil, Self.key(for: engine.intent) == key {
             engineToLoad = engine
         } else {
             engineToLoad = try PaymentEngine(configuration: configuration, intent: intent, http: http)
@@ -54,25 +69,55 @@ package final class PaymentSession {
             }
         }
 
-        let loaded = try await engineToLoad.load()
+        let loaded: SheetState
+        #if DEBUG
+        if let testingLoad {
+            loaded = try await testingLoad(intent)
+        } else {
+            loaded = try await engineToLoad.load()
+        }
+        #else
+        loaded = try await engineToLoad.load()
+        #endif
+        try Task.checkCancellation()
+        return BindCandidate(key: key, engine: engineToLoad, state: loaded, alreadyBound: false)
+    }
+
+    @discardableResult
+    package func commit(_ candidate: BindCandidate) -> SheetState {
+        guard !candidate.alreadyBound || boundKey != candidate.key else { return candidate.state }
+        engine = candidate.engine
+        boundKey = candidate.key
+        state = candidate.state
+        isOrderConsumed = false
+        isProcessing = false
+        return candidate.state
+    }
+
+    /// `load` then `commit`. Overlapping calls: only the newest commits.
+    package func bind(intent: PaymentIntent) async throws -> SheetState {
+        bindGeneration += 1
+        let generation = bindGeneration
+        let candidate = try await load(intent: intent)
         guard generation == bindGeneration else {
             throw CancellationError()
         }
-
-        engine = engineToLoad
-        boundKey = key
-        state = loaded
-        isOrderConsumed = false
-        isProcessing = false
-        return loaded
+        return commit(candidate)
     }
 
     #if DEBUG
     package var testingBindError: Error?
+    package var testingLoad: ((PaymentIntent) async throws -> SheetState)?
 
-    package func testingInstall(state: SheetState, processing: Bool = false) {
+    package func testingInstall(intent: PaymentIntent, state: SheetState, processing: Bool = false) throws {
+        let key = Self.key(for: intent)
+        if Self.key(for: engine.intent) != key {
+            engine = try PaymentEngine(configuration: configuration, intent: intent, http: http)
+        }
+        boundKey = key
         self.state = state
         self.isProcessing = processing
+        self.isOrderConsumed = false
     }
     #endif
 

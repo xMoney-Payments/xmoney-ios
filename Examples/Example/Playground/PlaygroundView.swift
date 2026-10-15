@@ -229,27 +229,26 @@ struct PlaygroundView: View {
             inlineConsumed = false
         }
         do {
-            var next: PaymentIntent?
-            let createOrder: () async throws -> PaymentIntent = {
+            let createOrder: @MainActor () async throws -> PaymentIntent = {
                 if !isInitial {
                     try await Task.sleep(nanoseconds: 300_000_000)
                 }
-                let intent = try await DemoCheckoutBackend.createPaymentIntent(
+                return try await DemoCheckoutBackend.createPaymentIntent(
                     amountMinor: amountMinor,
                     description: ExampleSecrets.orderDescription
                 )
-                next = intent
-                return intent
             }
+            let next: PaymentIntent?
             if isInitial {
                 let intent = try await createOrder()
                 if mode == .applePay {
                     try await applePay?.updateOrder(intent: intent)
                 }
+                next = intent
             } else if mode == .embedded {
-                try await payment?.updateOrder(createOrder: createOrder)
+                next = try await payment?.updateOrder(createOrder: createOrder)
             } else {
-                try await applePay?.updateOrder(createOrder: createOrder)
+                next = try await applePay?.updateOrder(createOrder: createOrder)
             }
             guard let next else { return }
             await MainActor.run {

@@ -153,14 +153,17 @@ package final class PaymentFormView: UIView {
 
     /// Card form has a real size, and the Apple Pay button has drawn when the
     /// order offers it. Returns after a short cap if PassKit never paints.
-    package func waitUntilSurfaceDrawn() async {
+    /// Returns `false` when the form is not in a window.
+    @discardableResult
+    package func waitUntilSurfaceDrawn() async -> Bool {
         layoutIfNeeded()
         if let walletButton {
-            await SurfacePaint.waitUntilButtonDrawn(walletButton)
-        } else {
-            await SurfacePaint.waitUntilLaidOut(self)
+            return await SurfacePaint.waitUntilButtonDrawn(walletButton)
         }
+        return await SurfacePaint.waitUntilLaidOut(self)
     }
+
+    var isLockedForTesting: Bool { !interactionEnabled }
 
     package override var intrinsicContentSize: CGSize {
         CGSize(width: UIView.noIntrinsicMetric, height: cachedContentHeight)
@@ -328,12 +331,12 @@ package final class PaymentFormView: UIView {
             }
             #endif
             let isDark = UIHelpers.isDarkMode(config: config, traitCollection: traitCollection)
-            let style = Self.applePayButtonStyle(
+            let style = ApplePayButtonFactory.style(
                 appearance: config.paymentMethods.applePay.appearance,
                 isDarkBackground: isDark
             )
-            let type = Self.applePayButtonType(from: config.paymentMethods.applePay.appearance.type)
-            let applePayButton = Self.makeApplePayButton(type: type, style: style)
+            let type = ApplePayButtonFactory.type(from: config.paymentMethods.applePay.appearance.type)
+            let applePayButton = ApplePayButtonFactory.make(type: type, style: style)
             applePayButton.addTarget(self, action: #selector(applePayTapped), for: .touchUpInside)
             applePayButton.translatesAutoresizingMaskIntoConstraints = false
             applePayButton.heightAnchor.constraint(equalToConstant: t.walletButtonHeight).isActive = true
@@ -518,41 +521,4 @@ package final class PaymentFormView: UIView {
         onApplePay?()
     }
 
-    /// iOS 26 paints card art onto the default button after the rest of the form.
-    /// `disableCardArt` restores the mark that is ready on the first frame.
-    /// The initializer is only in the iOS 26 SDK, so Xcode 16 (iOS 18 SDK) must not see the call.
-    private static func makeApplePayButton(type: PKPaymentButtonType, style: PKPaymentButtonStyle) -> PKPaymentButton {
-        #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
-            return PKPaymentButton(type: type, style: style, disableCardArt: true)
-        }
-        #endif
-        return PKPaymentButton(paymentButtonType: type, paymentButtonStyle: style)
-    }
-
-    private static func applePayButtonStyle(
-        appearance: PaymentConfig.WalletAppearance,
-        isDarkBackground: Bool
-    ) -> PKPaymentButtonStyle {
-        switch appearance.color {
-        case .white: return .white
-        case .whiteOutline: return .whiteOutline
-        case .black: return .black
-        case nil: return isDarkBackground ? .white : .black
-        }
-    }
-
-    private static func applePayButtonType(from type: PaymentConfig.WalletButtonType?) -> PKPaymentButtonType {
-        switch type {
-        case .buy: return .buy
-        case .checkout: return .checkout
-        case .donate: return .donate
-        case .order: return .order
-        case .pay: return .inStore
-        case .subscribe: return .subscribe
-        case .book: return .book
-        case .topUp: return .topUp
-        case .plain, nil: return .plain
-        }
-    }
 }

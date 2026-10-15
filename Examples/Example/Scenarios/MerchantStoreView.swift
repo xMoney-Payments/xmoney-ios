@@ -662,7 +662,11 @@ private struct EmbeddedCheckoutScreen: View {
                         placeholder: { ExampleCheckoutSkeleton(showOrder: false, showForm: true) }
                     ) {
                         PaymentElementHost(payment: payment, intent: intent) { event in
-                            if case .ready = event { ready = true }
+                            switch event {
+                            case .ready: ready = true
+                            case .processing: break
+                            case let .updateFailed(failure): error = failure.message
+                            }
                         }
                     }
                     .padding(.horizontal, 20)
@@ -709,17 +713,13 @@ private struct EmbeddedCheckoutScreen: View {
                     guard !Task.isCancelled else { return }
                     await MainActor.run { intent = next }
                 } else if let payment {
-                    var next: PaymentIntent?
-                    try await payment.updateOrder {
+                    let next = try await payment.updateOrder {
                         try await Task.sleep(nanoseconds: 300_000_000)
-                        let created = try await DemoCheckoutBackend.createPaymentIntent(
+                        return try await DemoCheckoutBackend.createPaymentIntent(
                             amountMinor: total,
                             description: description
                         )
-                        next = created
-                        return created
                     }
-                    guard let next else { return }
                     await MainActor.run { intent = next }
                 }
             } catch {

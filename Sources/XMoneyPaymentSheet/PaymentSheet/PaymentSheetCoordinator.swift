@@ -120,8 +120,14 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
                 transitioning.heightProvider = sheet
                 NSLayoutConstraint.deactivate(coverPins)
                 cover.removeFromSuperview()
-                transitioning.presentationController?.updateLayout(animated: true)
-                self.onEvent(.ready)
+                guard let presentation = transitioning.presentationController else {
+                    self.onEvent(.ready)
+                    return
+                }
+                presentation.updateLayout(animated: true) { [weak self, weak nav] in
+                    guard let self, let nav, self.presentedNav === nav else { return }
+                    self.onEvent(.ready)
+                }
             } catch is CancellationError {
                 return
             } catch let error as PaymentError {

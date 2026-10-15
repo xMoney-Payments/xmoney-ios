@@ -91,9 +91,14 @@ struct ApplePaySampleView: View {
         .onChange(of: theme.isDark) { _ in
             applePay = ApplePay(configuration: configuration, onResult: handleResult)
             if let intent {
-                Task {
-                    try? await applePay?.updateOrder(intent: intent)
-                    await MainActor.run { orderBound = true }
+                Task { @MainActor in
+                    do {
+                        try await applePay?.updateOrder(intent: intent)
+                        orderBound = true
+                    } catch {
+                        guard !isCancellation(error) else { return }
+                        self.error = error.localizedDescription
+                    }
                 }
             }
         }

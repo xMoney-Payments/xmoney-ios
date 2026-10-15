@@ -58,6 +58,10 @@ public enum PaymentError: Error, Equatable, LocalizedError {
     public static let genericNetwork = "Network request failed"
     public static let genericRequest = "Request failed"
     public static let genericPayment = "Payment failed"
+    /// Thrown by `updateOrder` / `prepare` when a different order is requested
+    /// while a charge is in flight. Compare with `==`.
+    public static let paymentInProgress = PaymentError.payment("Payment in progress")
+
     public static let genericLoad = "Failed to load"
     public static let genericApplePay = "Apple Pay failed"
     public static let missingApplePayAmountOrCurrency = "Missing amount or currency for Apple Pay."

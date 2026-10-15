@@ -1,5 +1,5 @@
 import XCTest
-import XMoneyCore
+@testable import XMoneyCore
 @testable import XMoneyApplePay
 
 private actor ApplePayOrderGate {
@@ -142,5 +142,120 @@ final class ApplePayDismissTests: XCTestCase {
         applePay.testingInstallPayable(current, processing: true)
         try await applePay.updateOrder(intent: current)
         XCTAssertFalse(applePay.isInteractionEnabled)
+    }
+
+    @MainActor
+    func testCreateOrderReturnsTheBoundIntentAndRunsOnTheMainActor() async throws {
+        let applePay = ApplePay(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in }
+        applePay.testingLoad = { _ in Self.sampleState() }
+        let next = Self.intent("next")
+        var ranOnMain = false
+
+        let bound = try await applePay.updateOrder {
+            ranOnMain = Thread.isMainThread
+            return next
+        }
+
+        XCTAssertEqual(bound, next)
+        XCTAssertEqual(applePay.testingPayableIntent, next)
+        XCTAssertTrue(ranOnMain)
+        XCTAssertTrue(applePay.isInteractionEnabled)
+    }
+
+    @MainActor
+    func testLaterBindFailureLocksTheStaleOrderUntilABindSucceeds() async throws {
+        let applePay = ApplePay(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in }
+        let current = Self.intent("current")
+        applePay.testingInstallPayable(current)
+        applePay.testingLoad = { _ in throw ApplePayOrderError.failed }
+
+        do {
+            try await applePay.updateOrder(intent: Self.intent("next"))
+            XCTFail("Expected bind to throw")
+        } catch {
+            XCTAssertTrue(error is ApplePayOrderError)
+        }
+        XCTAssertEqual(applePay.testingPayableIntent, current)
+        XCTAssertFalse(applePay.isInteractionEnabled)
+
+        applePay.testingLoad = { _ in Self.sampleState() }
+        try await applePay.updateOrder(intent: Self.intent("next"))
+        XCTAssertTrue(applePay.isInteractionEnabled)
+    }
+
+    @MainActor
+    func testMerchantUpdateWithTheBoundIntentSupersedesInFlightCreation() async throws {
+        let applePay = ApplePay(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in }
+        let current = Self.intent("current")
+        applePay.testingInstallPayable(current)
+        let started = expectation(description: "create order started")
+        let first = Task { @MainActor in
+            try await applePay.updateOrder {
+                started.fulfill()
+                try await Task.sleep(nanoseconds: 10_000_000_000)
+                return Self.intent("late")
+            }
+        }
+        await fulfillment(of: [started], timeout: 1)
+
+        try await applePay.updateOrder(intent: current)
+
+        do {
+            _ = try await first.value
+            XCTFail("Expected superseded update to be canceled")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertEqual(applePay.testingPayableIntent, current)
+        XCTAssertTrue(applePay.isInteractionEnabled)
+    }
+
+    @MainActor
+    func testCancellingTheCallerCancelsCreateOrder() async {
+        let applePay = ApplePay(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in }
+        let started = expectation(description: "create order started")
+        let cancelled = expectation(description: "create order cancelled")
+        let update = Task { @MainActor in
+            try await applePay.updateOrder {
+                started.fulfill()
+                do {
+                    try await Task.sleep(nanoseconds: 10_000_000_000)
+                } catch {
+                    cancelled.fulfill()
+                    throw error
+                }
+                return Self.intent("never")
+            }
+        }
+        await fulfillment(of: [started], timeout: 1)
+        update.cancel()
+        await fulfillment(of: [cancelled], timeout: 1)
+
+        do {
+            _ = try await update.value
+            XCTFail("Expected cancellation")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+    }
+
+    private static func intent(_ suffix: String) -> PaymentIntent {
+        PaymentIntent(orderPayload: OrderPayload("e30="), orderChecksum: OrderChecksum(suffix))
+    }
+
+    private static func sampleState() -> SheetState {
+        SheetState(
+            sessionToken: "tok",
+            orderInfo: OrderPayloadInfo(
+                cardTransactionMode: nil,
+                isVerifyCard: false,
+                amount: 19.99,
+                currency: "EUR",
+                externalOrderId: "order-1",
+                isRecurring: false
+            ),
+            savedCards: [],
+            applePayAvailable: false
+        )
     }
 }
