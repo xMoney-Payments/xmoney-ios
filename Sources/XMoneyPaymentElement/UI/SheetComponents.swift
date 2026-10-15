@@ -221,14 +221,14 @@ final class BrandTileView: UIView {
     private let iconView = UIImageView()
     private var brandIcon: CardBrandIcon?
 
-    init(theme: CheckoutTheme) {
+    init(theme: CheckoutTheme, size: CGSize = CGSize(width: 44, height: 32)) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = theme.brandTileRadius
         clipsToBounds = true
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 44),
-            heightAnchor.constraint(equalToConstant: 32),
+            widthAnchor.constraint(equalToConstant: size.width),
+            heightAnchor.constraint(equalToConstant: size.height),
         ])
     }
 
@@ -290,7 +290,9 @@ final class BrandTileView: UIView {
 // MARK: - Error row
 
 final class ErrorRowView: UIView {
-    init(message: String, theme: CheckoutTheme) {
+    private let label = UILabel()
+
+    init(message: String, theme: CheckoutTheme, topInset: CGFloat = 8) {
         super.init(frame: .zero)
         let badge = UILabel()
         badge.text = "!"
@@ -306,7 +308,6 @@ final class ErrorRowView: UIView {
             badge.heightAnchor.constraint(equalToConstant: 15),
         ])
 
-        let label = UILabel()
         label.text = message
         label.font = theme.font(ofSize: 12.5, weight: .semibold)
         label.textColor = theme.errorText
@@ -319,11 +320,15 @@ final class ErrorRowView: UIView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: topInset),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+    }
+
+    func setMessage(_ message: String) {
+        label.text = message
     }
 
     @available(*, unavailable)

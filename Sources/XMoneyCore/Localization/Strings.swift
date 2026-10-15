@@ -40,18 +40,18 @@ package enum Strings {
     }
 
     private static let catalogs: [String: [String: String]] = [
-        "en": en,
-        "en-US": en,
-        "el": el,
-        "el-GR": el,
-        "ro": ro,
-        "ro-RO": ro,
-        "bg": bg,
-        "bg-BG": bg,
-        "hu": hu,
-        "hu-HU": hu,
-        "pl": pl,
-        "pl-PL": pl,
+        "en": en.merging(PersonalDetailsStrings.en) { _, new in new },
+        "en-US": en.merging(PersonalDetailsStrings.en) { _, new in new },
+        "el": el.merging(PersonalDetailsStrings.el) { _, new in new },
+        "el-GR": el.merging(PersonalDetailsStrings.el) { _, new in new },
+        "ro": ro.merging(PersonalDetailsStrings.ro) { _, new in new },
+        "ro-RO": ro.merging(PersonalDetailsStrings.ro) { _, new in new },
+        "bg": bg.merging(PersonalDetailsStrings.bg) { _, new in new },
+        "bg-BG": bg.merging(PersonalDetailsStrings.bg) { _, new in new },
+        "hu": hu.merging(PersonalDetailsStrings.hu) { _, new in new },
+        "hu-HU": hu.merging(PersonalDetailsStrings.hu) { _, new in new },
+        "pl": pl.merging(PersonalDetailsStrings.pl) { _, new in new },
+        "pl-PL": pl.merging(PersonalDetailsStrings.pl) { _, new in new },
     ]
 
     private static let en: [String: String] = [

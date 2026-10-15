@@ -56,6 +56,7 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
         transitioning.dimmingColor = theme.scrim
         transitioning.canDismiss = { [weak self] in
             guard let self else { return false }
+            if self.sheetVC?.isShowingPersonalDetails == true { return false }
             return !self.session.isProcessing
         }
         transitioning.onRequestClose = { [weak self] in
@@ -67,8 +68,10 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
             transitioning?.presentationController?.updateLayout(animated: true)
         }
 
+        nav.view.backgroundColor = theme.background
         nav.modalPresentationStyle = .custom
         nav.transitioningDelegate = transitioning
+        nav.delegate = self
         self.presentedNav = nav
         presenter.present(nav, animated: true)
         nav.presentationController?.delegate = self
@@ -204,12 +207,28 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
 
     // MARK: - PaymentSheetViewControllerDelegate
 
-    package func sheetDidTapPayWithCard(_ input: CardInput) {
-        run { await self.session.submitNewCard(input, presenter: self) }
+    package func sheetDidTapPayWithCard(_ input: CardInput, customerDetails: CustomerDetails?) {
+        run { await self.session.submitNewCard(input, presenter: self, customerDetails: customerDetails) }
     }
 
-    package func sheetDidSelectSavedCard(_ card: SavedCard) {
-        run { await self.session.submitSavedCard(cardId: card.id, presenter: self) }
+    package func sheetDidSelectSavedCard(_ card: SavedCard, customerDetails: CustomerDetails?) {
+        run { await self.session.submitSavedCard(cardId: card.id, presenter: self, customerDetails: customerDetails) }
+    }
+
+    package func sheetDidTapPersonalDetails() {
+        guard let sheetVC else { return }
+        let details = PersonalDetailsFlow.make(
+            config: config,
+            visibility: sheetVC.customerDetailsVisibility,
+            progress: sheetVC.personalDetailsProgress,
+            onFinished: { [weak sheetVC] in
+                sheetVC?.hidePersonalDetails(refreshRow: true)
+            }
+        )
+        details.showsFooterHairline = true
+        let width = sheetVC.view.bounds.width > 0 ? sheetVC.view.bounds.width : UIScreen.main.bounds.width
+        details.prepareForPresentation(width: width, safeAreaBottom: sheetVC.view.safeAreaInsets.bottom)
+        sheetVC.showPersonalDetails(details)
     }
 
     package func sheetDidTapApplePay() {
@@ -240,6 +259,18 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
             self.threeDSSession?.dismiss()
             self.threeDSSession = nil
         }
+    }
+}
+
+extension PaymentSheetCoordinator: UINavigationControllerDelegate {
+    package func navigationController(
+        _ navigationController: UINavigationController,
+        willShow viewController: UIViewController,
+        animated: Bool
+    ) {
+        guard !animated, let provider = viewController as? PaymentSheetHeightProviding else { return }
+        sheetTransitioningDelegate?.heightProvider = provider
+        sheetTransitioningDelegate?.presentationController?.updateLayout(animated: false)
     }
 }
 

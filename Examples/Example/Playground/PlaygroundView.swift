@@ -21,6 +21,8 @@ struct PlaygroundView: View {
     @State private var savedCardsEnabled = true
     @State private var saveCardOptInVisible = true
     @State private var nameCheck = false
+    @State private var customerDetailsCard = false
+    @State private var customerDetailsApplePay = false
     @State private var walletColor = playgroundWalletColorOptions[0]
     @State private var walletType = playgroundWalletTypeOptions[0]
     @State private var walletRadius: Double = 28
@@ -46,6 +48,8 @@ struct PlaygroundView: View {
             String(saveCardOptInVisible),
             grouping.value,
             String(nameCheck),
+            String(customerDetailsCard),
+            String(customerDetailsApplePay),
             buttonType.value,
             validation.value,
             String(submitVisible),
@@ -126,7 +130,7 @@ struct PlaygroundView: View {
         )
         .id(structuralKey)
         .onChange(of: structuralKey) { _ in
-            remount(configuration)
+            remount(makeConfiguration())
             resetInline()
         }
         .onChange(of: appearance) { _ in
@@ -151,11 +155,11 @@ struct PlaygroundView: View {
         }
         .onAppear {
             ApplePay.register()
-            remount(configuration)
+            remount(makeConfiguration())
         }
         .task(id: "\(mode)-\(structuralKey)-\(amountMinor)") {
             guard mode != .paymentSheet else { return }
-            await prepareInline(configuration)
+            await prepareInline(makeConfiguration())
         }
     }
 
@@ -181,6 +185,7 @@ struct PlaygroundView: View {
                 submitButton: .init(visible: submitVisible, type: playgroundButtonType(buttonType.value))
             ),
             paymentMethods: .init(applePay: .init(enabled: applePayEnabled, appearance: walletAppearance)),
+            customerDetails: .init(card: customerDetailsCard, applePay: customerDetailsApplePay),
             options: .init(
                 locale: locale.value,
                 style: playgroundStyle(style.value),
@@ -282,6 +287,8 @@ struct PlaygroundView: View {
             ExampleSwitchRow(title: "Saved cards", subtitle: "Offer previously saved cards", isOn: $savedCardsEnabled, showDivider: true)
             ExampleSwitchRow(title: "Save-card opt-in", subtitle: "Show the save checkbox", isOn: $saveCardOptInVisible, enabled: savedCardsEnabled, showDivider: true)
             ExampleSwitchRow(title: "Name check", subtitle: "John Doe must match", isOn: $nameCheck, showDivider: true)
+            ExampleSwitchRow(title: "Personal details", subtitle: "Collect customerDetails on card", isOn: $customerDetailsCard, showDivider: true)
+            ExampleSwitchRow(title: "Apple Pay details", subtitle: "Request contact fields from Apple Pay", isOn: $customerDetailsApplePay, showDivider: true)
             optionPicker("Wallet color", $walletColor, playgroundWalletColorOptions)
             optionPicker("Wallet type", $walletType, playgroundWalletTypeOptions)
             VStack(alignment: .leading, spacing: 8) {

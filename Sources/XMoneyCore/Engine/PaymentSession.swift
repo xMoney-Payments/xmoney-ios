@@ -15,6 +15,9 @@ package final class PaymentSession {
     /// Idle/loading sheets may dismiss; in-flight pay must wait for the payment result.
     package var canDismiss: Bool { !isProcessing }
 
+    /// Entered shopper details. Survives order rebinds; `load` rechecks them against the new field list.
+    package let personalDetails = PersonalDetailsProgress()
+
     private var boundKey: String?
     private var bindGeneration = 0
     private let http: HTTPClient
@@ -74,10 +77,10 @@ package final class PaymentSession {
         if let testingLoad {
             loaded = try await testingLoad(intent)
         } else {
-            loaded = try await engineToLoad.load()
+            loaded = try await engineToLoad.load(personalDetails: personalDetails)
         }
         #else
-        loaded = try await engineToLoad.load()
+        loaded = try await engineToLoad.load(personalDetails: personalDetails)
         #endif
         try Task.checkCancellation()
         return BindCandidate(key: key, engine: engineToLoad, state: loaded, alreadyBound: false)
@@ -121,15 +124,23 @@ package final class PaymentSession {
     }
     #endif
 
-    package func submitNewCard(_ input: CardInput, presenter: ThreeDSPresenter) async -> EngineResult {
+    package func submitNewCard(
+        _ input: CardInput,
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetails? = nil
+    ) async -> EngineResult {
         await submit(didAuthorize: true) {
-            try await self.engine.submitNewCard(input, presenter: presenter)
+            try await self.engine.submitNewCard(input, presenter: presenter, customerDetails: customerDetails)
         }
     }
 
-    package func submitSavedCard(cardId: String, presenter: ThreeDSPresenter) async -> EngineResult {
+    package func submitSavedCard(
+        cardId: String,
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetails? = nil
+    ) async -> EngineResult {
         await submit(didAuthorize: true) {
-            try await self.engine.submitSavedCard(cardId: cardId, presenter: presenter)
+            try await self.engine.submitSavedCard(cardId: cardId, presenter: presenter, customerDetails: customerDetails)
         }
     }
 

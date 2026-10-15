@@ -14,6 +14,9 @@ package struct SheetState {
     /// PassKit reports this device can make Apple Pay payments.
     package let applePayReady: Bool
     package let nameCheckValidationEnabled: Bool
+    package let customerDetailsVisibility: CustomerDetailsVisibility
+    /// Shared with the form so entered details survive rebuilds.
+    package let personalDetails: PersonalDetailsProgress
 
     package init(
         sessionToken: String,
@@ -21,7 +24,9 @@ package struct SheetState {
         savedCards: [SavedCard],
         applePayAvailable: Bool,
         applePayReady: Bool = false,
-        nameCheckValidationEnabled: Bool = false
+        nameCheckValidationEnabled: Bool = false,
+        customerDetailsVisibility: CustomerDetailsVisibility = .inactive,
+        personalDetails: PersonalDetailsProgress = PersonalDetailsProgress()
     ) {
         self.sessionToken = sessionToken
         self.orderInfo = orderInfo
@@ -29,6 +34,8 @@ package struct SheetState {
         self.applePayAvailable = applePayAvailable
         self.applePayReady = applePayReady
         self.nameCheckValidationEnabled = nameCheckValidationEnabled
+        self.customerDetailsVisibility = customerDetailsVisibility
+        self.personalDetails = personalDetails
     }
 
     package func withSavedCards(_ cards: [SavedCard]) -> SheetState {
@@ -38,7 +45,9 @@ package struct SheetState {
             savedCards: cards,
             applePayAvailable: applePayAvailable,
             applePayReady: applePayReady,
-            nameCheckValidationEnabled: nameCheckValidationEnabled
+            nameCheckValidationEnabled: nameCheckValidationEnabled,
+            customerDetailsVisibility: customerDetailsVisibility,
+            personalDetails: personalDetails
         )
     }
 }
@@ -55,10 +64,12 @@ package final class PaymentEngine {
     private let wallets: DigitalWalletsService
     private let payment: PaymentService
     private let transactions: TransactionService
+    private let inlineFields: InlineCheckoutFieldsService
 
     private var sessionToken: String = ""
     private var nameCheckValidationEnabled: Bool = false
     private var cachedWalletParams: [String: WalletParams] = [:]
+    package private(set) var customerDetailsVisibility: CustomerDetailsVisibility = .inactive
 
     package var onCardHolderVerification: ((CardHolderVerificationResult) -> Bool)?
 
@@ -80,10 +91,11 @@ package final class PaymentEngine {
         self.wallets = DigitalWalletsService(http: http, env: env)
         self.payment = PaymentService(http: http, env: env)
         self.transactions = TransactionService(http: http, env: env)
+        self.inlineFields = InlineCheckoutFieldsService(http: http, env: env)
         self.onCardHolderVerification = configuration.card.cardHolderVerification?.onCardHolderVerification
     }
 
-    package func load() async throws -> SheetState {
+    package func load(personalDetails: PersonalDetailsProgress = PersonalDetailsProgress()) async throws -> SheetState {
         sessionToken = try await account.getSessionToken(
             orderPayload: intent.orderPayload,
             orderChecksum: intent.orderChecksum
@@ -105,11 +117,15 @@ package final class PaymentEngine {
             return (try? await self.cards.getCards(sessionToken: token)) ?? []
         }()
         async let applePayParamsTask = fetchApplePayParamsIfEnabled()
+        async let customerFieldsTask = fetchCustomerDetailFieldsIfEnabled(sessionToken: token)
 
         let siteConfig = await siteConfigTask
         let savedCards = await savedCardsTask
         let applePayParams = await applePayParamsTask
+        let customerFields = await customerFieldsTask
         nameCheckValidationEnabled = siteConfig.nameCheckValidationEnabled
+        customerDetailsVisibility = CustomerDetailsVisibility.resolve(fields: customerFields)
+        personalDetails.revalidate(visibility: customerDetailsVisibility)
 
         var applePayAvailable = false
         if let params = applePayParams, let merchantId = params.merchantId, !merchantId.isEmpty {
@@ -124,11 +140,17 @@ package final class PaymentEngine {
             savedCards: savedCards,
             applePayAvailable: applePayAvailable,
             applePayReady: applePayReady,
-            nameCheckValidationEnabled: nameCheckValidationEnabled
+            nameCheckValidationEnabled: nameCheckValidationEnabled,
+            customerDetailsVisibility: customerDetailsVisibility,
+            personalDetails: personalDetails
         )
     }
 
-    package func submitNewCard(_ card: CardInput, presenter: ThreeDSPresenter) async throws -> EngineResult {
+    package func submitNewCard(
+        _ card: CardInput,
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetails? = nil
+    ) async throws -> EngineResult {
         if let verification = configuration.card.cardHolderVerification {
             if !nameCheckValidationEnabled {
                 throw PaymentError.cardHolderVerification(PaymentError.nameCheckNotEnabled)
@@ -156,26 +178,38 @@ package final class PaymentEngine {
         let fields = payment.cardFields(
             card: card,
             orderPayload: intent.orderPayload,
-            orderChecksum: intent.orderChecksum
+            orderChecksum: intent.orderChecksum,
+            customerDetails: customerDetails
         )
         return try await submit(fields: fields, presenter: presenter)
     }
 
-    package func submitSavedCard(cardId: String, presenter: ThreeDSPresenter) async throws -> EngineResult {
+    package func submitSavedCard(
+        cardId: String,
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetails? = nil
+    ) async throws -> EngineResult {
         let fields = payment.savedCardFields(
             cardId: cardId,
             orderPayload: intent.orderPayload,
-            orderChecksum: intent.orderChecksum
+            orderChecksum: intent.orderChecksum,
+            customerDetails: customerDetails
         )
         return try await submit(fields: fields, presenter: presenter)
     }
 
-    package func submitWallet(walletType: String, token: String, presenter: ThreeDSPresenter) async throws -> EngineResult {
+    package func submitWallet(
+        walletType: String,
+        token: String,
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetails? = nil
+    ) async throws -> EngineResult {
         let fields = payment.walletFields(
             walletType: walletType,
             token: token,
             orderPayload: intent.orderPayload,
-            orderChecksum: intent.orderChecksum
+            orderChecksum: intent.orderChecksum,
+            customerDetails: customerDetails
         )
         return try await submit(fields: fields, presenter: presenter)
     }
@@ -200,6 +234,11 @@ package final class PaymentEngine {
             && !orderInfo.isRecurring
         guard showSavedCards else { return [] }
         return try await cards.getCards(sessionToken: sessionToken)
+    }
+
+    private func fetchCustomerDetailFieldsIfEnabled(sessionToken: String) async -> [String] {
+        guard configuration.customerDetails.isAnyEnabled else { return [] }
+        return await inlineFields.getFields(sessionToken: sessionToken)
     }
 
     private func fetchApplePayParamsIfEnabled() async -> WalletParams? {

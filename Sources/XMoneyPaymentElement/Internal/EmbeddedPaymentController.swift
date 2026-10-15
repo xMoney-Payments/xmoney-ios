@@ -41,10 +41,12 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     private(set) var isStaleOrder = false {
         didSet { publishOrderLock(oldValue: isUpdatingOrder || oldValue) }
     }
+    /// State used when tests mount a form without binding an order.
+    private var previewState: SheetState?
 
     var isOrderLocked: Bool { isUpdatingOrder || isStaleOrder }
 
-    var sheetState: SheetState? { session?.state }
+    var sheetState: SheetState? { session?.state ?? previewState }
     var boundIntent: PaymentIntent? {
         guard let session, session.isBound else { return nil }
         return session.intent
@@ -53,8 +55,17 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     var isProcessing: Bool { session?.isProcessing ?? false }
     var isOrderConsumed: Bool { session?.isOrderConsumed ?? false }
     var isInteractionEnabled: Bool {
-        guard !isOrderLocked, let session, session.isBound else { return false }
-        return session.isInteractionEnabled
+        if let session {
+            guard !isOrderLocked, session.isBound else { return false }
+            return session.isInteractionEnabled
+        }
+        return !isOrderLocked && previewState != nil
+    }
+
+    /// Installs config and state so a form can render without a network bind.
+    func preview(_ state: SheetState) {
+        paymentConfig = liveConfiguration
+        previewState = state
     }
 
     init(
@@ -270,7 +281,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         }
     }
 
-    func payWithCard(_ input: CardInput) {
+    func payWithCard(_ input: CardInput, customerDetails: CustomerDetails?) {
         guard isInteractionEnabled, let session else { return }
 
         let numberInvalid = CardFieldValidators.validateCardNumber(input.number) != nil
@@ -282,17 +293,17 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         emit(.processing(true))
         operationTask?.cancel()
         operationTask = Task { @MainActor in
-            let result = await session.submitNewCard(input, presenter: self)
+            let result = await session.submitNewCard(input, presenter: self, customerDetails: customerDetails)
             self.deliver(result)
         }
     }
 
-    func paySavedCard(_ card: SavedCard) {
+    func paySavedCard(_ card: SavedCard, customerDetails: CustomerDetails?) {
         guard isInteractionEnabled, let session else { return }
         emit(.processing(true))
         operationTask?.cancel()
         operationTask = Task { @MainActor in
-            let result = await session.submitSavedCard(cardId: card.id, presenter: self)
+            let result = await session.submitSavedCard(cardId: card.id, presenter: self, customerDetails: customerDetails)
             self.deliver(result)
         }
     }
