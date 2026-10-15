@@ -5,9 +5,10 @@ import XMoneyPaymentElement
 #endif
 
 package protocol PaymentSheetViewControllerDelegate: AnyObject {
-    func sheetDidTapPayWithCard(_ input: CardInput)
-    func sheetDidSelectSavedCard(_ card: SavedCard)
+    func sheetDidTapPayWithCard(_ input: CardInput, customerDetails: CustomerDetails?)
+    func sheetDidSelectSavedCard(_ card: SavedCard, customerDetails: CustomerDetails?)
     func sheetDidTapApplePay()
+    func sheetDidTapPersonalDetails()
     func sheetDidTapDeleteSavedCard(_ card: SavedCard) async throws
     func sheetDidCancel()
 }
@@ -19,7 +20,9 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
     private var state: SheetState
     private let chromeStack = UIStackView()
     private let scrollView = UIScrollView()
+    private var headerRow: UIView!
     private var formView: PaymentFormView!
+    private var personalDetails: PersonalDetailsViewController?
     private var closeButton: UIButton!
     private var lastReportedHeight: CGFloat = 0
     private var isInvalidatingHeight = false
@@ -69,6 +72,47 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         navigationController?.isModalInPresentation = processing
     }
 
+    package var customerDetailsVisibility: CustomerDetailsVisibility { state.customerDetailsVisibility }
+
+    package var personalDetailsProgress: PersonalDetailsProgress { state.personalDetails }
+
+    package var isShowingPersonalDetails: Bool { personalDetails != nil }
+
+    package func showPersonalDetails(_ details: PersonalDetailsViewController) {
+        view.endEditing(true)
+        guard personalDetails == nil else { return }
+        addChild(details)
+        details.view.translatesAutoresizingMaskIntoConstraints = false
+        chromeStack.addArrangedSubview(details.view)
+        details.didMove(toParent: self)
+        headerRow.isHidden = true
+        scrollView.isHidden = true
+        personalDetails = details
+        details.onContentSizeChange = { [weak self] in
+            self?.invalidateSheetHeight()
+        }
+        // Lay the page out in the sheet so its safe-area inset is part of the height
+        // before the sheet resizes. Otherwise a short form opens a bit too small and scrolls.
+        view.layoutIfNeeded()
+        invalidateSheetHeight()
+    }
+
+    package func hidePersonalDetails(refreshRow: Bool = false) {
+        guard let details = personalDetails else { return }
+        view.endEditing(true)
+        details.willMove(toParent: nil)
+        chromeStack.removeArrangedSubview(details.view)
+        details.view.removeFromSuperview()
+        details.removeFromParent()
+        personalDetails = nil
+        headerRow.isHidden = false
+        scrollView.isHidden = false
+        if refreshRow {
+            formView?.refreshPersonalDetailsRow()
+        }
+        invalidateSheetHeight()
+    }
+
     package func update(state: SheetState) {
         self.state = state
         formView?.update(state: state)
@@ -76,6 +120,10 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
     }
 
     package var preferredSheetHeight: CGFloat {
+        if let personalDetails {
+            // Grabber 16 (10+4+2) + 6 gap. The details view fills the rest.
+            return ceil(16 + 6 + personalDetails.contentHeight)
+        }
         // Grabber 16 (10+4+2) + 6 gap + 36 close row.
         let headerChrome: CGFloat = 16 + 6 + 36
         return ceil(headerChrome + (formView?.contentHeight ?? 280))
@@ -116,18 +164,26 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         close.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
         closeButton = close
 
-        let headerRow = UIView()
-        headerRow.translatesAutoresizingMaskIntoConstraints = false
-        headerRow.addSubview(close)
+        let header = UIView()
+        header.translatesAutoresizingMaskIntoConstraints = false
+        headerRow = header
+        header.addSubview(close)
         NSLayoutConstraint.activate([
-            headerRow.heightAnchor.constraint(equalToConstant: 36),
-            close.leadingAnchor.constraint(equalTo: headerRow.leadingAnchor, constant: 20),
-            close.centerYAnchor.constraint(equalTo: headerRow.centerYAnchor),
+            header.heightAnchor.constraint(equalToConstant: 36),
+            close.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 20),
+            close.centerYAnchor.constraint(equalTo: header.centerYAnchor),
         ])
 
         formView = PaymentFormView(config: config, state: state, contentInsets: .sheet)
-        formView.onPayCard = { [weak self] input in self?.delegate?.sheetDidTapPayWithCard(input) }
-        formView.onSelectSaved = { [weak self] card in self?.delegate?.sheetDidSelectSavedCard(card) }
+        formView.onPayCard = { [weak self] input, details in
+            self?.delegate?.sheetDidTapPayWithCard(input, customerDetails: details)
+        }
+        formView.onSelectSaved = { [weak self] card, details in
+            self?.delegate?.sheetDidSelectSavedCard(card, customerDetails: details)
+        }
+        formView.onOpenPersonalDetails = { [weak self] in
+            self?.delegate?.sheetDidTapPersonalDetails()
+        }
         formView.onDeleteSaved = { [weak self] card in
             try await self?.delegate?.sheetDidTapDeleteSavedCard(card)
         }
@@ -156,7 +212,7 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         chromeStack.spacing = 0
         chromeStack.addArrangedSubview(grabber)
         chromeStack.setCustomSpacing(6, after: grabber)
-        chromeStack.addArrangedSubview(headerRow)
+        chromeStack.addArrangedSubview(header)
         chromeStack.addArrangedSubview(scrollView)
         chromeStack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(chromeStack)

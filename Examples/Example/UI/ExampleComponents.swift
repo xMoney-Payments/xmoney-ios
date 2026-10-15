@@ -233,6 +233,16 @@ struct ExampleResultPanel: View {
             if let desc = tx.description, !desc.isEmpty { rows.append(("Description", desc)) }
             if !name.isEmpty { rows.append(("Customer", name)) }
             if let email = customer?.email, !email.isEmpty { rows.append(("Email", email)) }
+            if let identifier = customer?.identifier, !identifier.isEmpty {
+                rows.append(("Identifier", identifier))
+            }
+            if let phone = customer?.phone, !phone.isEmpty { rows.append(("Phone", phone)) }
+            if let country = customer?.country, !country.isEmpty { rows.append(("Country", country)) }
+            if let city = customer?.city, !city.isEmpty { rows.append(("City", city)) }
+            if let address = customerAddress(customer) { rows.append(("Address", address)) }
+            if let created = customer?.creationDate, !created.isEmpty {
+                rows.append(("Date", formatCustomerDate(created)))
+            }
             return rows
         case let .failed(error):
             return [
@@ -247,6 +257,29 @@ struct ExampleResultPanel: View {
             ]
         }
     }
+}
+
+private func customerAddress(_ customer: TransactionCustomer?) -> String? {
+    guard let customer else { return nil }
+    let parts = [customer.address, customer.state, customer.zipCode]
+        .compactMap { $0 }
+        .filter { !$0.isEmpty }
+    return parts.isEmpty ? nil : parts.joined(separator: ", ")
+}
+
+private func formatCustomerDate(_ raw: String) -> String {
+    let parser = ISO8601DateFormatter()
+    parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    var date = parser.date(from: raw)
+    if date == nil {
+        parser.formatOptions = [.withInternetDateTime]
+        date = parser.date(from: raw)
+    }
+    guard let date else { return raw }
+    let output = DateFormatter()
+    output.locale = Locale(identifier: "en_US")
+    output.dateFormat = "MMM d, yyyy, h:mm a"
+    return output.string(from: date)
 }
 
 private func formatAmount(_ amount: String?, _ currency: String?, _ fallback: String?) -> String? {

@@ -6,17 +6,20 @@ public struct PaymentConfig: Sendable {
     public let publicKey: String
     public var card: CardConfig
     public var paymentMethods: PaymentMethodsConfig
+    public var customerDetails: CustomerDetailsConfig
     public var options: OptionsConfig
 
     public init(
         publicKey: String,
         card: CardConfig = .init(),
         paymentMethods: PaymentMethodsConfig = .init(),
+        customerDetails: CustomerDetailsConfig = .init(),
         options: OptionsConfig = .init()
     ) {
         self.publicKey = publicKey
         self.card = card
         self.paymentMethods = paymentMethods
+        self.customerDetails = customerDetails
         self.options = options
     }
 }
@@ -91,6 +94,22 @@ public extension PaymentConfig {
 
     enum SubmitButtonType: String, Equatable, Sendable {
         case book, buy, checkout, donate, order, pay, subscribe, topUp, deposit
+    }
+
+    /// When a method is enabled, checkout asks `/inline-checkout/fields` which
+    /// shopper fields to collect. Card payments stay blocked until those fields
+    /// are valid. Apple Pay asks the wallet for the same sections and sends
+    /// whatever comes back.
+    public struct CustomerDetailsConfig: Equatable, Sendable {
+        public var card: Bool
+        public var applePay: Bool
+
+        public init(card: Bool = false, applePay: Bool = false) {
+            self.card = card
+            self.applePay = applePay
+        }
+
+        public var isAnyEnabled: Bool { card || applePay }
     }
 
     struct PaymentMethodsConfig: Equatable, Sendable {

@@ -9,7 +9,12 @@ struct PaymentService {
         self.env = env
     }
 
-    func cardFields(card: CardInput, orderPayload: String, orderChecksum: String) -> [String: String] {
+    func cardFields(
+        card: CardInput,
+        orderPayload: String,
+        orderChecksum: String,
+        customerDetails: CustomerDetails? = nil
+    ) -> [String: String] {
         var fields: [String: String] = [
             "cardNumber": CardFieldValidators.normalizeDigits(card.number),
             "cardExpiryMonth": card.expiryMonth,
@@ -20,16 +25,23 @@ struct PaymentService {
         ]
         if card.saveCard { fields["saveCard"] = "true" }
         if let name = card.holderName, !name.isEmpty { fields["cardHolderName"] = name }
+        appendCustomerDetails(customerDetails, to: &fields)
         DeviceMetadata.fields().forEach { fields[$0.key] = $0.value }
         return fields
     }
 
-    func savedCardFields(cardId: String, orderPayload: String, orderChecksum: String) -> [String: String] {
+    func savedCardFields(
+        cardId: String,
+        orderPayload: String,
+        orderChecksum: String,
+        customerDetails: CustomerDetails? = nil
+    ) -> [String: String] {
         var fields: [String: String] = [
             "jsonRequest": orderPayload,
             "checksum": orderChecksum,
             "cardId": cardId,
         ]
+        appendCustomerDetails(customerDetails, to: &fields)
         DeviceMetadata.fields().forEach { fields[$0.key] = $0.value }
         return fields
     }
@@ -38,7 +50,8 @@ struct PaymentService {
         walletType: String,
         token: String,
         orderPayload: String,
-        orderChecksum: String
+        orderChecksum: String,
+        customerDetails: CustomerDetails? = nil
     ) -> [String: String] {
         var fields: [String: String] = [
             "jsonRequest": orderPayload,
@@ -46,8 +59,14 @@ struct PaymentService {
             "digitalWalletType": walletType,
             "digitalWalletData": token,
         ]
+        appendCustomerDetails(customerDetails, to: &fields)
         DeviceMetadata.fields().forEach { fields[$0.key] = $0.value }
         return fields
+    }
+
+    private func appendCustomerDetails(_ details: CustomerDetails?, to fields: inout [String: String]) {
+        guard let json = details?.apiJSON() else { return }
+        fields["customerDetails"] = json
     }
 
     func confirmPayment(fields: [String: String]) async throws -> ConfirmPaymentResponse {

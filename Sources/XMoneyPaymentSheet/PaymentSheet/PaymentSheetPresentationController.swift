@@ -118,9 +118,21 @@ final class PaymentSheetPresentationController: UIPresentationController {
         stylePresentedView()
     }
 
+    /// Moves the sheet to the current target frame. Call from inside an existing animation block.
+    func applyTargetFrame() {
+        guard let presentedView else { return }
+        presentedView.transform = .identity
+        presentedView.frame = frameOfPresentedViewInContainerView
+    }
+
     /// `completion` runs once the sheet has settled at its new height, or
     /// immediately when no resize is needed.
-    func updateLayout(animated: Bool, completion: (() -> Void)? = nil) {
+    func updateLayout(
+        animated: Bool,
+        duration: TimeInterval = 0.28,
+        options: UIView.AnimationOptions = [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction],
+        completion: (() -> Void)? = nil
+    ) {
         guard let presentedView else {
             completion?()
             return
@@ -135,9 +147,9 @@ final class PaymentSheetPresentationController: UIPresentationController {
         let updates = { presentedView.frame = target }
         if animated {
             UIView.animate(
-                withDuration: 0.28,
+                withDuration: duration,
                 delay: 0,
-                options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction],
+                options: options,
                 animations: updates,
                 completion: { _ in completion?() }
             )
@@ -218,9 +230,9 @@ final class PaymentSheetPresentationController: UIPresentationController {
             center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
                 self?.handleKeyboard(note)
             },
-            center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
+            center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] note in
                 self?.keyboardHeight = 0
-                self?.updateLayout(animated: true)
+                self?.animateSheetWithKeyboard(note)
             },
         ]
     }
@@ -229,15 +241,29 @@ final class PaymentSheetPresentationController: UIPresentationController {
         guard let containerView,
               let endFrame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
         let converted = containerView.convert(endFrame, from: nil)
-        let overlap = max(0, containerView.bounds.maxY - converted.minY)
-        keyboardHeight = overlap
-        updateLayout(animated: true)
+        keyboardHeight = max(0, containerView.bounds.maxY - converted.minY)
+        animateSheetWithKeyboard(note)
+    }
+
+    /// Moves the sheet with the keyboard without building an animation curve from the notification.
+    /// An invalid curve value crashes as soon as a field becomes first responder.
+    private func animateSheetWithKeyboard(_ note: Notification) {
+        let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval ?? 0.25
+        UIView.animate(
+            withDuration: duration,
+            delay: 0,
+            options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction]
+        ) { [weak self] in
+            self?.applyTargetFrame()
+        }
     }
 }
 
 extension PaymentSheetPresentationController: UIGestureRecognizerDelegate {
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard gestureRecognizer == panGesture, let presentedView else { return true }
+        // A begun pan steals the drag from the details form even when handlePan only rubber-bands.
+        guard canDismiss() else { return false }
         let point = gestureRecognizer.location(in: presentedView)
         // Let nested scrollers (saved cards list) own the drag.
         if let scroll = scrollViewBlockingDismiss(at: point, in: presentedView) {
