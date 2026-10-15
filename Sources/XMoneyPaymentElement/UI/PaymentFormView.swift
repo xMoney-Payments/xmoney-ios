@@ -38,6 +38,7 @@ package final class PaymentFormView: UIView {
     private let rootStack = UIStackView()
     private let payButton = PayCTAButton()
     private var cardForm: CardFormView?
+    private var walletButton: PKPaymentButton?
     private var methodContainer: PaymentMethodContainerView?
     private var selection: MethodSelection
     private var isProcessing = false
@@ -150,6 +151,22 @@ package final class PaymentFormView: UIView {
 
     package var contentHeight: CGFloat { cachedContentHeight }
 
+    /// Card form has a real size, and the Apple Pay button has drawn when the
+    /// order offers it. Returns after a short cap if PassKit never paints.
+    /// Returns `false` when the form or the wallet button is not in a window,
+    /// including when a rebuild replaced the button during the wait.
+    @discardableResult
+    package func waitUntilSurfaceDrawn(timeout: TimeInterval = 2) async -> Bool {
+        layoutIfNeeded()
+        if let walletButton {
+            return await SurfacePaint.waitUntilButtonDrawn(walletButton, timeout: timeout)
+        }
+        return await SurfacePaint.waitUntilLaidOut(self, timeout: timeout)
+    }
+
+    var isLockedForTesting: Bool { !interactionEnabled }
+    var walletButtonForTesting: UIView? { walletButton }
+
     package override var intrinsicContentSize: CGSize {
         CGSize(width: UIView.noIntrinsicMetric, height: cachedContentHeight)
     }
@@ -190,6 +207,7 @@ package final class PaymentFormView: UIView {
             $0.removeFromSuperview()
         }
         cardForm = nil
+        walletButton = nil
         methodContainer = nil
         buildContent()
         if let draft {
@@ -304,6 +322,7 @@ package final class PaymentFormView: UIView {
 
     private func buildContent() {
         let t = theme
+        walletButton = nil
 
         if state.applePayAvailable, state.applePayReady {
             #if DEBUG
@@ -314,12 +333,12 @@ package final class PaymentFormView: UIView {
             }
             #endif
             let isDark = UIHelpers.isDarkMode(config: config, traitCollection: traitCollection)
-            let style = Self.applePayButtonStyle(
+            let style = ApplePayButtonFactory.style(
                 appearance: config.paymentMethods.applePay.appearance,
                 isDarkBackground: isDark
             )
-            let type = Self.applePayButtonType(from: config.paymentMethods.applePay.appearance.type)
-            let applePayButton = PKPaymentButton(paymentButtonType: type, paymentButtonStyle: style)
+            let type = ApplePayButtonFactory.type(from: config.paymentMethods.applePay.appearance.type)
+            let applePayButton = ApplePayButtonFactory.make(type: type, style: style)
             applePayButton.addTarget(self, action: #selector(applePayTapped), for: .touchUpInside)
             applePayButton.translatesAutoresizingMaskIntoConstraints = false
             applePayButton.heightAnchor.constraint(equalToConstant: t.walletButtonHeight).isActive = true
@@ -337,6 +356,7 @@ package final class PaymentFormView: UIView {
                 applePayButton.layer.shadowRadius = 9
                 applePayButton.layer.masksToBounds = false
             }
+            walletButton = applePayButton
             contentStack.addArrangedSubview(applePayButton)
             contentStack.addArrangedSubview(
                 OrDividerView(theme: t, label: Strings.text("sheet.or", locale: config.options.locale))
@@ -503,29 +523,4 @@ package final class PaymentFormView: UIView {
         onApplePay?()
     }
 
-    private static func applePayButtonStyle(
-        appearance: PaymentConfig.WalletAppearance,
-        isDarkBackground: Bool
-    ) -> PKPaymentButtonStyle {
-        switch appearance.color {
-        case .white: return .white
-        case .whiteOutline: return .whiteOutline
-        case .black: return .black
-        case nil: return isDarkBackground ? .white : .black
-        }
-    }
-
-    private static func applePayButtonType(from type: PaymentConfig.WalletButtonType?) -> PKPaymentButtonType {
-        switch type {
-        case .buy: return .buy
-        case .checkout: return .checkout
-        case .donate: return .donate
-        case .order: return .order
-        case .pay: return .inStore
-        case .subscribe: return .subscribe
-        case .book: return .book
-        case .topUp: return .topUp
-        case .plain, nil: return .plain
-        }
-    }
 }

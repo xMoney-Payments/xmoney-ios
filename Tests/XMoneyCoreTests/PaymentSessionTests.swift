@@ -290,6 +290,67 @@ final class PaymentSessionTests: XCTestCase {
         XCTAssertEqual(session.state?.savedCards.map(\.id), ["card-2"])
     }
 
+    func testLoadDoesNotChangeTheBoundOrderUntilCommit() async throws {
+        let session = try makeSession(applePayEnabled: false) { request in
+            StubHTTP.jsonResponse(for: request, sessionTokenCalls: TokenCallCounter())
+        }
+        _ = try await session.bind(intent: session.intent)
+        let bound = session.intent
+        let next = PaymentIntent(orderPayload: OrderPayload("e30="), orderChecksum: OrderChecksum("next"))
+
+        let candidate = try await session.load(intent: next)
+        XCTAssertTrue(session.isBound(bound))
+        XCTAssertFalse(session.isBound(next))
+        XCTAssertEqual(session.intent, bound)
+
+        session.commit(candidate)
+        XCTAssertTrue(session.isBound(next))
+        XCTAssertEqual(session.intent, next)
+    }
+
+    func testOlderBindFinishingLastDoesNotOverwriteNewerOrder() async throws {
+        let session = try makeSession(applePayEnabled: false) { request in
+            StubHTTP.jsonResponse(for: request, sessionTokenCalls: TokenCallCounter())
+        }
+        let gate = SessionGate()
+        let olderStarted = expectation(description: "older load started")
+        session.testingLoad = { intent in
+            if intent.orderChecksum == "older" {
+                olderStarted.fulfill()
+                await gate.wait()
+            }
+            return SheetState(
+                sessionToken: "tok-\(intent.orderChecksum)",
+                orderInfo: OrderPayloadInfo(
+                    cardTransactionMode: nil,
+                    isVerifyCard: false,
+                    amount: 1,
+                    currency: "EUR",
+                    externalOrderId: "order",
+                    isRecurring: false
+                ),
+                savedCards: [],
+                applePayAvailable: false
+            )
+        }
+        let older = PaymentIntent(orderPayload: OrderPayload("e30="), orderChecksum: OrderChecksum("older"))
+        let newer = PaymentIntent(orderPayload: OrderPayload("e30="), orderChecksum: OrderChecksum("newer"))
+
+        let olderBind = Task { @MainActor in try await session.bind(intent: older) }
+        await fulfillment(of: [olderStarted], timeout: 1)
+        _ = try await session.bind(intent: newer)
+        await gate.open()
+
+        do {
+            _ = try await olderBind.value
+            XCTFail("Expected the older bind to be superseded")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertTrue(session.isBound(newer))
+        XCTAssertEqual(session.state?.sessionToken, "tok-newer")
+    }
+
     private func makeSession(
         applePayEnabled: Bool,
         savedCardsEnabled: Bool = false,
@@ -351,6 +412,19 @@ private enum StubHTTP {
 
     static func json(_ object: [String: Any]) -> Data {
         (try? JSONSerialization.data(withJSONObject: object)) ?? Data("{}".utf8)
+    }
+}
+
+private actor SessionGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func open() {
+        continuation?.resume()
+        continuation = nil
     }
 }
 

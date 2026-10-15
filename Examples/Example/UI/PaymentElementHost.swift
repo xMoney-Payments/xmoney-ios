@@ -55,6 +55,9 @@ private struct PaymentElementHostRepresentable: UIViewControllerRepresentable {
         let key = orderKey
         guard context.coordinator.lastKey != key else { return }
         context.coordinator.lastKey = key
+        // The intent came back from `updateOrder { }`: it is already bound, and
+        // re-asserting it would cancel a newer update.
+        guard payment.boundIntent != intent else { return }
         Task { @MainActor in
             try? await uiViewController.element.updateOrder(intent: intent)
             uiViewController.publishHeight()

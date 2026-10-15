@@ -10,9 +10,9 @@ private let amountMinMinor: Int64 = 500
  * Update the bound order without unmounting Payment Element.
  *
  * Create a new `payload` + `checksum` on **your** server, then pass that
- * `PaymentIntent` into the mounted Element. Pay is locked until it returns
- * (`isInteractionEnabled`). The Pay button keeps its current title — this
- * does not emit `.processing`.
+ * server call to `updateOrder`. Pay is locked while the order is created and
+ * bound (`isInteractionEnabled`). The Pay button keeps its current title —
+ * this does not emit `.processing`.
  */
 struct UpdateOrderSampleView: View {
     @EnvironmentObject private var theme: ExampleThemeState
@@ -22,7 +22,9 @@ struct UpdateOrderSampleView: View {
     @State private var error: String?
     @State private var payment: EmbeddedPayment?
     @State private var ready = false
-    @State private var interactionEnabled = false
+    @State private var loadFailed = false
+    @State private var retryKey = 0
+    @State private var processing = false
 
     var body: some View {
         let style = exampleForcedStyle(theme.isDark)
@@ -36,18 +38,19 @@ struct UpdateOrderSampleView: View {
 
         SampleScaffold(
             title: "Update order",
-            subtitle: "updateOrder() a new PaymentIntent — Pay locked until Ready.",
+            subtitle: "updateOrder() a new PaymentIntent — Pay locked until it returns.",
             scrollable: true,
             showTestCards: true
         ) {
-            UpdateOrderCard(amountMinor: amountMinor, enabled: !consumed && interactionEnabled) { amountMinor = $0 }
+            UpdateOrderCard(amountMinor: amountMinor, enabled: ready && !consumed && !processing) { amountMinor = $0 }
             if consumed, let lastResult {
                 ExampleResultPanel(result: lastResult)
                 ExampleButton(label: "New payment", variant: .secondary) {
                     self.lastResult = nil
                     hostIntent = nil
                     ready = false
-                    interactionEnabled = false
+                    loadFailed = false
+                    processing = false
                     amountMinor = SAMPLE_AMOUNT_MINOR
                 }
             } else if hostIntent == nil {
@@ -55,10 +58,23 @@ struct UpdateOrderSampleView: View {
             } else if let hostIntent, let payment {
                 MerchantReadyGate(ready: ready, message: "Preparing checkout…") {
                     PaymentElementHost(payment: payment, intent: hostIntent) { event in
-                        if case .ready = event {
+                        switch event {
+                        case .ready:
                             ready = true
-                            interactionEnabled = payment.isInteractionEnabled
+                            loadFailed = false
+                        case let .processing(isProcessing):
+                            processing = isProcessing
+                        case let .updateFailed(failure):
+                            error = failure.message
                         }
+                    }
+                }
+                if loadFailed {
+                    // Keep the gate open: a repeat failure in the same streak does not deliver `.failed` again.
+                    ExampleButton(label: "Try again", variant: .secondary) {
+                        lastResult = nil
+                        self.hostIntent = nil
+                        retryKey += 1
                     }
                 }
             }
@@ -73,18 +89,19 @@ struct UpdateOrderSampleView: View {
         .onChange(of: theme.isDark) { _ in
             applyLiveTheme(configuration)
         }
-        .task(id: "\(amountMinor)-\(consumed)-\(payment != nil)") {
-            guard !consumed, payment != nil else { return }
-            if hostIntent != nil {
-                await MainActor.run { interactionEnabled = false }
-                try? await Task.sleep(nanoseconds: 300_000_000)
-            }
+        .task(id: "\(amountMinor)-\(consumed)-\(payment != nil)-\(retryKey)") {
+            guard !consumed, let payment else { return }
             error = nil
             do {
-                let next = try await DemoCheckoutBackend.createPaymentIntent(amountMinor: amountMinor)
-                await MainActor.run {
-                    if hostIntent != nil { interactionEnabled = false }
-                    hostIntent = next
+                if hostIntent == nil {
+                    let next = try await DemoCheckoutBackend.createPaymentIntent(amountMinor: amountMinor)
+                    await MainActor.run { hostIntent = next }
+                } else {
+                    let next = try await payment.updateOrder {
+                        try await Task.sleep(nanoseconds: 300_000_000)
+                        return try await DemoCheckoutBackend.createPaymentIntent(amountMinor: amountMinor)
+                    }
+                    await MainActor.run { hostIntent = next }
                 }
             } catch {
                 guard !isCancellation(error) else { return }
@@ -101,6 +118,11 @@ struct UpdateOrderSampleView: View {
         lastResult = result
         if result == .canceled, payment?.isOrderConsumed == false {
             lastResult = nil
+        }
+        // A failed first load emits no `.ready`: open the gate onto the SDK failure label.
+        if case .failed = result {
+            ready = true
+            loadFailed = true
         }
     }
 

@@ -662,7 +662,11 @@ private struct EmbeddedCheckoutScreen: View {
                         placeholder: { ExampleCheckoutSkeleton(showOrder: false, showForm: true) }
                     ) {
                         PaymentElementHost(payment: payment, intent: intent) { event in
-                            if case .ready = event { ready = true }
+                            switch event {
+                            case .ready: ready = true
+                            case .processing: break
+                            case let .updateFailed(failure): error = failure.message
+                            }
                         }
                     }
                     .padding(.horizontal, 20)
@@ -699,17 +703,25 @@ private struct EmbeddedCheckoutScreen: View {
         }
         .task(id: "\(total)-\(description)-\(retryKey)-\(theme.isDark)-\(payment != nil)") {
             if lines.isEmpty || payment == nil { return }
-            if intent != nil {
-                try? await Task.sleep(nanoseconds: 300_000_000)
-            }
             error = nil
             do {
-                let next = try await DemoCheckoutBackend.createPaymentIntent(
-                    amountMinor: total,
-                    description: description
-                )
-                guard !Task.isCancelled else { return }
-                await MainActor.run { intent = next }
+                if intent == nil {
+                    let next = try await DemoCheckoutBackend.createPaymentIntent(
+                        amountMinor: total,
+                        description: description
+                    )
+                    guard !Task.isCancelled else { return }
+                    await MainActor.run { intent = next }
+                } else if let payment {
+                    let next = try await payment.updateOrder {
+                        try await Task.sleep(nanoseconds: 300_000_000)
+                        return try await DemoCheckoutBackend.createPaymentIntent(
+                            amountMinor: total,
+                            description: description
+                        )
+                    }
+                    await MainActor.run { intent = next }
+                }
             } catch {
                 guard !isCancellation(error) else { return }
                 await MainActor.run { self.error = error.localizedDescription }

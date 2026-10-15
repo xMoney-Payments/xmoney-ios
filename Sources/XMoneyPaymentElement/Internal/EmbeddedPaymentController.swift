@@ -3,6 +3,18 @@ import UIKit
 import XMoneyCore
 #endif
 
+/// Who asked for a rebind. Merchant calls always supersede in-flight work;
+/// the SDK's own declarative host re-asserting the bound intent does not.
+enum BindOrigin {
+    case merchant
+    /// The host mounted with its current intent. It may be older than an
+    /// order the merchant bound directly, so it never clears the stale lock.
+    case surfaceMount
+    /// The host's intent changed. Switching back to the bound intent means
+    /// the cart matches it again, so the stale lock clears.
+    case surfaceUpdate
+}
+
 @MainActor
 final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     private var liveConfiguration: PaymentConfig
@@ -14,17 +26,35 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     private var threeDSSession: ThreeDSSafariController?
     private weak var hostView: UIView?
     private var prepareGeneration = 0
+    private var createOrderTask: Task<PaymentIntent, Error>?
     private var operationTask: Task<Void, Never>?
     private var submitHandler: (() -> Void)?
     private var onLiveConfigChange: (() -> Void)?
-    private(set) var isUpdatingOrder = false
+    private var onOrderLockChange: ((Bool) -> Void)?
+    private var onOrderBound: ((SheetState) -> Void)?
+    private var initialFailureReported = false
+    private(set) var isUpdatingOrder = false {
+        didSet { publishOrderLock(oldValue: oldValue || isStaleOrder) }
+    }
+    /// A later bind failed: the bound order no longer matches the cart, so Pay
+    /// stays locked until a bind succeeds.
+    private(set) var isStaleOrder = false {
+        didSet { publishOrderLock(oldValue: isUpdatingOrder || oldValue) }
+    }
+
+    var isOrderLocked: Bool { isUpdatingOrder || isStaleOrder }
 
     var sheetState: SheetState? { session?.state }
+    var boundIntent: PaymentIntent? {
+        guard let session, session.isBound else { return nil }
+        return session.intent
+    }
     /// In-flight charge only. Order rebind uses `isUpdatingOrder`, not this flag.
     var isProcessing: Bool { session?.isProcessing ?? false }
     var isOrderConsumed: Bool { session?.isOrderConsumed ?? false }
     var isInteractionEnabled: Bool {
-        !isUpdatingOrder && (session?.isInteractionEnabled ?? false)
+        guard !isOrderLocked, let session, session.isBound else { return false }
+        return session.isInteractionEnabled
     }
 
     init(
@@ -41,6 +71,24 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
 
     func setOnLiveConfigChange(_ handler: (() -> Void)?) {
         onLiveConfigChange = handler
+    }
+
+    func setOnOrderLockChange(_ handler: ((Bool) -> Void)?) {
+        onOrderLockChange = handler
+        handler?(isOrderLocked)
+    }
+
+    func setOnOrderBound(_ handler: ((SheetState) -> Void)?) {
+        onOrderBound = handler
+    }
+
+    func emit(_ event: EmbeddedEvent) {
+        onEvent(event)
+    }
+
+    private func publishOrderLock(oldValue: Bool) {
+        guard isOrderLocked != oldValue else { return }
+        onOrderLockChange?(isOrderLocked)
     }
 
     /// Submit the currently selected method (new card or saved card).
@@ -79,48 +127,142 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         onLiveConfigChange?()
     }
 
-    func prepare(intent: PaymentIntent, onEvent: @escaping (EmbeddedEvent) -> Void = { _ in }) async throws {
-        guard !(session?.isProcessing ?? false) else {
-            throw PaymentError.payment("Payment in progress")
+    private func isBoundAndPayable(_ intent: PaymentIntent) -> Bool {
+        guard let session else { return false }
+        return session.isBound(intent) && !session.isOrderConsumed
+    }
+
+    func prepare(
+        intent: PaymentIntent,
+        origin: BindOrigin = .merchant,
+        onEvent: ((EmbeddedEvent) -> Void)? = nil
+    ) async throws {
+        if let onEvent {
+            self.onEvent = onEvent
         }
-        self.onEvent = onEvent
+        paymentConfig = liveConfiguration
+        if session?.isProcessing == true {
+            if session?.isBound(intent) == true { return }
+            throw PaymentError.paymentInProgress
+        }
+        if origin != .merchant, isBoundAndPayable(intent) {
+            if origin == .surfaceUpdate {
+                isStaleOrder = false
+            }
+            return
+        }
+        prepareGeneration += 1
+        let generation = prepareGeneration
+        createOrderTask?.cancel()
+        createOrderTask = nil
+        if isBoundAndPayable(intent) {
+            isStaleOrder = false
+            isUpdatingOrder = false
+            return
+        }
+        isUpdatingOrder = true
+        try await bindLocked(intent: intent, generation: generation)
+    }
+
+    @discardableResult
+    func updateOrder(
+        onEvent: ((EmbeddedEvent) -> Void)? = nil,
+        createOrder: @escaping @MainActor () async throws -> PaymentIntent
+    ) async throws -> PaymentIntent {
+        if let onEvent {
+            self.onEvent = onEvent
+        }
+        guard !(session?.isProcessing ?? false) else {
+            throw PaymentError.paymentInProgress
+        }
         paymentConfig = liveConfiguration
         prepareGeneration += 1
         let generation = prepareGeneration
         isUpdatingOrder = true
 
+        createOrderTask?.cancel()
+        let task = Task { @MainActor in try await createOrder() }
+        createOrderTask = task
+        let intent: PaymentIntent
         do {
-            if session == nil {
-                session = try PaymentSession(configuration: liveConfiguration, intent: intent)
+            intent = try await withTaskCancellationHandler {
+                try await task.value
+            } onCancel: {
+                task.cancel()
             }
-            guard let session else { return }
-            let state = try await session.bind(intent: intent)
-            guard generation == prepareGeneration else { return }
-            _ = state
-            isUpdatingOrder = false
-            onEvent(.ready)
-        } catch is CancellationError {
-            guard generation == prepareGeneration else { return }
-            isUpdatingOrder = false
-            throw CancellationError()
-        } catch let error as PaymentError {
-            guard generation == prepareGeneration else { return }
-            isUpdatingOrder = false
-            onResult(.failed(error.merchantFacing()))
-            throw error
+            try Task.checkCancellation()
         } catch {
-            guard generation == prepareGeneration else { return }
+            guard generation == prepareGeneration else {
+                throw CancellationError()
+            }
+            createOrderTask = nil
             isUpdatingOrder = false
-            let mapped = PaymentError.load(error.localizedDescription)
-            onResult(.failed(mapped.merchantFacing()))
             throw error
         }
+
+        guard generation == prepareGeneration else {
+            throw CancellationError()
+        }
+        createOrderTask = nil
+        if isBoundAndPayable(intent) {
+            isStaleOrder = false
+            isUpdatingOrder = false
+            return intent
+        }
+        try await bindLocked(intent: intent, generation: generation)
+        return intent
+    }
+
+    private func bindLocked(intent: PaymentIntent, generation: Int) async throws {
+        let initial = !(session?.isBound ?? false)
+        do {
+            let session = try self.session ?? makeSession(intent: intent)
+            self.session = session
+            let candidate = try await session.load(intent: intent)
+            guard generation == prepareGeneration else {
+                throw CancellationError()
+            }
+            let state = session.commit(candidate)
+            initialFailureReported = false
+            isStaleOrder = false
+            isUpdatingOrder = false
+            onOrderBound?(state)
+        } catch {
+            let superseded = generation != prepareGeneration
+            if superseded || error is CancellationError || Task.isCancelled {
+                if !superseded {
+                    isUpdatingOrder = false
+                }
+                throw CancellationError()
+            }
+            let mapped = (error as? PaymentError) ?? PaymentError.load(error.localizedDescription)
+            if initial {
+                isUpdatingOrder = false
+                if !initialFailureReported {
+                    initialFailureReported = true
+                    onResult(.failed(mapped.merchantFacing()))
+                }
+            } else {
+                isStaleOrder = true
+                isUpdatingOrder = false
+                emit(.updateFailed(mapped.merchantFacing()))
+            }
+            throw error
+        }
+    }
+
+    private func makeSession(intent: PaymentIntent) throws -> PaymentSession {
+        let session = try PaymentSession(configuration: liveConfiguration, intent: intent)
+        #if DEBUG
+        session.testingLoad = testingLoad
+        #endif
+        return session
     }
 
     func startApplePay() {
         guard isInteractionEnabled, let session,
               let authorizer = session.makeWalletAuthorizer(presenter: self) else { return }
-        onEvent(.processing(true))
+        emit(.processing(true))
         operationTask?.cancel()
         operationTask = Task { @MainActor in
             let result = await session.startWallet(authorizer)
@@ -137,7 +279,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         let holderInvalid = CardFieldValidators.validateHolderName(input.holderName) != nil
         if numberInvalid || expiryInvalid || cvvInvalid || holderInvalid { return }
 
-        onEvent(.processing(true))
+        emit(.processing(true))
         operationTask?.cancel()
         operationTask = Task { @MainActor in
             let result = await session.submitNewCard(input, presenter: self)
@@ -147,7 +289,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
 
     func paySavedCard(_ card: SavedCard) {
         guard isInteractionEnabled, let session else { return }
-        onEvent(.processing(true))
+        emit(.processing(true))
         operationTask?.cancel()
         operationTask = Task { @MainActor in
             let result = await session.submitSavedCard(cardId: card.id, presenter: self)
@@ -162,7 +304,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     }
 
     private func deliver(_ result: EngineResult) {
-        onEvent(.processing(false))
+        emit(.processing(false))
         onResult(OrderConsumption.merchantResult(result))
     }
 
@@ -207,4 +349,26 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         }
         return root
     }
+
+    #if DEBUG
+    /// Replaces the network load for every session this controller creates.
+    var testingLoad: ((PaymentIntent) async throws -> SheetState)? {
+        didSet { session?.testingLoad = testingLoad }
+    }
+
+    func testingInstallBound(
+        _ intent: PaymentIntent,
+        state: SheetState,
+        processing: Bool = false
+    ) throws {
+        if session == nil {
+            session = try makeSession(intent: intent)
+        }
+        try session?.testingInstall(intent: intent, state: state, processing: processing)
+    }
+
+    func testingFailNextBind(_ error: Error) {
+        session?.testingBindError = error
+    }
+    #endif
 }

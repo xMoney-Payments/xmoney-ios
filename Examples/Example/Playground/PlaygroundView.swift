@@ -196,6 +196,8 @@ struct PlaygroundView: View {
                 lastResult = nil
                 return
             }
+            // A failed first load emits no `.ready`: open the gate onto the SDK failure label.
+            if case .failed = result { ready = true }
             inlineConsumed = payment?.isOrderConsumed ?? true
         }
         applePay = ApplePay(configuration: configuration) { result in
@@ -218,23 +220,41 @@ struct PlaygroundView: View {
             await MainActor.run { error = message }
             return
         }
+        let isInitial = pendingOrder == nil
         await MainActor.run {
             isLoading = true
             error = nil
             lastResult = nil
-            ready = false
+            if isInitial {
+                ready = false
+            }
             inlineConsumed = false
         }
         do {
-            let intent = try await DemoCheckoutBackend.createPaymentIntent(
-                amountMinor: amountMinor,
-                description: ExampleSecrets.orderDescription
-            )
-            if mode == .applePay {
-                try await applePay?.updateOrder(intent: intent)
+            let createOrder: @MainActor () async throws -> PaymentIntent = {
+                if !isInitial {
+                    try await Task.sleep(nanoseconds: 300_000_000)
+                }
+                return try await DemoCheckoutBackend.createPaymentIntent(
+                    amountMinor: amountMinor,
+                    description: ExampleSecrets.orderDescription
+                )
             }
+            let next: PaymentIntent?
+            if isInitial {
+                let intent = try await createOrder()
+                if mode == .applePay {
+                    try await applePay?.updateOrder(intent: intent)
+                }
+                next = intent
+            } else if mode == .embedded {
+                next = try await payment?.updateOrder(createOrder: createOrder)
+            } else {
+                next = try await applePay?.updateOrder(createOrder: createOrder)
+            }
+            guard let next else { return }
             await MainActor.run {
-                pendingOrder = intent
+                pendingOrder = next
                 isLoading = false
                 if mode != .embedded {
                     ready = true

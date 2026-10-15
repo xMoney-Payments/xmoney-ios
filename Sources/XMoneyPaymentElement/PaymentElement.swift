@@ -9,9 +9,13 @@ public final class PaymentElement: UIView {
     private let onEvent: (EmbeddedEvent) -> Void
     private let loaderHost = UIView()
     private var loader: XCoinFlipLoaderView?
+    private var failureLabel: UILabel?
     private var formView: PaymentFormView?
-    /// Bumps on each ``prepare(intent:)`` so overlapping async prepares discard stale results.
-    private var prepareGeneration = 0
+    private var readyEmitted = false
+    private var revealTask: Task<Void, Never>?
+    /// The form is rendered under the cover but the Element is not in a window,
+    /// so the draw wait resumes from `didMoveToWindow`.
+    private var pendingReveal = false
 
     /// Fired when the form’s measured height changes (saved-card expand, errors, locale).
     public var onContentSizeChange: (() -> Void)?
@@ -29,76 +33,102 @@ public final class PaymentElement: UIView {
         payment._controller.setOnLiveConfigChange { [weak self] in
             self?.applyLiveConfig()
         }
+        payment._controller.setOnOrderLockChange { [weak self] locked in
+            self?.formView?.setUpdatingOrder(locked)
+        }
+        payment._controller.setOnOrderBound { [weak self] state in
+            self?.orderBound(state)
+        }
         setupLoader()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    private var controller: EmbeddedPaymentController { payment._controller }
+
+    /// Binds `intent` and renders the form. Returns once the surface has drawn
+    /// (or the draw cap passed). A superseded call throws `CancellationError`
+    /// and leaves the loader for the newer bind.
     @MainActor
     public func prepare(intent: PaymentIntent) async throws {
-        if formView != nil {
-            try await updateOrder(intent: intent)
-            return
-        }
-        prepareGeneration += 1
-        let generation = prepareGeneration
-        showLoader()
-        try await payment.prepare(intent: intent) { [weak self] event in
-            Task { @MainActor in
-                guard let self, self.prepareGeneration == generation else { return }
-                self.onEvent(event)
-                switch event {
-                case .ready:
-                    break
-                case let .processing(isProcessing):
-                    self.formView?.setProcessing(isProcessing)
-                    self.formView?.setOrderConsumed(self.payment.isOrderConsumed)
-                }
-            }
-        }
-        guard !Task.isCancelled, prepareGeneration == generation else { return }
-        renderForm()
+        try await bind(intent: intent, origin: .merchant)
     }
 
     /// Rebinds a new signed order in place. The form stays mounted; Pay is
     /// locked with its current title until bind finishes. Does not show
-    /// “Processing...”.
+    /// “Processing...”. The newest call wins, even for the bound intent.
     @MainActor
     public func updateOrder(intent: PaymentIntent) async throws {
-        if formView == nil {
-            try await prepare(intent: intent)
-            return
+        try await bind(intent: intent, origin: .merchant)
+    }
+
+    /// Locks Pay immediately, creates the next signed order, binds it in
+    /// place, and returns it. If `createOrder` throws, the previous order
+    /// remains payable.
+    @MainActor
+    @discardableResult
+    public func updateOrder(
+        createOrder: @escaping @MainActor () async throws -> PaymentIntent
+    ) async throws -> PaymentIntent {
+        let hadForm = formView != nil
+        if !hadForm, failureLabel == nil {
+            showLoader()
         }
-        prepareGeneration += 1
-        let generation = prepareGeneration
-        formView?.setUpdatingOrder(true)
         do {
-            try await payment.updateOrder(intent: intent) { [weak self] event in
-                Task { @MainActor in
-                    guard let self, self.prepareGeneration == generation else { return }
-                    self.onEvent(event)
-                    switch event {
-                    case .ready:
-                        break
-                    case let .processing(isProcessing):
-                        self.formView?.setProcessing(isProcessing)
-                        self.formView?.setOrderConsumed(self.payment.isOrderConsumed)
-                    }
-                }
+            let intent = try await payment.updateOrder(onEvent: forwarder(), createOrder: createOrder)
+            if formView == nil {
+                renderForm()
             }
-            guard !Task.isCancelled, prepareGeneration == generation else { return }
-            if let state = payment._controller.sheetState {
-                formView?.update(state: state)
-            }
-            formView?.setUpdatingOrder(false)
-            formView?.setProcessing(payment.isProcessing)
-            formView?.setOrderConsumed(payment.isOrderConsumed)
-            invalidateIntrinsicContentSize()
-            onContentSizeChange?()
+            await refreshForm()
+            return intent
         } catch {
-            guard prepareGeneration == generation else { throw error }
-            formView?.setUpdatingOrder(false)
+            syncFormState()
+            if formView == nil {
+                showFailureIfNeeded(error)
+            } else {
+                await revealIfCovered()
+            }
+            throw error
+        }
+    }
+
+    /// Binds on behalf of `origin`. The SwiftUI host uses a surface origin so that
+    /// re-asserting the bound intent never cancels a merchant update.
+    @MainActor
+    func bind(intent: PaymentIntent, origin: BindOrigin) async throws {
+        if formView == nil {
+            try await initialBind(intent: intent, origin: origin)
+        } else {
+            try await rebind(intent: intent, origin: origin)
+        }
+    }
+
+    private func initialBind(intent: PaymentIntent, origin: BindOrigin) async throws {
+        if failureLabel == nil {
+            showLoader()
+        }
+        do {
+            try await controller.prepare(intent: intent, origin: origin, onEvent: forwarder())
+        } catch {
+            if formView == nil {
+                showFailureIfNeeded(error)
+            }
+            throw error
+        }
+        if formView == nil {
+            renderForm()
+        }
+        await revealIfCovered()
+    }
+
+    private func rebind(intent: PaymentIntent, origin: BindOrigin) async throws {
+        do {
+            try await controller.prepare(intent: intent, origin: origin, onEvent: forwarder())
+            await refreshForm()
+        } catch {
+            syncFormState()
+            await revealIfCovered()
             throw error
         }
     }
@@ -133,6 +163,124 @@ public final class PaymentElement: UIView {
 
     public var isOrderConsumed: Bool { payment.isOrderConsumed }
 
+    private func forwarder() -> (EmbeddedEvent) -> Void {
+        { [weak self] event in
+            Task { @MainActor in
+                self?.forward(event)
+            }
+        }
+    }
+
+    /// Charge and update events always reach the merchant: they describe the
+    /// charge or the bind, not a particular `updateOrder` call. `.ready` is
+    /// emitted by the Element itself after the first draw.
+    private func forward(_ event: EmbeddedEvent) {
+        switch event {
+        case .ready:
+            break
+        case let .processing(isProcessing):
+            onEvent(event)
+            formView?.setProcessing(isProcessing)
+            formView?.setOrderConsumed(payment.isOrderConsumed)
+        case .updateFailed:
+            onEvent(event)
+        }
+    }
+
+    private func orderBound(_ state: SheetState) {
+        if let formView {
+            formView.update(state: state)
+        } else if !loaderHost.isHidden {
+            renderForm()
+            Task { @MainActor [weak self] in
+                await self?.revealIfCovered()
+            }
+        }
+    }
+
+    private func syncFormState() {
+        formView?.setUpdatingOrder(controller.isOrderLocked)
+        formView?.setProcessing(controller.isProcessing)
+        formView?.setOrderConsumed(controller.isOrderConsumed)
+    }
+
+    private func refreshForm() async {
+        syncFormState()
+        if !loaderHost.isHidden {
+            await revealIfCovered()
+        }
+        invalidateIntrinsicContentSize()
+        onContentSizeChange?()
+    }
+
+    /// Lifts the cover once the current form has drawn. Owned by the view, not
+    /// the caller: cancelling the caller's task does not leave the cover up.
+    private func revealIfCovered() async {
+        guard formView != nil, !loaderHost.isHidden else { return }
+        if revealTask == nil {
+            guard window != nil else {
+                pendingReveal = true
+                return
+            }
+            startRevealTask()
+        }
+        await revealTask?.value
+    }
+
+    private func startRevealTask() {
+        guard let form = formView else { return }
+        pendingReveal = false
+        layoutIfNeeded()
+        revealTask = Task { @MainActor [weak self] in
+            guard let outcome = await self?.waitForSurface(form) else { return }
+            guard let self, self.formView === form, !Task.isCancelled else { return }
+            self.revealTask = nil
+            if outcome {
+                self.revealIfNeeded()
+            } else {
+                self.pendingReveal = true
+            }
+        }
+    }
+
+    private static let revealTimeout: TimeInterval = 2
+
+    /// `true` once `form` has drawn or the cap passed; `false` when the Element
+    /// left its window; `nil` when the form was replaced or the task cancelled.
+    /// A rebuild that replaces the wallet button restarts the wait on the new
+    /// button, under the same deadline.
+    private func waitForSurface(_ form: PaymentFormView) async -> Bool? {
+        let deadline = ProcessInfo.processInfo.systemUptime + Self.revealTimeout
+        while true {
+            let remaining = max(deadline - ProcessInfo.processInfo.systemUptime, 0)
+            #if DEBUG
+            if let hook = testingOnRevealWaitStarted {
+                testingOnRevealWaitStarted = nil
+                Task { @MainActor in hook() }
+            }
+            #endif
+            let drawn = await form.waitUntilSurfaceDrawn(timeout: remaining)
+            guard formView === form, !Task.isCancelled else { return nil }
+            if drawn { return true }
+            guard window != nil, form.window != nil else { return false }
+            if ProcessInfo.processInfo.systemUptime >= deadline { return true }
+            try? await Task.sleep(nanoseconds: 16_000_000)
+        }
+    }
+
+    public override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window == nil {
+            if revealTask != nil {
+                revealTask?.cancel()
+                revealTask = nil
+                pendingReveal = formView != nil && !loaderHost.isHidden
+            }
+        } else if pendingReveal {
+            startRevealTask()
+        }
+    }
+
     private func setupLoader() {
         loaderHost.translatesAutoresizingMaskIntoConstraints = false
         addSubview(loaderHost)
@@ -146,32 +294,98 @@ public final class PaymentElement: UIView {
         showLoader()
     }
 
+    private var locale: String {
+        controller.paymentConfig?.options.locale ?? "en"
+    }
+
     private func showLoader() {
-        payment._controller.bindSubmitHandler(nil)
+        controller.bindSubmitHandler(nil)
+        revealTask?.cancel()
+        revealTask = nil
+        pendingReveal = false
         formView?.removeFromSuperview()
         formView = nil
         loaderHost.isHidden = false
-        loader?.removeFromSuperview()
+        failureLabel?.removeFromSuperview()
+        failureLabel = nil
+        installLoaderIfNeeded()
+    }
+
+    private func installLoaderIfNeeded() {
+        guard loader == nil else { return }
         let flip = XCoinFlipLoaderView()
         flip.translatesAutoresizingMaskIntoConstraints = false
+        flip.accessibilityLabel = Strings.text("element.loading", locale: locale)
+        flip.accessibilityTraits = .updatesFrequently
         loaderHost.addSubview(flip)
         NSLayoutConstraint.activate([
             flip.centerXAnchor.constraint(equalTo: loaderHost.centerXAnchor),
             flip.centerYAnchor.constraint(equalTo: loaderHost.centerYAnchor),
         ])
         loader = flip
+        if UIAccessibility.isVoiceOverRunning, window != nil {
+            UIAccessibility.post(notification: .announcement, argument: flip.accessibilityLabel)
+        }
     }
 
-    private func renderForm() {
-        let controller = payment._controller
-        guard let config = controller.paymentConfig, let state = controller.sheetState else { return }
+    /// The initial bind failed. A superseded bind and a charge in flight are
+    /// not failures: the loader stays for the newer bind or the retry.
+    private func showFailureIfNeeded(_ error: Error) {
+        if error is CancellationError { return }
+        if let paymentError = error as? PaymentError, paymentError == .paymentInProgress { return }
+        showFailure(error)
+    }
 
+    func showFailure(_ error: Error) {
         loader?.stopAnimating()
         loader?.removeFromSuperview()
         loader = nil
-        loaderHost.isHidden = true
+        failureLabel?.removeFromSuperview()
 
+        let config = controller.paymentConfig
+        if let config {
+            overrideUserInterfaceStyle = UIHelpers.overrideStyle(for: config)
+        }
+        let label = UILabel()
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.numberOfLines = 0
+        label.textAlignment = .center
+        label.font = .preferredFont(forTextStyle: .body)
+        label.adjustsFontForContentSizeCategory = true
+        label.accessibilityTraits = .staticText
+        label.text = Strings.text("element.loadFailed", locale: locale)
+        if let config {
+            let theme = CheckoutTheme.resolve(
+                config: config,
+                isDark: UIHelpers.isDarkMode(config: config, traitCollection: traitCollection)
+            )
+            label.textColor = theme.text
+            loaderHost.backgroundColor = theme.background
+        } else {
+            label.textColor = .label
+        }
+        loaderHost.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: loaderHost.leadingAnchor, constant: 24),
+            label.trailingAnchor.constraint(equalTo: loaderHost.trailingAnchor, constant: -24),
+            label.centerYAnchor.constraint(equalTo: loaderHost.centerYAnchor),
+        ])
+        loaderHost.isHidden = false
+        failureLabel = label
+        if UIAccessibility.isVoiceOverRunning, window != nil {
+            UIAccessibility.post(notification: .announcement, argument: label.text)
+        }
+    }
+
+    private func renderForm() {
+        guard let config = controller.paymentConfig, let state = controller.sheetState else { return }
+
+        revealTask?.cancel()
+        revealTask = nil
         formView?.removeFromSuperview()
+        failureLabel?.removeFromSuperview()
+        failureLabel = nil
+        installLoaderIfNeeded()
         let form = PaymentFormView(config: config, state: state)
         form.translatesAutoresizingMaskIntoConstraints = false
         form.onPayCard = { [weak self] input in
@@ -197,8 +411,9 @@ public final class PaymentElement: UIView {
             form?.confirm()
         }
         form.setProcessing(controller.isProcessing)
-        form.setUpdatingOrder(controller.isUpdatingOrder)
+        form.setUpdatingOrder(controller.isOrderLocked)
         form.setOrderConsumed(controller.isOrderConsumed)
+        form.accessibilityElementsHidden = true
         overrideUserInterfaceStyle = UIHelpers.overrideStyle(for: config)
         addSubview(form)
         NSLayoutConstraint.activate([
@@ -208,10 +423,67 @@ public final class PaymentElement: UIView {
             form.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
         formView = form
+        bringSubviewToFront(loaderHost)
+        let theme = CheckoutTheme.resolve(
+            config: config,
+            isDark: UIHelpers.isDarkMode(config: config, traitCollection: traitCollection)
+        )
+        loaderHost.backgroundColor = theme.background
+        loaderHost.isHidden = false
         invalidateIntrinsicContentSize()
         setNeedsLayout()
         onContentSizeChange?()
     }
+
+    private func revealForm() {
+        formView?.accessibilityElementsHidden = false
+        loader?.stopAnimating()
+        loader?.removeFromSuperview()
+        loader = nil
+        loaderHost.backgroundColor = .clear
+        loaderHost.isHidden = true
+        UIAccessibility.post(notification: .layoutChanged, argument: formView)
+    }
+
+    /// Reveals the drawn form and emits `.ready` once per mounted Element.
+    /// The failure state never reveals and never emits `.ready`.
+    func revealIfNeeded() {
+        guard formView != nil, failureLabel == nil, !loaderHost.isHidden else { return }
+        revealForm()
+        if !readyEmitted {
+            readyEmitted = true
+            onEvent(.ready)
+        }
+    }
+
+    var isLoaderVisible: Bool { loader != nil && !loaderHost.isHidden }
+    var isFailureVisible: Bool { failureLabel != nil && !loaderHost.isHidden }
+    var isFormVisible: Bool { formView != nil && loaderHost.isHidden }
+    var isPayLockedForTesting: Bool { formView?.isLockedForTesting ?? true }
+    var walletButtonForTesting: UIView? { formView?.walletButtonForTesting }
+    var failureMessage: String? { failureLabel?.text }
+
+    #if DEBUG
+    /// Runs once, at the first suspension of the next reveal wait.
+    var testingOnRevealWaitStarted: (() -> Void)?
+
+    func _installFormForTesting(
+        config: PaymentConfig,
+        state: SheetState
+    ) {
+        let form = PaymentFormView(config: config, state: state)
+        form.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(form)
+        NSLayoutConstraint.activate([
+            form.topAnchor.constraint(equalTo: topAnchor),
+            form.leadingAnchor.constraint(equalTo: leadingAnchor),
+            form.trailingAnchor.constraint(equalTo: trailingAnchor),
+            form.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        formView = form
+        bringSubviewToFront(loaderHost)
+    }
+    #endif
 
     private func applyLiveConfig() {
         guard let config = payment._controller.paymentConfig else { return }
@@ -245,27 +517,24 @@ public struct PaymentElementView: UIViewRepresentable {
     }
 
     public func makeUIView(context: Context) -> PaymentElement {
-        let element = PaymentElement(payment: payment, onEvent: onEvent)
-        context.coordinator.element = element
-        let key = orderKey
-        context.coordinator.lastOrderKey = key
-        context.coordinator.prepareTask?.cancel()
-        context.coordinator.prepareTask = Task { @MainActor in
-            guard !Task.isCancelled else { return }
-            try? await element.prepare(intent: intent)
+        let coordinator = context.coordinator
+        coordinator.onEvent = onEvent
+        let element = PaymentElement(payment: payment) { [weak coordinator] event in
+            coordinator?.onEvent(event)
+            if case .processing(false) = event {
+                coordinator?.retryPendingOrder()
+            }
         }
+        coordinator.element = element
+        coordinator.bind(intent: intent, key: orderKey, origin: .surfaceMount, to: element)
         return element
     }
 
     public func updateUIView(_ uiView: PaymentElement, context: Context) {
+        context.coordinator.onEvent = onEvent
         let key = orderKey
         guard context.coordinator.lastOrderKey != key else { return }
-        context.coordinator.lastOrderKey = key
-        context.coordinator.prepareTask?.cancel()
-        context.coordinator.prepareTask = Task { @MainActor in
-            guard !Task.isCancelled else { return }
-            try? await uiView.updateOrder(intent: intent)
-        }
+        context.coordinator.bind(intent: intent, key: key, origin: .surfaceUpdate, to: uiView)
     }
 
     @available(iOS 16.0, *)
@@ -290,12 +559,49 @@ public struct PaymentElementView: UIViewRepresentable {
     }
 
     private var orderKey: String {
+        Self.key(for: intent)
+    }
+
+    static func key(for intent: PaymentIntent) -> String {
         "\(intent.orderPayload):\(intent.orderChecksum)"
     }
 
     public final class Coordinator {
         var element: PaymentElement?
+        /// The last intent handed to the Element. Kept after a failed bind so a
+        /// re-render does not retry; only a new intent (or a pending retry) rebinds.
         var lastOrderKey: String?
         var prepareTask: Task<Void, Never>?
+        var pendingIntent: PaymentIntent?
+        var onEvent: (EmbeddedEvent) -> Void = { _ in }
+
+        @MainActor
+        func bind(intent: PaymentIntent, key: String, origin: BindOrigin, to element: PaymentElement) {
+            lastOrderKey = key
+            pendingIntent = nil
+            prepareTask?.cancel()
+            prepareTask = Task { @MainActor [weak self, weak element] in
+                guard !Task.isCancelled, let element else { return }
+                do {
+                    try await element.bind(intent: intent, origin: origin)
+                } catch {
+                    self?.handle(error, intent: intent, key: key)
+                }
+            }
+        }
+
+        @MainActor
+        func handle(_ error: Error, intent: PaymentIntent, key: String) {
+            guard lastOrderKey == key else { return }
+            if let paymentError = error as? PaymentError, paymentError == .paymentInProgress {
+                pendingIntent = intent
+            }
+        }
+
+        @MainActor
+        func retryPendingOrder() {
+            guard let element, let intent = pendingIntent else { return }
+            bind(intent: intent, key: PaymentElementView.key(for: intent), origin: .surfaceUpdate, to: element)
+        }
     }
 }

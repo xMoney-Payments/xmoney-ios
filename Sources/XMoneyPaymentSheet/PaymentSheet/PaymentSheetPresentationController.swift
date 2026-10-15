@@ -118,12 +118,18 @@ final class PaymentSheetPresentationController: UIPresentationController {
         stylePresentedView()
     }
 
-    func updateLayout(animated: Bool) {
-        guard let presentedView else { return }
+    /// `completion` runs once the sheet has settled at its new height, or
+    /// immediately when no resize is needed.
+    func updateLayout(animated: Bool, completion: (() -> Void)? = nil) {
+        guard let presentedView else {
+            completion?()
+            return
+        }
         presentedView.transform = .identity
         let target = frameOfPresentedViewInContainerView
         guard abs(presentedView.frame.height - target.height) > 0.5
             || abs(presentedView.frame.origin.y - target.origin.y) > 0.5 else {
+            completion?()
             return
         }
         let updates = { presentedView.frame = target }
@@ -132,10 +138,12 @@ final class PaymentSheetPresentationController: UIPresentationController {
                 withDuration: 0.28,
                 delay: 0,
                 options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction],
-                animations: updates
+                animations: updates,
+                completion: { _ in completion?() }
             )
         } else {
             updates()
+            completion?()
         }
     }
 

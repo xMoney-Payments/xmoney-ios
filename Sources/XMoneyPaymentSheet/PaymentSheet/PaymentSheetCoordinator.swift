@@ -81,15 +81,53 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
                 let sheet = PaymentSheetViewController(config: config, state: state)
                 sheet.delegate = self
                 self.sheetVC = sheet
+                // Stay on the coin height until the form and Apple Pay mark have painted.
+                // Layout callbacks during that wait must not grow the sheet.
+                var surfaceRevealed = false
                 sheet.onContentSizeChange = { [weak transitioning] in
+                    guard surfaceRevealed else { return }
                     transitioning?.presentationController?.updateLayout(animated: true)
                 }
-                transitioning.heightProvider = sheet
                 nav.setViewControllers([sheet], animated: false)
+                sheet.view.accessibilityElementsHidden = true
+                let cover = UIView()
+                cover.translatesAutoresizingMaskIntoConstraints = false
+                cover.backgroundColor = theme.background
+                let coverLoader = XCoinFlipLoaderView(color: CheckoutTheme.brandPrimary, size: 72)
+                coverLoader.translatesAutoresizingMaskIntoConstraints = false
+                cover.addSubview(coverLoader)
+                nav.view.addSubview(cover)
+                let coverPins = [
+                    cover.topAnchor.constraint(equalTo: nav.view.topAnchor),
+                    cover.leadingAnchor.constraint(equalTo: nav.view.leadingAnchor),
+                    cover.trailingAnchor.constraint(equalTo: nav.view.trailingAnchor),
+                    cover.bottomAnchor.constraint(equalTo: nav.view.bottomAnchor),
+                ]
+                NSLayoutConstraint.activate(coverPins)
+                NSLayoutConstraint.activate([
+                    coverLoader.centerXAnchor.constraint(equalTo: cover.centerXAnchor),
+                    coverLoader.centerYAnchor.constraint(equalTo: cover.safeAreaLayoutGuide.centerYAnchor),
+                ])
+                // Full width at the loader height is enough for PassKit to paint.
                 nav.view.layoutIfNeeded()
                 sheet.view.layoutIfNeeded()
-                transitioning.presentationController?.updateLayout(animated: true)
-                self.onEvent(.ready)
+                await sheet.waitUntilSurfaceDrawn()
+                guard self.presentedNav === nav, nav.presentingViewController != nil, !Task.isCancelled else {
+                    return
+                }
+                surfaceRevealed = true
+                sheet.view.accessibilityElementsHidden = false
+                transitioning.heightProvider = sheet
+                NSLayoutConstraint.deactivate(coverPins)
+                cover.removeFromSuperview()
+                guard let presentation = transitioning.presentationController else {
+                    self.onEvent(.ready)
+                    return
+                }
+                presentation.updateLayout(animated: true) { [weak self, weak nav] in
+                    guard let self, let nav, self.presentedNav === nav else { return }
+                    self.onEvent(.ready)
+                }
             } catch is CancellationError {
                 return
             } catch let error as PaymentError {
