@@ -6,6 +6,7 @@ import XMoneyCore
 package final class CardFormView: UIView, UITextFieldDelegate {
     package struct Configuration {
         package let showSaveOptIn: Bool
+        package let saveCardPolicy: SaveCardPolicy
         package let showCardDetailsCaption: Bool
         package let validationMode: PaymentConfig.ValidationMode
         package let locale: String
@@ -15,12 +16,14 @@ package final class CardFormView: UIView, UITextFieldDelegate {
 
         package init(
             showSaveOptIn: Bool,
+            saveCardPolicy: SaveCardPolicy = .optional,
             showCardDetailsCaption: Bool = false,
             validationMode: PaymentConfig.ValidationMode = .onTouched,
             locale: String = "en-US",
             grouping: PaymentConfig.CardGrouping = .condensed
         ) {
             self.showSaveOptIn = showSaveOptIn
+            self.saveCardPolicy = saveCardPolicy
             self.showCardDetailsCaption = showCardDetailsCaption
             self.validationMode = validationMode
             self.locale = locale
@@ -91,7 +94,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             expiryYear: year,
             cvv: fields[.cvv]?.field.text ?? "",
             holderName: fields[.holder]?.field.text,
-            saveCard: config.showSaveOptIn && (saveCheckbox?.isChecked ?? false)
+            saveCard: resolvedSaveCard
         )
     }
 
@@ -153,6 +156,95 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         return digits.count == 16 && expDigits.count >= 4 && cvcDigits.count >= 3 && holderOk
     }
 
+    private var resolvedSaveCard: Bool {
+        switch config.saveCardPolicy {
+        case .force:
+            return true
+        case .not:
+            return false
+        case .optional:
+            return config.showSaveOptIn && (saveCheckbox?.isChecked ?? false)
+        }
+    }
+
+    private func makeForceSaveNotice() -> UIView {
+        let icon = InfoCircleIconView()
+        icon.iconColor = theme.primaryText
+        icon.markColor = theme.background
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            icon.widthAnchor.constraint(equalToConstant: 16),
+            icon.heightAnchor.constraint(equalToConstant: 16),
+        ])
+
+        let title = UILabel()
+        title.numberOfLines = 0
+        title.attributedText = noticeText(
+            Strings.text("elements.savedCardNoticeTitle", locale: config.locale),
+            font: theme.font(ofSize: 14, weight: .bold),
+            color: theme.primaryText,
+            lineHeight: 16,
+            kern: -0.14
+        )
+
+        let body = UILabel()
+        body.numberOfLines = 0
+        body.attributedText = noticeText(
+            Strings.text("elements.savedCardNoticeBody", locale: config.locale),
+            font: theme.font(ofSize: 14, weight: .regular),
+            color: theme.placeholderText,
+            lineHeight: 14 * 1.4,
+            kern: 0
+        )
+
+        let copy = UIStackView(arrangedSubviews: [title, body])
+        copy.axis = .vertical
+        copy.spacing = 4
+        copy.alignment = .fill
+
+        let row = UIStackView(arrangedSubviews: [icon, copy])
+        row.axis = .horizontal
+        row.alignment = .top
+        row.spacing = 12
+        row.translatesAutoresizingMaskIntoConstraints = false
+
+        let wrap = UIView()
+        wrap.addSubview(row)
+        let top: CGFloat = config.isSpaced ? 6 : 18
+        let bottom: CGFloat = config.isSpaced ? 4 : 12
+        let horizontal: CGFloat = config.isSpaced ? 8 : 2
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: wrap.topAnchor, constant: top),
+            row.leadingAnchor.constraint(equalTo: wrap.leadingAnchor, constant: horizontal),
+            row.trailingAnchor.constraint(equalTo: wrap.trailingAnchor, constant: -horizontal),
+            row.bottomAnchor.constraint(equalTo: wrap.bottomAnchor, constant: -bottom),
+        ])
+        wrap.isAccessibilityElement = true
+        wrap.accessibilityLabel = [
+            Strings.text("elements.savedCardNoticeTitle", locale: config.locale),
+            Strings.text("elements.savedCardNoticeBody", locale: config.locale),
+        ].joined(separator: ". ")
+        return wrap
+    }
+
+    private func noticeText(
+        _ text: String,
+        font: UIFont,
+        color: UIColor,
+        lineHeight: CGFloat,
+        kern: CGFloat
+    ) -> NSAttributedString {
+        let style = NSMutableParagraphStyle()
+        style.minimumLineHeight = lineHeight * theme.fontScale
+        style.maximumLineHeight = lineHeight * theme.fontScale
+        return NSAttributedString(string: text, attributes: [
+            .font: font,
+            .foregroundColor: color,
+            .kern: kern * theme.fontScale,
+            .paragraphStyle: style,
+        ])
+    }
+
     private func setup() {
         outerStack.axis = .vertical
         outerStack.spacing = 6
@@ -193,10 +285,17 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         if !config.isSpaced {
             errorsStack.axis = .vertical
             errorsStack.spacing = 2
+            errorsStack.isHidden = true
             outerStack.addArrangedSubview(errorsStack)
+            if config.saveCardPolicy == .force {
+                outerStack.setCustomSpacing(0, after: container)
+                outerStack.setCustomSpacing(0, after: errorsStack)
+            }
         }
 
-        if config.showSaveOptIn {
+        if config.saveCardPolicy == .force && !config.isSpaced {
+            outerStack.addArrangedSubview(makeForceSaveNotice())
+        } else if config.showSaveOptIn && config.saveCardPolicy == .optional {
             let saveRow = UIControl()
             let checkbox = CheckboxControl(theme: theme)
             checkbox.setChecked(false, animated: false)
@@ -285,7 +384,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
 
         let expCvvRow = UIStackView()
         expCvvRow.axis = .horizontal
-        expCvvRow.spacing = 12
+        expCvvRow.spacing = 0
         expCvvRow.distribution = .fillEqually
         expCvvRow.addArrangedSubview(makeSpacedLabeledField(
             field: .expiry,
@@ -303,17 +402,23 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             titleKey: "elements.cardholderName",
             content: makeHolderRow()
         ))
+
+        if config.saveCardPolicy == .force {
+            spaced.addArrangedSubview(makeForceSaveNotice())
+        }
     }
 
     private func makeSpacedLabeledField(field: Field, titleKey: String, content: UIView) -> UIView {
         let wrapper = UIStackView()
         wrapper.axis = .vertical
-        wrapper.spacing = 6
+        wrapper.spacing = 4
+        wrapper.isLayoutMarginsRelativeArrangement = true
+        wrapper.layoutMargins = UIEdgeInsets(top: 0, left: 8, bottom: 0, right: 8)
 
         let label = UILabel()
         label.text = Strings.text(titleKey, locale: config.locale)
         label.font = theme.font(ofSize: 13, weight: .semibold)
-        label.textColor = theme.secondaryText
+        label.textColor = theme.primaryText
         label.isAccessibilityElement = false
 
         let box = UIView()
@@ -699,6 +804,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             let row = ErrorRowView(message: error.localizedMessage(locale: config.locale), theme: theme)
             errorsStack.addArrangedSubview(row)
         }
+        errorsStack.isHidden = errorsStack.arrangedSubviews.isEmpty
     }
 
     private func shouldShowError(for field: Field) -> Bool {
@@ -758,5 +864,42 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         let digits = CardFieldValidators.normalizeDigits(text)
         guard digits.count >= 2 else { return (digits, "") }
         return (String(digits.prefix(2)), String(digits.dropFirst(2).prefix(2)))
+    }
+}
+
+/// Filled info circle matching the checkout `info-circle` icon.
+private final class InfoCircleIconView: UIView {
+    var iconColor: UIColor = .label { didSet { setNeedsDisplay() } }
+    var markColor: UIColor = .white { didSet { setNeedsDisplay() } }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        backgroundColor = .clear
+        contentMode = .redraw
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ rect: CGRect) {
+        let scale = min(bounds.width, bounds.height) / 16
+        guard scale > 0 else { return }
+
+        iconColor.setFill()
+        UIBezierPath(ovalIn: CGRect(x: scale, y: scale, width: 14 * scale, height: 14 * scale)).fill()
+
+        markColor.setStroke()
+        let stem = UIBezierPath()
+        stem.lineWidth = 1.5 * scale
+        stem.lineCapStyle = .round
+        stem.move(to: CGPoint(x: 8 * scale, y: 7.25 * scale))
+        stem.addLine(to: CGPoint(x: 8 * scale, y: 11.25 * scale))
+        stem.stroke()
+
+        markColor.setFill()
+        UIBezierPath(
+            ovalIn: CGRect(x: 7 * scale, y: 3.75 * scale, width: 2 * scale, height: 2 * scale)
+        ).fill()
     }
 }

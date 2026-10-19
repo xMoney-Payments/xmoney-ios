@@ -211,6 +211,35 @@ final class ApiResponseModelsTests: XCTestCase {
         XCTAssertEqual(info.currency, "EUR")
         XCTAssertEqual(info.externalOrderId, "order-1786545845128")
         XCTAssertFalse(info.isRecurring)
+        XCTAssertEqual(info.saveCardPolicy, .force)
+    }
+
+    func testSaveCardPolicyFromPayload() {
+        XCTAssertEqual(saveCardPolicy(true), .force)
+        XCTAssertEqual(saveCardPolicy("true"), .force)
+        XCTAssertEqual(saveCardPolicy(1), .force)
+        XCTAssertEqual(saveCardPolicy("1"), .force)
+        XCTAssertEqual(saveCardPolicy("force"), .force)
+        XCTAssertEqual(saveCardPolicy("Force"), .force)
+        XCTAssertEqual(saveCardPolicy("not"), .not)
+        XCTAssertEqual(saveCardPolicy("NOT"), .not)
+        XCTAssertEqual(saveCardPolicy(false), .optional)
+        XCTAssertEqual(saveCardPolicy("false"), .optional)
+        XCTAssertEqual(saveCardPolicy(nil), .optional)
+
+        let missing = OrderInput(apiMap: ["order": ["type": "purchase"]]).toInfo()
+        XCTAssertEqual(missing.saveCardPolicy, .optional)
+        XCTAssertFalse(OrderInput(apiMap: ["saveCard": "not"]).saveCard)
+        XCTAssertTrue(OrderInput(apiMap: ["saveCard": true]).saveCard)
+        XCTAssertFalse(OrderInput(apiMap: ["saveCard": "force"]).saveCard)
+    }
+
+    private func saveCardPolicy(_ value: Any?) -> SaveCardPolicy {
+        var map: [String: Any] = ["order": ["type": "purchase"]]
+        if let value {
+            map["saveCard"] = value
+        }
+        return OrderInput(apiMap: map).toInfo().saveCardPolicy
     }
 
     func testConfirmPaymentResponseParsesNestedBackUrl() {
