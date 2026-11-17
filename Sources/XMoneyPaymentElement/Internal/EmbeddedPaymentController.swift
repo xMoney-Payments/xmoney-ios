@@ -308,6 +308,16 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         }
     }
 
+    func payWithCrypto(customerDetails: CustomerDetails?) {
+        guard isInteractionEnabled, let session else { return }
+        emit(.processing(true))
+        operationTask?.cancel()
+        operationTask = Task { @MainActor in
+            let result = await session.submitCrypto(presenter: self, customerDetails: customerDetails)
+            self.deliver(result)
+        }
+    }
+
     @MainActor
     func deleteSavedCardAndReload(_ card: SavedCard) async throws {
         guard isInteractionEnabled, let session else { return }

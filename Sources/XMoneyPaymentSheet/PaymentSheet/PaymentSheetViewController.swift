@@ -7,6 +7,7 @@ import XMoneyPaymentElement
 package protocol PaymentSheetViewControllerDelegate: AnyObject {
     func sheetDidTapPayWithCard(_ input: CardInput, customerDetails: CustomerDetails?)
     func sheetDidSelectSavedCard(_ card: SavedCard, customerDetails: CustomerDetails?)
+    func sheetDidTapPayWithCrypto(customerDetails: CustomerDetails?)
     func sheetDidTapApplePay()
     func sheetDidTapPersonalDetails()
     func sheetDidTapDeleteSavedCard(_ card: SavedCard) async throws
@@ -180,6 +181,9 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         }
         formView.onSelectSaved = { [weak self] card, details in
             self?.delegate?.sheetDidSelectSavedCard(card, customerDetails: details)
+        }
+        formView.onPayCrypto = { [weak self] details in
+            self?.delegate?.sheetDidTapPayWithCrypto(customerDetails: details)
         }
         formView.onOpenPersonalDetails = { [weak self] in
             self?.delegate?.sheetDidTapPersonalDetails()

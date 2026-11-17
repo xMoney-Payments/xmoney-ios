@@ -179,7 +179,7 @@ public extension PaymentConfig {
 
     struct PaymentMethodsConfig: Equatable, Sendable {
         public var applePay: ApplePayConfig
-        /// Shows the "Pay with crypto" option. Preview only: selecting it does not start a payment yet.
+        /// Shows the "Pay with crypto" option. Continue redirects the shopper to a secure page to complete the payment.
         public var showCryptoOption: Bool
 
         public init(applePay: ApplePayConfig = .init(), showCryptoOption: Bool = false) {

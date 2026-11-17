@@ -423,6 +423,9 @@ public final class PaymentElement: UIView {
         form.onSelectSaved = { [weak self] card, details in
             self?.payment._controller.paySavedCard(card, customerDetails: details)
         }
+        form.onPayCrypto = { [weak self] details in
+            self?.payment._controller.payWithCrypto(customerDetails: details)
+        }
         form.onOpenPersonalDetails = { [weak self] in
             self?.showPersonalDetails()
         }

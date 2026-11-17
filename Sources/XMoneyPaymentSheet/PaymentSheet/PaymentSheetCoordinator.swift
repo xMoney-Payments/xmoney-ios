@@ -215,6 +215,10 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
         run { await self.session.submitSavedCard(cardId: card.id, presenter: self, customerDetails: customerDetails) }
     }
 
+    package func sheetDidTapPayWithCrypto(customerDetails: CustomerDetails?) {
+        run { await self.session.submitCrypto(presenter: self, customerDetails: customerDetails) }
+    }
+
     package func sheetDidTapPersonalDetails() {
         guard let sheetVC else { return }
         let details = PersonalDetailsFlow.make(

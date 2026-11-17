@@ -316,7 +316,7 @@ struct PlaygroundView: View {
             optionPicker("Grouping", $grouping, playgroundGroupingOptions)
             ExampleSwitchRow(title: "SDK Pay button", subtitle: "Embedded only", isOn: $submitVisible, enabled: mode == .embedded, showDivider: true)
             ExampleSwitchRow(title: "Apple Pay", subtitle: "Wallet in Sheet / Element / standalone", isOn: $applePayEnabled, showDivider: true)
-            ExampleSwitchRow(title: "Crypto", subtitle: "Preview the Pay with crypto option (UI only)", isOn: $cryptoEnabled, showDivider: true)
+            ExampleSwitchRow(title: "Crypto", subtitle: "Show the Pay with crypto option", isOn: $cryptoEnabled, showDivider: true)
             ExampleSwitchRow(title: "Saved cards", subtitle: "Offer previously saved cards", isOn: $savedCardsEnabled, showDivider: true)
             ExampleSwitchRow(title: "Save-card opt-in", subtitle: "Show the save checkbox", isOn: $saveCardOptInVisible, enabled: savedCardsEnabled, showDivider: true)
             ExampleSwitchRow(title: "Name check", subtitle: "John Doe must match", isOn: $nameCheck, showDivider: true)

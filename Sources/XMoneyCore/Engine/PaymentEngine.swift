@@ -221,6 +221,18 @@ package final class PaymentEngine {
         return try await submit(fields: fields, presenter: presenter)
     }
 
+    package func submitCrypto(
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetails? = nil
+    ) async throws -> EngineResult {
+        let fields = payment.cryptoFields(
+            orderPayload: intent.orderPayload,
+            orderChecksum: intent.orderChecksum,
+            customerDetails: customerDetails
+        )
+        return try await submit(fields: fields, presenter: presenter)
+    }
+
     package func walletParams(walletType: String) async throws -> WalletParams {
         if let cached = cachedWalletParams[walletType] {
             return cached

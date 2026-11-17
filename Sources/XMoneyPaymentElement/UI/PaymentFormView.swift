@@ -28,6 +28,7 @@ package final class PaymentFormView: UIView {
 
     package var onPayCard: ((CardInput, CustomerDetails?) -> Void)?
     package var onSelectSaved: ((SavedCard, CustomerDetails?) -> Void)?
+    package var onPayCrypto: ((CustomerDetails?) -> Void)?
     package var onDeleteSaved: ((SavedCard) async throws -> Void)?
     package var onApplePay: (() -> Void)?
     package var onOpenPersonalDetails: (() -> Void)?
@@ -653,8 +654,8 @@ package final class PaymentFormView: UIView {
             guard cardOK, detailsOK else { return }
             onPayCard?(form.currentInput, personalDetailsPayload())
         case .crypto:
-            // Preview only until crypto checkout is wired to the backend.
-            break
+            guard ensurePersonalDetails() else { return }
+            onPayCrypto?(personalDetailsPayload())
         }
     }
 

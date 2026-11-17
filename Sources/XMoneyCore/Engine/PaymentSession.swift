@@ -144,6 +144,15 @@ package final class PaymentSession {
         }
     }
 
+    package func submitCrypto(
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetails? = nil
+    ) async -> EngineResult {
+        await submit(didAuthorize: true) {
+            try await self.engine.submitCrypto(presenter: presenter, customerDetails: customerDetails)
+        }
+    }
+
     package func startWallet(_ authorizer: DigitalWalletAuthorizing) async -> EngineResult {
         guard beginOperation() else { return Self.canceled }
         let result = await authorizer.start()

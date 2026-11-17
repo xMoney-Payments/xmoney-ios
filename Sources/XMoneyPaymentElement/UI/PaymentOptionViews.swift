@@ -148,7 +148,7 @@ final class PayWithCardPanelView: PaymentOptionPanel {
     }
 }
 
-/// "Pay with crypto" option. UI preview only; selecting it shows the redirect notice.
+/// "Pay with crypto" option. Selecting it shows the redirect notice.
 final class CryptoOptionPanel: PaymentOptionPanel {
     private let notice = UIView()
 
