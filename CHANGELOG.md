@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-16
+
 ### Added
 
 - `PaymentConfig.customerDetails` collects shopper details for card payments and Apple Pay. Which fields appear comes from your account. Card and saved-card Pay stay blocked until the details page is valid. Apple Pay requests the matching contact fields and sends them with the payment.
