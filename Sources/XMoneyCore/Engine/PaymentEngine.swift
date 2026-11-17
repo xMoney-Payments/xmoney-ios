@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 package protocol ThreeDSPresenter: AnyObject {
     func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd
@@ -53,6 +54,8 @@ package struct SheetState {
 }
 
 package final class PaymentEngine {
+    private static let logger = Logger(subsystem: "com.xmoney.paymentsheet", category: "customer-details")
+
     package let configuration: PaymentConfig
     package let intent: PaymentIntent
     let env: PaymentEnvironment
@@ -125,6 +128,10 @@ package final class PaymentEngine {
         let customerFields = await customerFieldsTask
         nameCheckValidationEnabled = siteConfig.nameCheckValidationEnabled
         customerDetailsVisibility = CustomerDetailsVisibility.resolve(fields: customerFields)
+        personalDetails.defaults = CustomerDetailsResolver.resolve(
+            configuration.customerDetails.defaultValues,
+            visibility: customerDetailsVisibility
+        )
         personalDetails.revalidate(visibility: customerDetailsVisibility)
 
         var applePayAvailable = false
@@ -238,6 +245,13 @@ package final class PaymentEngine {
 
     private func fetchCustomerDetailFieldsIfEnabled(sessionToken: String) async -> [String] {
         guard configuration.customerDetails.isAnyEnabled else { return [] }
+        if let fields = configuration.customerDetails.fields {
+            let resolved = CustomerDetailsResolver.inlineCheckoutFields(fields)
+            if resolved.isEmpty {
+                Self.logger.debug("[customer-details] customerDetails.fields has every field disabled.")
+            }
+            return resolved
+        }
         return await inlineFields.getFields(sessionToken: sessionToken)
     }
 

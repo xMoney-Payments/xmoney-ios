@@ -376,12 +376,17 @@ Pay uses current field validity. Cardholder name is always collected.
 
 ## Customer details
 
-`customerDetails` asks the shopper for the fields your account requires. If that list cannot be loaded, checkout continues without the form.
+`customerDetails` asks the shopper for the fields your account requires. If that list cannot be loaded, checkout continues without the form. Pass `fields` to choose the blocks yourself; that replaces the account list, and a flag you leave off is not collected. `defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Apple Pay does not use them.
 
 ```swift
 PaymentConfig(
     publicKey: "pk_test_…",
-    customerDetails: .init(card: true, applePay: true)
+    customerDetails: .init(
+        card: true,
+        applePay: true,
+        fields: .init(fullName: true, email: true, address: true),
+        defaultValues: .init(fullName: "Jane Doe", email: "jane@example.com", country: "US", region: "CA")
+    )
 )
 ```
 

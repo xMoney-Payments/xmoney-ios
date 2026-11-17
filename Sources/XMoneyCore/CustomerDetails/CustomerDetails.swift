@@ -196,14 +196,17 @@ package final class PersonalDetailsProgress {
     /// Latest edits, including ones that have not passed Continue.
     package var draft: PersonalDetailsValues?
     package var showsIncompleteError = false
+    /// Card-form prefill used until the shopper edits or continues.
+    package var defaults = PersonalDetailsValues()
 
     package init() {}
 
     package var isComplete: Bool { committed != nil }
 
     /// Values to show when the details page opens again.
+    /// A draft or a previous Continue wins over ``defaults``.
     package var seed: PersonalDetailsValues {
-        draft ?? committed ?? PersonalDetailsValues()
+        draft ?? committed ?? defaults
     }
 
     package func commit(_ values: PersonalDetailsValues) {

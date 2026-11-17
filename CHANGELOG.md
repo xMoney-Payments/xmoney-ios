@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `PaymentConfig.customerDetails.fields` replaces the account field list. Leave it unset to keep using `/inline-checkout/fields`. A flag left off is not collected.
+- `PaymentConfig.customerDetails.defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Apple Pay does not use them.
+
 ## [1.1.0] - 2026-10-16
 
 ### Added

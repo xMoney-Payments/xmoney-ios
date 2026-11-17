@@ -206,13 +206,6 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
     private func build(theme: CheckoutTheme) {
         clearBuiltChrome()
         let back = UIButton(type: .system)
-        back.setImage(
-            EmbeddedAssets.image(named: "chevron-left")?.withRenderingMode(.alwaysTemplate),
-            for: .normal
-        )
-        back.tintColor = theme.primaryText
-        back.backgroundColor = theme.neutralChip
-        back.layer.cornerRadius = 18
         back.accessibilityLabel = Strings.text("personalDetails.back", locale: config.options.locale)
         back.addAction(UIAction { [weak self] _ in
             guard let self else { return }
@@ -220,6 +213,14 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
             self.onBack?(self.form.currentValues())
         }, for: .touchUpInside)
         back.translatesAutoresizingMaskIntoConstraints = false
+        let backIcon = UIImageView(
+            image: EmbeddedAssets.image(named: "chevron-left")?.withRenderingMode(.alwaysTemplate)
+        )
+        backIcon.tintColor = theme.primaryText
+        backIcon.contentMode = .scaleAspectFit
+        backIcon.isUserInteractionEnabled = false
+        backIcon.translatesAutoresizingMaskIntoConstraints = false
+        back.addSubview(backIcon)
 
         let titleLabel = UILabel()
         titleLabel.attributedText = NSAttributedString(
@@ -237,18 +238,25 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
         header.addSubview(back)
         header.addSubview(titleLabel)
         activate([
-            header.heightAnchor.constraint(greaterThanOrEqualToConstant: 36),
-            back.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            header.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            back.leadingAnchor.constraint(
+                equalTo: header.leadingAnchor,
+                constant: presentation == .inline ? 0 : 6 - horizontalInset
+            ),
             back.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            back.widthAnchor.constraint(equalToConstant: 36),
-            back.heightAnchor.constraint(equalToConstant: 36),
+            back.widthAnchor.constraint(equalToConstant: 44),
+            back.heightAnchor.constraint(equalToConstant: 44),
+            backIcon.centerXAnchor.constraint(equalTo: back.centerXAnchor),
+            backIcon.centerYAnchor.constraint(equalTo: back.centerYAnchor),
+            backIcon.widthAnchor.constraint(equalToConstant: 20),
+            backIcon.heightAnchor.constraint(equalToConstant: 20),
             titleLabel.leadingAnchor.constraint(equalTo: back.trailingAnchor, constant: 12),
             titleLabel.trailingAnchor.constraint(equalTo: header.trailingAnchor),
             titleLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             titleLabel.topAnchor.constraint(greaterThanOrEqualTo: header.topAnchor),
             titleLabel.bottomAnchor.constraint(lessThanOrEqualTo: header.bottomAnchor),
         ])
-        let headerFit = header.heightAnchor.constraint(equalToConstant: 36)
+        let headerFit = header.heightAnchor.constraint(equalToConstant: 44)
         headerFit.priority = .defaultHigh
         activate([headerFit])
 
@@ -260,7 +268,7 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
         let powered = PoweredByFooterView(theme: theme, locale: config.options.locale)
         let footerStack = UIStackView(arrangedSubviews: [continueButton, powered])
         footerStack.axis = .vertical
-        footerStack.spacing = 10
+        footerStack.spacing = 12
         footerStack.translatesAutoresizingMaskIntoConstraints = false
         footer.addSubview(footerStack)
         var footerConstraints = [
@@ -275,8 +283,8 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
             footer.addSubview(hairline)
             footerConstraints.append(contentsOf: [
                 hairline.topAnchor.constraint(equalTo: footer.topAnchor),
-                hairline.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: -22),
-                hairline.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: 22),
+                hairline.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: -horizontalInset),
+                hairline.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: horizontalInset),
                 hairline.heightAnchor.constraint(equalToConstant: 1),
                 footerStack.topAnchor.constraint(equalTo: hairline.bottomAnchor, constant: 12),
             ])
@@ -290,7 +298,7 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
         let stack = UIStackView(arrangedSubviews: [header, formHost, footer])
         stack.axis = .vertical
         stack.spacing = 12
-        stack.setCustomSpacing(20, after: header)
+        stack.setCustomSpacing(0, after: header)
         stack.translatesAutoresizingMaskIntoConstraints = false
         contentStack = stack
         view.addSubview(stack)
@@ -337,7 +345,7 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
         return scroll
     }
 
-    private var horizontalInset: CGFloat { presentation == .inline ? 0 : 22 }
+    private var horizontalInset: CGFloat { presentation == .inline ? 0 : 16 }
 
     private func updateScrollability() {
         guard let scrollView else { return }
@@ -462,6 +470,7 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
         view.endEditing(true)
         let theme = resolvedTheme()
         let locale = config.options.locale
+        let closeTopInset: CGFloat = presentation == .inline ? 10 : 4
         let list: SelectionListViewController
         switch field {
         case .country:
@@ -470,7 +479,8 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
                 options: countryOptions(locale: locale),
                 selectedID: form.currentValues().country,
                 theme: theme,
-                locale: locale
+                locale: locale,
+                closeTopInset: closeTopInset
             )
         case .phoneCountry:
             list = SelectionListViewController(
@@ -478,7 +488,8 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
                 options: phoneOptions(locale: locale),
                 selectedID: form.currentValues().phoneCountry,
                 theme: theme,
-                locale: locale
+                locale: locale,
+                closeTopInset: closeTopInset
             )
         case .region:
             let country = form.currentValues().country
@@ -490,7 +501,8 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
                 },
                 selectedID: form.currentValues().region,
                 theme: theme,
-                locale: locale
+                locale: locale,
+                closeTopInset: closeTopInset
             )
         default:
             return

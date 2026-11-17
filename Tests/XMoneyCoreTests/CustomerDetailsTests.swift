@@ -312,4 +312,154 @@ final class CustomerDetailsTests: XCTestCase {
         XCTAssertEqual(parsed["email"], "ada@example.com")
         XCTAssertNil(service.savedCardFields(cardId: "1", orderPayload: "{}", orderChecksum: "sum")["customerDetails"])
     }
+
+    func testFieldsOverrideReplacesTheServerListAndMissingKeysAreOff() {
+        let contact = CustomerDetailsResolver.inlineCheckoutFields(.init(fullName: true, email: true))
+        let visibility = CustomerDetailsVisibility.resolve(fields: contact)
+        XCTAssertEqual(contact, ["firstName", "lastName", "email"])
+        XCTAssertTrue(visibility.showFullName)
+        XCTAssertTrue(visibility.showEmail)
+        XCTAssertFalse(visibility.showPhone)
+        XCTAssertFalse(visibility.showAddressSection)
+
+        let address = CustomerDetailsVisibility.resolve(
+            fields: CustomerDetailsResolver.inlineCheckoutFields(.init(phone: true, address: true))
+        )
+        XCTAssertTrue(address.showPhone)
+        XCTAssertTrue(address.showAddressSection)
+        XCTAssertFalse(address.showFullName)
+        XCTAssertFalse(address.showEmail)
+
+        let none = CustomerDetailsVisibility.resolve(
+            fields: CustomerDetailsResolver.inlineCheckoutFields(.init())
+        )
+        XCTAssertFalse(none.isActive)
+    }
+
+    func testParsePhoneSplitsE164AndPrefersSharedDialCodes() {
+        XCTAssertEqual(
+            CustomerDetailsResolver.parsePhone("+40722123456"),
+            CustomerDetailsResolver.ParsedPhone(country: "RO", national: "722123456")
+        )
+        XCTAssertEqual(CustomerDetailsResolver.parsePhone("+14155550100")?.country, "US")
+        XCTAssertEqual(CustomerDetailsResolver.parsePhone("+14155550100", preferredCountryCode: "CA")?.country, "CA")
+        XCTAssertEqual(CustomerDetailsResolver.parsePhone("+442071838750")?.country, "GB")
+        XCTAssertEqual(CustomerDetailsResolver.parsePhone("+79001234567")?.country, "RU")
+        XCTAssertNil(CustomerDetailsResolver.parsePhone("0722123456"))
+        XCTAssertNil(CustomerDetailsResolver.parsePhone("+"))
+        XCTAssertNil(CustomerDetailsResolver.parsePhone("+0000000"))
+        XCTAssertNil(CustomerDetailsResolver.parsePhone(nil))
+    }
+
+    func testDefaultsApplyOnlyToActiveBlocks() {
+        let defaults = PaymentConfig.CustomerDetailsConfig.DefaultValues(
+            fullName: " John Doe ",
+            email: "john@doe.com",
+            phone: "+40722123456",
+            country: "ro",
+            region: "Bucuresti",
+            city: "Bucharest",
+            postalCode: "010101",
+            address: "Str. Example 1"
+        )
+        let all = CustomerDetailsVisibility.resolve(fields: ["firstName", "email", "phone", "country"])
+        let resolved = CustomerDetailsResolver.resolve(defaults, visibility: all)
+        XCTAssertEqual(resolved.fullName, "John Doe")
+        XCTAssertEqual(resolved.email, "john@doe.com")
+        XCTAssertEqual(resolved.phoneCountry, "RO")
+        XCTAssertEqual(resolved.phoneNational, "722123456")
+        XCTAssertEqual(resolved.country, "RO")
+        XCTAssertEqual(resolved.city, "Bucharest")
+        XCTAssertEqual(resolved.postalCode, "010101")
+        XCTAssertEqual(resolved.address, "Str. Example 1")
+        XCTAssertTrue(resolved.region.isEmpty)
+
+        let contactOnly = CustomerDetailsVisibility.resolve(fields: ["firstName", "email"])
+        let contact = CustomerDetailsResolver.resolve(defaults, visibility: contactOnly)
+        XCTAssertEqual(contact.fullName, "John Doe")
+        XCTAssertEqual(contact.email, "john@doe.com")
+        XCTAssertTrue(contact.phoneCountry.isEmpty)
+        XCTAssertTrue(contact.country.isEmpty)
+        XCTAssertTrue(contact.city.isEmpty)
+
+        XCTAssertEqual(
+            CustomerDetailsResolver.resolve(defaults, visibility: .inactive),
+            PersonalDetailsValues()
+        )
+        XCTAssertEqual(
+            CustomerDetailsResolver.resolve(nil, visibility: all),
+            PersonalDetailsValues()
+        )
+    }
+
+    func testInvalidCountryDropsRegionAndPostalButKeepsCityAndAddress() {
+        let all = CustomerDetailsVisibility.resolve(fields: ["firstName", "email", "phone", "country"])
+        let resolved = CustomerDetailsResolver.resolve(
+            .init(
+                phone: "+40722123456",
+                country: "ZZ",
+                region: "California",
+                city: "Bucharest",
+                postalCode: "010101",
+                address: "Str. Example 1"
+            ),
+            visibility: all
+        )
+        XCTAssertTrue(resolved.country.isEmpty)
+        XCTAssertTrue(resolved.region.isEmpty)
+        XCTAssertTrue(resolved.postalCode.isEmpty)
+        XCTAssertEqual(resolved.city, "Bucharest")
+        XCTAssertEqual(resolved.address, "Str. Example 1")
+        XCTAssertEqual(resolved.phoneCountry, "RO")
+    }
+
+    func testRegionDefaultUsesTheCanonicalNameAndDropsUnknownValues() {
+        let address = CustomerDetailsVisibility.resolve(fields: ["country"])
+        let known = CustomerDetailsResolver.resolve(
+            .init(country: "us", region: "ca", city: "San Francisco", postalCode: "94105", address: "1 Market"),
+            visibility: address
+        )
+        XCTAssertEqual(known.country, "US")
+        XCTAssertEqual(known.region, "California")
+        XCTAssertEqual(known.postalCode, "94105")
+
+        let unknown = CustomerDetailsResolver.resolve(
+            .init(country: "US", region: "Atlantis", postalCode: "94105"),
+            visibility: address
+        )
+        XCTAssertEqual(unknown.country, "US")
+        XCTAssertTrue(unknown.region.isEmpty)
+        XCTAssertEqual(unknown.postalCode, "94105")
+
+        let noPostal = CustomerDetailsResolver.resolve(
+            .init(country: "AE", region: "Dubai", city: "Dubai", postalCode: "00000"),
+            visibility: address
+        )
+        XCTAssertEqual(noPostal.country, "AE")
+        XCTAssertEqual(noPostal.region, "Dubai")
+        XCTAssertTrue(noPostal.postalCode.isEmpty)
+        XCTAssertEqual(noPostal.city, "Dubai")
+    }
+
+    func testUnknownPhoneDialCodeIsDropped() {
+        let all = CustomerDetailsVisibility.resolve(fields: ["phone"])
+        let resolved = CustomerDetailsResolver.resolve(.init(phone: "+0000000"), visibility: all)
+        XCTAssertTrue(resolved.phoneCountry.isEmpty)
+        XCTAssertTrue(resolved.phoneNational.isEmpty)
+    }
+
+    func testSeedUsesDefaultsUntilTheShopperEdits() {
+        let progress = PersonalDetailsProgress()
+        progress.defaults = PersonalDetailsValues(email: "default@x.co")
+        XCTAssertEqual(progress.seed.email, "default@x.co")
+        XCTAssertNil(progress.committed)
+        XCTAssertFalse(progress.isComplete)
+
+        progress.draft = PersonalDetailsValues(email: "edited@x.co")
+        XCTAssertEqual(progress.seed.email, "edited@x.co")
+
+        progress.draft = nil
+        progress.commit(PersonalDetailsValues(email: "saved@x.co"))
+        XCTAssertEqual(progress.seed.email, "saved@x.co")
+    }
 }

@@ -124,8 +124,8 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
             // Grabber 16 (10+4+2) + 6 gap. The details view fills the rest.
             return ceil(16 + 6 + personalDetails.contentHeight)
         }
-        // Grabber 16 (10+4+2) + 6 gap + 36 close row.
-        let headerChrome: CGFloat = 16 + 6 + 36
+        // Grabber 16 (10+4+2) + 54 close row.
+        let headerChrome: CGFloat = 16 + 54
         return ceil(headerChrome + (formView?.contentHeight ?? 280))
     }
 
@@ -169,9 +169,9 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         headerRow = header
         header.addSubview(close)
         NSLayoutConstraint.activate([
-            header.heightAnchor.constraint(equalToConstant: 36),
-            close.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 20),
-            close.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            header.heightAnchor.constraint(equalToConstant: 54),
+            close.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 6),
+            close.topAnchor.constraint(equalTo: header.topAnchor, constant: 10),
         ])
 
         formView = PaymentFormView(config: config, state: state, contentInsets: .sheet)
@@ -199,7 +199,7 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         scrollView.contentInsetAdjustmentBehavior = .never
         scrollView.addSubview(formView)
         formView.translatesAutoresizingMaskIntoConstraints = false
-        // Form owns the 22pt horizontal inset — do not add a second margin here.
+        // Form owns the 16pt horizontal inset — do not add a second margin here.
         NSLayoutConstraint.activate([
             formView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
             formView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
@@ -211,7 +211,7 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         chromeStack.axis = .vertical
         chromeStack.spacing = 0
         chromeStack.addArrangedSubview(grabber)
-        chromeStack.setCustomSpacing(6, after: grabber)
+        chromeStack.setCustomSpacing(0, after: grabber)
         chromeStack.addArrangedSubview(header)
         chromeStack.addArrangedSubview(scrollView)
         chromeStack.translatesAutoresizingMaskIntoConstraints = false

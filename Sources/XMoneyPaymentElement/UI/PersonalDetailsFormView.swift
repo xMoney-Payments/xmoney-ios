@@ -111,7 +111,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
 
     package func setPhoneCountry(_ code: String) {
         values.phoneCountry = code
-        selects[.phoneCountry]?.setDisplay(phoneCountryTitle(code), placeholder: text("personalDetails.phoneCountryPlaceholder"))
+        refreshPhoneCountryDisplay()
         revalidate(changed: .phoneCountry, trigger: .change)
     }
 
@@ -131,29 +131,26 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         return CustomerDetailsValidator.validate(values, visibility: visibility).isEmpty
     }
 
-    private func build() {
-        let shell = UIView()
-        shell.backgroundColor = theme.selectedBackground
-        shell.layer.cornerRadius = theme.rowRadius
-        shell.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(shell)
-        NSLayoutConstraint.activate([
-            shell.topAnchor.constraint(equalTo: topAnchor),
-            shell.leadingAnchor.constraint(equalTo: leadingAnchor),
-            shell.trailingAnchor.constraint(equalTo: trailingAnchor),
-            shell.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
+    private let fieldHeight: CGFloat = 48
+    private let fieldInset: CGFloat = 16
 
+    private var restingFieldBorder: UIColor {
+        UIColor(hex: "#E3E1E8") ?? theme.fieldBorder
+    }
+
+    private var placeholderColor: UIColor { theme.inputPlaceholder }
+
+    private func build() {
         let stack = UIStackView()
         stack.axis = .vertical
-        stack.spacing = 16
+        stack.spacing = isSpaced ? 16 : 12
         stack.translatesAutoresizingMaskIntoConstraints = false
-        shell.addSubview(stack)
+        addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: shell.topAnchor, constant: 12),
-            stack.leadingAnchor.constraint(equalTo: shell.leadingAnchor, constant: 12),
-            stack.trailingAnchor.constraint(equalTo: shell.trailingAnchor, constant: -12),
-            stack.bottomAnchor.constraint(equalTo: shell.bottomAnchor, constant: -12),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 24),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
         if visibility.showsContactSection {
@@ -161,29 +158,22 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
             contactErrorRow = errorRow
             stack.addArrangedSubview(section(
                 heading("personalDetails.contactInfoHeading"),
-                body: isSpaced ? spacedContact() : condensedContact(),
+                body: isSpaced ? padded(spacedContact(), top: 4, bottom: 4) : condensedContact(),
                 error: errorRow
             ))
-        }
-        if isSpaced, visibility.showsContactSection, visibility.showAddressSection {
-            let line = UIView()
-            line.backgroundColor = theme.orDivider
-            line.translatesAutoresizingMaskIntoConstraints = false
-            line.heightAnchor.constraint(equalToConstant: 1).isActive = true
-            stack.addArrangedSubview(line)
         }
         if visibility.showAddressSection {
             let errorRow = isSpaced ? nil : makeSectionError()
             addressErrorRow = errorRow
             stack.addArrangedSubview(section(
                 heading("personalDetails.addressHeading"),
-                body: isSpaced ? spacedAddress() : condensedAddress(),
+                body: isSpaced ? padded(spacedAddress(), top: 4) : condensedAddress(),
                 error: errorRow
             ))
         }
     }
 
-    private func section(_ title: UILabel, body: UIView, error: ErrorRowView?) -> UIView {
+    private func section(_ title: UIView, body: UIView, error: ErrorRowView?) -> UIView {
         let stack = UIStackView()
         stack.axis = .vertical
         stack.spacing = 8
@@ -205,15 +195,28 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         return row
     }
 
-    private func heading(_ key: String) -> UILabel {
+    private func heading(_ key: String) -> UIView {
         let label = UILabel()
-        let size: CGFloat = isSpaced ? 16 : 14
-        let color = isSpaced ? theme.primaryText : theme.icon
         label.attributedText = NSAttributedString(
             string: text(key),
-            attributes: theme.titleAttributes(size: size, weight: .semibold, color: color)
+            attributes: isSpaced
+                ? theme.titleAttributes(size: 16, weight: .semibold, color: theme.primaryText)
+                : theme.titleAttributes(size: 14, weight: .semibold, color: theme.sectionLabelColor)
         )
-        return label
+        return isSpaced ? label : padded(label, top: 4)
+    }
+
+    private func padded(_ child: UIView, top: CGFloat = 0, bottom: CGFloat = 0) -> UIView {
+        let wrap = UIView()
+        child.translatesAutoresizingMaskIntoConstraints = false
+        wrap.addSubview(child)
+        NSLayoutConstraint.activate([
+            child.topAnchor.constraint(equalTo: wrap.topAnchor, constant: top),
+            child.leadingAnchor.constraint(equalTo: wrap.leadingAnchor),
+            child.trailingAnchor.constraint(equalTo: wrap.trailingAnchor),
+            child.bottomAnchor.constraint(equalTo: wrap.bottomAnchor, constant: -bottom),
+        ])
+        return wrap
     }
 
     private func fieldLabel(_ key: String) -> UILabel {
@@ -227,9 +230,9 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         label.attributedText = NSAttributedString(
             string: key.isEmpty ? " " : text(key),
             attributes: theme.titleAttributes(
-                size: 13,
+                size: 14,
                 weight: .semibold,
-                color: theme.secondaryText
+                color: theme.sectionLabelColor
             )
         )
     }
@@ -237,21 +240,23 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     private func spacedContact() -> UIView {
         let stack = UIStackView()
         stack.axis = .vertical
-        stack.spacing = 12
+        stack.spacing = 16
         if visibility.showFullName {
             stack.addArrangedSubview(spacedField(.fullName, label: "personalDetails.fullName", placeholder: "personalDetails.fullNamePlaceholder", keyboard: .default, contentType: .name, cap: .words).view)
         }
         if visibility.showPhone {
             let row = UIStackView()
             row.axis = .horizontal
-            row.spacing = 12
+            row.spacing = 8
             row.alignment = .top
             row.distribution = .fill
-            let country = spacedSelect(.phoneCountry, label: "personalDetails.phoneCountryCode", placeholder: "personalDetails.phoneCountryPlaceholder")
-            let national = spacedField(.phone, label: "personalDetails.phone", placeholder: "personalDetails.phonePlaceholder", keyboard: .phonePad, contentType: .telephoneNumber, cap: .none)
+            let country = spacedSelect(.phoneCountry, label: "personalDetails.phone", placeholder: "personalDetails.phoneCountryPlaceholder")
+            let national = spacedField(.phone, label: "", placeholder: "personalDetails.phonePlaceholder", keyboard: .phonePad, contentType: .telephoneNumber, cap: .none)
             row.addArrangedSubview(country.view)
             row.addArrangedSubview(national.view)
-            country.view.widthAnchor.constraint(equalTo: row.widthAnchor, multiplier: 0.39).isActive = true
+            country.view.widthAnchor.constraint(equalToConstant: 130).isActive = true
+            national.view.setContentHuggingPriority(.defaultLow, for: .horizontal)
+            country.view.setContentHuggingPriority(.required, for: .horizontal)
             stack.addArrangedSubview(row)
         }
         if visibility.showEmail {
@@ -263,7 +268,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     private func spacedAddress() -> UIView {
         let stack = UIStackView()
         stack.axis = .vertical
-        stack.spacing = 12
+        stack.spacing = 16
         stack.addArrangedSubview(spacedSelect(.country, label: "personalDetails.country", placeholder: "personalDetails.countryPlaceholder").view)
         let region = spacedSelect(.region, label: "personalDetails.region.generic", placeholder: "personalDetails.region.genericSelect")
         regionRow = region.view
@@ -276,11 +281,12 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         postalLabel = postal.caption
         let row = UIStackView(arrangedSubviews: [city.view, postal.view])
         row.axis = .horizontal
-        row.spacing = 12
+        row.spacing = 8
         row.alignment = .top
-        let ratio = city.view.widthAnchor.constraint(equalTo: row.widthAnchor, multiplier: 191.0 / 318.0)
-        ratio.isActive = true
-        cityPostalRatio = ratio
+        city.view.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        city.view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        postal.view.setContentHuggingPriority(.required, for: .horizontal)
+        postal.view.setContentCompressionResistancePriority(.required, for: .horizontal)
         stack.addArrangedSubview(row)
         return stack
     }
@@ -315,7 +321,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         cityRow.axis = .horizontal
         cityRow.alignment = .fill
         let divider = UIView()
-        divider.backgroundColor = theme.fieldDivider
+        divider.backgroundColor = restingFieldBorder
         divider.translatesAutoresizingMaskIntoConstraints = false
         divider.widthAnchor.constraint(equalToConstant: 1).isActive = true
         postalDivider = divider
@@ -336,14 +342,14 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         row.alignment = .fill
         let country = plainSelect(.phoneCountry, placeholder: "personalDetails.phoneCountryPlaceholder")
         let divider = UIView()
-        divider.backgroundColor = theme.fieldDivider
+        divider.backgroundColor = restingFieldBorder
         divider.translatesAutoresizingMaskIntoConstraints = false
         divider.widthAnchor.constraint(equalToConstant: 1).isActive = true
         let national = plainField(.phone, placeholder: "personalDetails.phonePlaceholder", keyboard: .phonePad, contentType: .telephoneNumber, cap: .none)
         row.addArrangedSubview(country)
         row.addArrangedSubview(divider)
         row.addArrangedSubview(national)
-        country.widthAnchor.constraint(equalTo: row.widthAnchor, multiplier: 0.39).isActive = true
+        country.widthAnchor.constraint(equalToConstant: 130).isActive = true
         return row
     }
 
@@ -351,7 +357,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         group.backgroundColor = theme.componentBackground
         group.layer.cornerRadius = theme.fieldGroupRadius
         group.layer.borderWidth = theme.borderWidth
-        group.layer.borderColor = theme.fieldBorder.cgColor
+        group.layer.borderColor = restingFieldBorder.cgColor
         group.clipsToBounds = true
         let stack = UIStackView()
         stack.axis = .vertical
@@ -372,7 +378,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
 
     private func hairline() -> UIView {
         let line = UIView()
-        line.backgroundColor = theme.fieldDivider
+        line.backgroundColor = restingFieldBorder
         line.translatesAutoresizingMaskIntoConstraints = false
         line.heightAnchor.constraint(equalToConstant: 1).isActive = true
         return line
@@ -388,7 +394,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     ) -> LabeledField {
         let wrapper = UIStackView()
         wrapper.axis = .vertical
-        wrapper.spacing = 6
+        wrapper.spacing = 4
         let label = fieldLabel(key)
         let box = fieldBox()
         boxes[field] = box
@@ -399,6 +405,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         errorLabels[field] = error
         wrapper.addArrangedSubview(label)
         wrapper.addArrangedSubview(box)
+        wrapper.setCustomSpacing(6, after: box)
         wrapper.addArrangedSubview(error)
         return LabeledField(view: wrapper, caption: label)
     }
@@ -406,7 +413,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     private func spacedSelect(_ field: PersonalDetailsField, label key: String, placeholder: String) -> LabeledField {
         let wrapper = UIStackView()
         wrapper.axis = .vertical
-        wrapper.spacing = 6
+        wrapper.spacing = 4
         let label = fieldLabel(key)
         let box = fieldBox()
         boxes[field] = box
@@ -417,6 +424,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         errorLabels[field] = error
         wrapper.addArrangedSubview(label)
         wrapper.addArrangedSubview(box)
+        wrapper.setCustomSpacing(6, after: box)
         wrapper.addArrangedSubview(error)
         return LabeledField(view: wrapper, caption: label)
     }
@@ -430,7 +438,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     ) -> UIView {
         let row = UIView()
         row.translatesAutoresizingMaskIntoConstraints = false
-        row.heightAnchor.constraint(equalToConstant: theme.fieldRowHeight).isActive = true
+        row.heightAnchor.constraint(equalToConstant: fieldHeight).isActive = true
         let input = makeTextField(field, placeholder: placeholder, keyboard: keyboard, contentType: contentType, cap: cap)
         row.addSubview(input)
         pinField(input, in: row)
@@ -440,7 +448,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     private func plainSelect(_ field: PersonalDetailsField, placeholder: String) -> UIView {
         let row = UIView()
         row.translatesAutoresizingMaskIntoConstraints = false
-        row.heightAnchor.constraint(equalToConstant: theme.fieldRowHeight).isActive = true
+        row.heightAnchor.constraint(equalToConstant: fieldHeight).isActive = true
         let select = makeSelect(field, placeholder: placeholder)
         row.addSubview(select)
         pinField(select, in: row)
@@ -452,10 +460,10 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         box.backgroundColor = theme.componentBackground
         box.layer.cornerRadius = theme.fieldGroupRadius
         box.layer.borderWidth = theme.borderWidth
-        box.layer.borderColor = theme.fieldBorder.cgColor
+        box.layer.borderColor = restingFieldBorder.cgColor
         box.clipsToBounds = true
         box.translatesAutoresizingMaskIntoConstraints = false
-        box.heightAnchor.constraint(equalToConstant: theme.fieldRowHeight).isActive = true
+        box.heightAnchor.constraint(equalToConstant: fieldHeight).isActive = true
         return box
     }
 
@@ -468,7 +476,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     ) -> UITextField {
         let input = UITextField()
         input.font = theme.font(ofSize: 18, weight: .medium)
-        input.textColor = theme.componentText
+        input.textColor = theme.primaryText
         input.keyboardType = keyboard
         input.autocapitalizationType = cap
         input.autocorrectionType = .no
@@ -492,6 +500,9 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
             self?.onPick?(field)
         }, for: .touchUpInside)
         select.setDisplay(storedSelectTitle(field), placeholder: text(placeholder))
+        if field == .phoneCountry {
+            select.setFlag(phoneFlag(values.phoneCountry))
+        }
         selects[field] = select
         return select
     }
@@ -499,8 +510,8 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     private func pinField(_ child: UIView, in parent: UIView) {
         child.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            child.leadingAnchor.constraint(equalTo: parent.leadingAnchor, constant: 14),
-            child.trailingAnchor.constraint(equalTo: parent.trailingAnchor, constant: -14),
+            child.leadingAnchor.constraint(equalTo: parent.leadingAnchor, constant: fieldInset),
+            child.trailingAnchor.constraint(equalTo: parent.trailingAnchor, constant: -fieldInset),
             child.topAnchor.constraint(equalTo: parent.topAnchor),
             child.bottomAnchor.constraint(equalTo: parent.bottomAnchor),
         ])
@@ -508,7 +519,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
 
     private func makeErrorLabel() -> UILabel {
         let label = UILabel()
-        label.font = theme.font(ofSize: 12.5, weight: .semibold)
+        label.font = theme.font(ofSize: 12, weight: .semibold)
         label.textColor = theme.errorText
         label.numberOfLines = 0
         label.isHidden = true
@@ -536,10 +547,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
             placeholder: text(format.regionSelectKey)
         )
         selects[.country]?.setDisplay(storedSelectTitle(.country), placeholder: text("personalDetails.countryPlaceholder"))
-        selects[.phoneCountry]?.setDisplay(
-            storedSelectTitle(.phoneCountry),
-            placeholder: text("personalDetails.phoneCountryPlaceholder")
-        )
+        refreshPhoneCountryDisplay()
     }
 
     private func regionPlaceholder() -> String {
@@ -564,7 +572,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
             return values.phoneCountry.isEmpty ? nil : phoneCountryTitle(values.phoneCountry)
         case .country:
             guard let country = Countries.byCode(values.country) else { return nil }
-            return "\(Countries.flagEmoji(code: country.code)) \(Countries.localizedName(country, locale: locale))"
+            return Countries.localizedName(country, locale: locale)
         case .region:
             return values.region.isEmpty ? nil : values.region
         default:
@@ -574,7 +582,21 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
 
     private func phoneCountryTitle(_ code: String) -> String {
         guard let country = Countries.byCode(code) else { return code }
-        return "\(Countries.flagEmoji(code: country.code)) +\(country.dialCode)"
+        return "+\(country.dialCode)"
+    }
+
+    private func phoneFlag(_ code: String) -> String? {
+        guard let country = Countries.byCode(code) else { return nil }
+        let flag = Countries.flagEmoji(code: country.code)
+        return flag.isEmpty ? nil : flag
+    }
+
+    private func refreshPhoneCountryDisplay() {
+        selects[.phoneCountry]?.setFlag(phoneFlag(values.phoneCountry))
+        selects[.phoneCountry]?.setDisplay(
+            storedSelectTitle(.phoneCountry),
+            placeholder: text("personalDetails.phoneCountryPlaceholder")
+        )
     }
 
     private func labelKey(_ field: PersonalDetailsField) -> String {
@@ -594,7 +616,11 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     private func setPlaceholder(_ field: UITextField, key: String) {
         field.attributedPlaceholder = NSAttributedString(
             string: text(key),
-            attributes: [.foregroundColor: theme.placeholderText]
+            attributes: [
+                .foregroundColor: placeholderColor,
+                .font: theme.font(ofSize: 18, weight: .regular),
+                .kern: -0.18 * theme.fontScale,
+            ]
         )
     }
 
@@ -713,7 +739,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
                     box.layer.borderColor = theme.primary.cgColor
                 } else {
                     box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
-                    box.layer.borderColor = theme.fieldBorder.cgColor
+                    box.layer.borderColor = restingFieldBorder.cgColor
                 }
             }
             return
@@ -733,7 +759,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
             group.layer.borderColor = theme.primary.cgColor
         } else {
             group.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
-            group.layer.borderColor = theme.fieldBorder.cgColor
+            group.layer.borderColor = restingFieldBorder.cgColor
         }
     }
 }
@@ -745,24 +771,36 @@ private struct LabeledField {
 
 private final class SelectControl: UIControl {
     private let label = UILabel()
+    private let flagLabel = UILabel()
     private let chevron = UIImageView()
     private let theme: CheckoutTheme
     private var placeholder = ""
+    private var labelLeading: NSLayoutConstraint!
 
     init(theme: CheckoutTheme) {
         self.theme = theme
         super.init(frame: .zero)
         label.font = theme.font(ofSize: 18, weight: .medium)
         label.translatesAutoresizingMaskIntoConstraints = false
+        flagLabel.font = theme.font(ofSize: 18, weight: .regular)
+        flagLabel.textAlignment = .center
+        flagLabel.isHidden = true
+        flagLabel.translatesAutoresizingMaskIntoConstraints = false
         chevron.image = EmbeddedAssets.image(named: "chevron-down")?.withRenderingMode(.alwaysTemplate)
         chevron.tintColor = theme.mutedIcon
         chevron.translatesAutoresizingMaskIntoConstraints = false
         isAccessibilityElement = true
         accessibilityTraits = .button
+        addSubview(flagLabel)
         addSubview(label)
         addSubview(chevron)
+        labelLeading = label.leadingAnchor.constraint(equalTo: leadingAnchor)
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor),
+            flagLabel.leadingAnchor.constraint(equalTo: leadingAnchor),
+            flagLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            flagLabel.widthAnchor.constraint(equalToConstant: 24),
+            flagLabel.heightAnchor.constraint(equalToConstant: 24),
+            labelLeading,
             label.trailingAnchor.constraint(equalTo: chevron.leadingAnchor, constant: -8),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
             chevron.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -775,6 +813,13 @@ private final class SelectControl: UIControl {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    func setFlag(_ flag: String?) {
+        let shown = flag?.isEmpty == false
+        flagLabel.isHidden = !shown
+        flagLabel.text = flag
+        labelLeading.constant = shown ? 32 : 0
+    }
+
     func setDisplay(_ value: String?, placeholder: String) {
         self.placeholder = placeholder
         let shown = (value?.isEmpty == false) ? value! : placeholder
@@ -783,8 +828,8 @@ private final class SelectControl: UIControl {
         label.attributedText = NSAttributedString(
             string: shown,
             attributes: [
-                .font: theme.font(ofSize: 18, weight: .medium),
-                .foregroundColor: filled ? theme.componentText : theme.placeholderText,
+                .font: theme.font(ofSize: 18, weight: filled ? .medium : .regular),
+                .foregroundColor: filled ? theme.primaryText : (UIColor(hex: "#D1CDDB") ?? theme.placeholderText),
             ]
         )
     }
