@@ -587,6 +587,7 @@ final class PaymentMethodContainerView: UIView {
         mc.setBrand("mastercard", size: .useOtherCardPair)
         let brands = UIStackView(arrangedSubviews: [visa, mc])
         brands.axis = .horizontal
+        brands.alignment = .center
         brands.spacing = 8
         brands.alpha = 0.85
 
