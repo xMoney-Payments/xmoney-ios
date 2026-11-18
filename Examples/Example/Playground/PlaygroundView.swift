@@ -18,9 +18,27 @@ struct PlaygroundView: View {
     @State private var grouping = playgroundGroupingOptions[0]
     @State private var submitVisible = true
     @State private var applePayEnabled = true
+    @State private var cryptoEnabled = false
     @State private var savedCardsEnabled = true
     @State private var saveCardOptInVisible = true
     @State private var nameCheck = false
+    @State private var customerDetailsCard = false
+    @State private var customerDetailsApplePay = false
+    @State private var customerDetailsFieldsOverride = false
+    @State private var customerDetailsFullName = true
+    @State private var customerDetailsEmail = true
+    @State private var customerDetailsPhone = false
+    @State private var customerDetailsAddress = true
+    @State private var customerDetailsPrefill = false
+    @State private var defaultsRevision = 0
+    @State private var defaultFullName = "Jane Doe"
+    @State private var defaultEmail = "jane@example.com"
+    @State private var defaultPhone = "+14155550100"
+    @State private var defaultCountry = "US"
+    @State private var defaultRegion = "CA"
+    @State private var defaultCity = "San Francisco"
+    @State private var defaultPostalCode = "94105"
+    @State private var defaultAddress = "1 Market St"
     @State private var walletColor = playgroundWalletColorOptions[0]
     @State private var walletType = playgroundWalletTypeOptions[0]
     @State private var walletRadius: Double = 28
@@ -42,10 +60,20 @@ struct PlaygroundView: View {
     private var structuralKey: String {
         [
             String(applePayEnabled),
+            String(cryptoEnabled),
             String(savedCardsEnabled),
             String(saveCardOptInVisible),
             grouping.value,
             String(nameCheck),
+            String(customerDetailsCard),
+            String(customerDetailsApplePay),
+            String(customerDetailsFieldsOverride),
+            String(customerDetailsFullName),
+            String(customerDetailsEmail),
+            String(customerDetailsPhone),
+            String(customerDetailsAddress),
+            String(customerDetailsPrefill),
+            String(defaultsRevision),
             buttonType.value,
             validation.value,
             String(submitVisible),
@@ -126,7 +154,7 @@ struct PlaygroundView: View {
         )
         .id(structuralKey)
         .onChange(of: structuralKey) { _ in
-            remount(configuration)
+            remount(makeConfiguration())
             resetInline()
         }
         .onChange(of: appearance) { _ in
@@ -151,11 +179,11 @@ struct PlaygroundView: View {
         }
         .onAppear {
             ApplePay.register()
-            remount(configuration)
+            remount(makeConfiguration())
         }
         .task(id: "\(mode)-\(structuralKey)-\(amountMinor)") {
             guard mode != .paymentSheet else { return }
-            await prepareInline(configuration)
+            await prepareInline(makeConfiguration())
         }
     }
 
@@ -180,7 +208,16 @@ struct PlaygroundView: View {
                 validationMode: playgroundValidation(validation.value),
                 submitButton: .init(visible: submitVisible, type: playgroundButtonType(buttonType.value))
             ),
-            paymentMethods: .init(applePay: .init(enabled: applePayEnabled, appearance: walletAppearance)),
+            paymentMethods: .init(
+                applePay: .init(enabled: applePayEnabled, appearance: walletAppearance),
+                showCryptoOption: cryptoEnabled
+            ),
+            customerDetails: .init(
+                card: customerDetailsCard,
+                applePay: customerDetailsApplePay,
+                fields: customerDetailsFields,
+                defaultValues: customerDetailsDefaultValues
+            ),
             options: .init(
                 locale: locale.value,
                 style: playgroundStyle(style.value),
@@ -279,9 +316,43 @@ struct PlaygroundView: View {
             optionPicker("Grouping", $grouping, playgroundGroupingOptions)
             ExampleSwitchRow(title: "SDK Pay button", subtitle: "Embedded only", isOn: $submitVisible, enabled: mode == .embedded, showDivider: true)
             ExampleSwitchRow(title: "Apple Pay", subtitle: "Wallet in Sheet / Element / standalone", isOn: $applePayEnabled, showDivider: true)
+            ExampleSwitchRow(title: "Crypto", subtitle: "Show the Pay with crypto option", isOn: $cryptoEnabled, showDivider: true)
             ExampleSwitchRow(title: "Saved cards", subtitle: "Offer previously saved cards", isOn: $savedCardsEnabled, showDivider: true)
             ExampleSwitchRow(title: "Save-card opt-in", subtitle: "Show the save checkbox", isOn: $saveCardOptInVisible, enabled: savedCardsEnabled, showDivider: true)
             ExampleSwitchRow(title: "Name check", subtitle: "John Doe must match", isOn: $nameCheck, showDivider: true)
+            ExampleSwitchRow(title: "Personal details", subtitle: "Collect customerDetails on card", isOn: $customerDetailsCard, showDivider: true)
+            ExampleSwitchRow(title: "Apple Pay details", subtitle: "Request contact fields from Apple Pay", isOn: $customerDetailsApplePay, showDivider: true)
+            ExampleSwitchRow(
+                title: "Custom field list",
+                subtitle: "customerDetails.fields replaces the account list",
+                isOn: $customerDetailsFieldsOverride,
+                showDivider: true
+            )
+            ExampleSwitchRow(title: "Name", subtitle: "fields.fullName", isOn: $customerDetailsFullName, enabled: customerDetailsFieldsOverride, showDivider: true)
+            ExampleSwitchRow(title: "Email", subtitle: "fields.email", isOn: $customerDetailsEmail, enabled: customerDetailsFieldsOverride, showDivider: true)
+            ExampleSwitchRow(title: "Phone", subtitle: "fields.phone", isOn: $customerDetailsPhone, enabled: customerDetailsFieldsOverride, showDivider: true)
+            ExampleSwitchRow(title: "Address", subtitle: "fields.address", isOn: $customerDetailsAddress, enabled: customerDetailsFieldsOverride, showDivider: true)
+            ExampleSwitchRow(
+                title: "Prefill card form",
+                subtitle: "customerDetails.defaultValues · Apple Pay ignores this",
+                isOn: $customerDetailsPrefill,
+                showDivider: true
+            )
+            if customerDetailsPrefill {
+                PlaygroundDefaultField(title: "Full name", text: $defaultFullName)
+                PlaygroundDefaultField(title: "Email", text: $defaultEmail)
+                PlaygroundDefaultField(title: "Phone", text: $defaultPhone)
+                PlaygroundDefaultField(title: "Country", text: $defaultCountry)
+                PlaygroundDefaultField(title: "Region", text: $defaultRegion)
+                PlaygroundDefaultField(title: "City", text: $defaultCity)
+                PlaygroundDefaultField(title: "Postal code", text: $defaultPostalCode)
+                PlaygroundDefaultField(title: "Address", text: $defaultAddress)
+                ExampleButton(label: "Apply prefill", variant: .secondary) {
+                    defaultsRevision += 1
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+            }
             optionPicker("Wallet color", $walletColor, playgroundWalletColorOptions)
             optionPicker("Wallet type", $walletType, playgroundWalletTypeOptions)
             VStack(alignment: .leading, spacing: 8) {
@@ -294,6 +365,30 @@ struct PlaygroundView: View {
                     .padding(.bottom, 12)
             }
         }
+    }
+
+    private var customerDetailsFields: PaymentConfig.CustomerDetailsConfig.Fields? {
+        guard customerDetailsFieldsOverride else { return nil }
+        return .init(
+            fullName: customerDetailsFullName,
+            email: customerDetailsEmail,
+            phone: customerDetailsPhone,
+            address: customerDetailsAddress
+        )
+    }
+
+    private var customerDetailsDefaultValues: PaymentConfig.CustomerDetailsConfig.DefaultValues? {
+        guard customerDetailsPrefill else { return nil }
+        return .init(
+            fullName: defaultFullName,
+            email: defaultEmail,
+            phone: defaultPhone,
+            country: defaultCountry,
+            region: defaultRegion,
+            city: defaultCity,
+            postalCode: defaultPostalCode,
+            address: defaultAddress
+        )
     }
 
     private func optionPicker(_ title: String, _ selection: Binding<DemoOption>, _ options: [DemoOption]) -> some View {
@@ -755,4 +850,23 @@ private func colorFromHex(_ hex: String) -> Color? {
         return nil
     }
     return Color(red: r, green: g, blue: b).opacity(a)
+}
+
+private struct PlaygroundDefaultField: View {
+    let title: String
+    @Binding var text: String
+    @EnvironmentObject private var theme: ExampleThemeState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .exampleLabelMedium()
+                .foregroundColor(theme.isDark ? ExampleColors.darkMuted : ExampleColors.lightMuted)
+            TextField(title, text: $text)
+                .textFieldStyle(.roundedBorder)
+                .font(ExampleFont.bodyMedium)
+                .autocorrectionDisabled()
+        }
+        .padding(.horizontal, 20)
+    }
 }

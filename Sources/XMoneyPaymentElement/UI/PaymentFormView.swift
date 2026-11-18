@@ -17,18 +17,21 @@ package final class PaymentFormView: UIView {
         }
 
         package static let embedded = ContentInsets(horizontal: 0, top: 0, bottom: 0)
-        package static let sheet = ContentInsets(horizontal: 22, top: 16, bottom: 12)
+        package static let sheet = ContentInsets(horizontal: 16, top: 16, bottom: 16)
     }
 
     package enum MethodSelection: Equatable {
         case saved(String)
         case newCard
+        case crypto
     }
 
-    package var onPayCard: ((CardInput) -> Void)?
-    package var onSelectSaved: ((SavedCard) -> Void)?
+    package var onPayCard: ((CardInput, CustomerDetails?) -> Void)?
+    package var onSelectSaved: ((SavedCard, CustomerDetails?) -> Void)?
+    package var onPayCrypto: ((CustomerDetails?) -> Void)?
     package var onDeleteSaved: ((SavedCard) async throws -> Void)?
     package var onApplePay: (() -> Void)?
+    package var onOpenPersonalDetails: (() -> Void)?
     package var onContentSizeChange: (() -> Void)?
 
     private var config: PaymentConfig
@@ -39,7 +42,10 @@ package final class PaymentFormView: UIView {
     private let payButton = PayCTAButton()
     private var cardForm: CardFormView?
     private var walletButton: PKPaymentButton?
+    private var personalDetailsRow: PersonalDetailsEntryRow?
     private var methodContainer: PaymentMethodContainerView?
+    private var cardPanel: PayWithCardPanelView?
+    private var cryptoPanel: CryptoOptionPanel?
     private var selection: MethodSelection
     private var isProcessing = false
     private var isUpdatingOrder = false
@@ -208,7 +214,13 @@ package final class PaymentFormView: UIView {
         }
         cardForm = nil
         walletButton = nil
+        personalDetailsRow = nil
         methodContainer = nil
+        cardPanel = nil
+        cryptoPanel = nil
+        if selection == .crypto, !config.paymentMethods.showCryptoOption {
+            selection = state.savedCards.first.map { .saved($0.id) } ?? .newCard
+        }
         buildContent()
         if let draft {
             cardForm?.restore(draft)
@@ -236,7 +248,7 @@ package final class PaymentFormView: UIView {
         applyPageFill()
 
         contentStack.axis = .vertical
-        contentStack.spacing = 18
+        contentStack.spacing = 12
         contentStack.translatesAutoresizingMaskIntoConstraints = false
 
         payButton.translatesAutoresizingMaskIntoConstraints = false
@@ -259,7 +271,7 @@ package final class PaymentFormView: UIView {
 
         let footerInner = UIStackView(arrangedSubviews: [payButton, powered])
         footerInner.axis = .vertical
-        footerInner.spacing = 10
+        footerInner.spacing = 12
         footerInner.translatesAutoresizingMaskIntoConstraints = false
 
         let footerWrap = UIView()
@@ -271,24 +283,9 @@ package final class PaymentFormView: UIView {
             footerInner.trailingAnchor.constraint(equalTo: footerWrap.trailingAnchor, constant: -contentInsets.horizontal),
             footerInner.bottomAnchor.constraint(equalTo: footerWrap.bottomAnchor),
         ]
-        if isEmbedded {
-            // Compact: no hairline; 8pt above Pay / powered-by (matches Android).
-            footerConstraints.append(
-                footerInner.topAnchor.constraint(equalTo: footerWrap.topAnchor, constant: 8)
-            )
-        } else {
-            let footerHairline = UIView()
-            footerHairline.backgroundColor = t.footerBorder
-            footerHairline.translatesAutoresizingMaskIntoConstraints = false
-            footerWrap.addSubview(footerHairline)
-            footerConstraints.append(contentsOf: [
-                footerHairline.topAnchor.constraint(equalTo: footerWrap.topAnchor),
-                footerHairline.leadingAnchor.constraint(equalTo: footerWrap.leadingAnchor),
-                footerHairline.trailingAnchor.constraint(equalTo: footerWrap.trailingAnchor),
-                footerHairline.heightAnchor.constraint(equalToConstant: 1),
-                footerInner.topAnchor.constraint(equalTo: footerHairline.bottomAnchor, constant: 12),
-            ])
-        }
+        footerConstraints.append(
+            footerInner.topAnchor.constraint(equalTo: footerWrap.topAnchor, constant: 12)
+        )
         NSLayoutConstraint.activate(footerConstraints)
 
         rootStack.axis = .vertical
@@ -296,13 +293,14 @@ package final class PaymentFormView: UIView {
         rootStack.alignment = .fill
         rootStack.addArrangedSubview(contentWrap)
         rootStack.addArrangedSubview(footerWrap)
-        rootStack.setCustomSpacing(isEmbedded ? 0 : 16, after: contentWrap)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(rootStack)
 
         // Below required so UIKit's transient 0x0 layout pass doesn't log conflicts.
         let bottom = rootStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -contentInsets.bottom)
-        bottom.priority = UILayoutPriority(999)
+        // Embedded hosts own the height and apply it a frame later. A high-priority bottom pin
+        // squeezes the details row while that height is still the previous one.
+        bottom.priority = isEmbedded ? .defaultLow - 1 : UILayoutPriority(999)
         rootBottomConstraint = bottom
         let trailing = rootStack.trailingAnchor.constraint(equalTo: trailingAnchor)
         trailing.priority = UILayoutPriority(999)
@@ -362,9 +360,25 @@ package final class PaymentFormView: UIView {
             }
             walletButton = applePayButton
             contentStack.addArrangedSubview(applePayButton)
+            contentStack.setCustomSpacing(24, after: applePayButton)
             contentStack.addArrangedSubview(
                 OrDividerView(theme: t, label: Strings.text("sheet.or", locale: config.options.locale))
             )
+        }
+
+        if collectsPersonalDetails {
+            let row = PersonalDetailsEntryRow(theme: t, locale: config.options.locale)
+            row.onTap = { [weak self] in self?.onOpenPersonalDetails?() }
+            row.apply(
+                completed: state.personalDetails.isComplete,
+                showsError: state.personalDetails.showsIncompleteError && !state.personalDetails.isComplete
+            )
+            personalDetailsRow = row
+            if let previous = contentStack.arrangedSubviews.last {
+                contentStack.setCustomSpacing(12, after: previous)
+            }
+            contentStack.addArrangedSubview(row)
+            contentStack.setCustomSpacing(12, after: row)
         }
 
         let formConfig = CardFormView.Configuration(
@@ -375,6 +389,9 @@ package final class PaymentFormView: UIView {
             grouping: config.card.inputs.grouping
         )
         let form = CardFormView(theme: t, config: formConfig)
+        form.onValidationChange = { [weak self] _ in
+            self?.updatePayButtonAppearance()
+        }
         form.onContentSizeChange = { [weak self] in
             guard let self else { return }
             let width = self.bounds.width > 0 ? self.bounds.width : UIScreen.main.bounds.width
@@ -415,14 +432,30 @@ package final class PaymentFormView: UIView {
             }
             methodContainer = container
             contentStack.addArrangedSubview(container)
+        } else if config.paymentMethods.showCryptoOption {
+            let panel = PayWithCardPanelView(theme: t, locale: config.options.locale, form: form)
+            panel.onSelect = { [weak self] in self?.setSelection(.newCard, animated: true) }
+            cardPanel = panel
+            contentStack.addArrangedSubview(panel)
         } else {
             contentStack.addArrangedSubview(form)
+        }
+
+        if config.paymentMethods.showCryptoOption {
+            let panel = CryptoOptionPanel(theme: t, locale: config.options.locale)
+            panel.onSelect = { [weak self] in self?.setSelection(.crypto, animated: true) }
+            cryptoPanel = panel
+            contentStack.addArrangedSubview(panel)
         }
 
         updatePayButtonAppearance()
     }
 
-    private func applySelection(animated: Bool) {
+    private func applySelection(animated: Bool, reportHeightImmediately: Bool = false) {
+        personalDetailsRow?.isHidden = isEditingSavedCards
+        cardPanel?.applySelected(selection == .newCard)
+        cryptoPanel?.applySelected(selection == .crypto)
+        cryptoPanel?.isHidden = isEditingSavedCards
         if let container = methodContainer, let form = cardForm {
             container.apply(
                 selection: mapSelection(),
@@ -434,6 +467,14 @@ package final class PaymentFormView: UIView {
             )
         }
         updatePayButtonAppearance()
+        if reportHeightImmediately {
+            layoutIfNeeded()
+            let width = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width
+            refreshCachedHeight(forWidth: width)
+            invalidateIntrinsicContentSize()
+            onContentSizeChange?()
+            return
+        }
         setNeedsLayout()
         // Defer measurement + callbacks until after the current layout pass.
         DispatchQueue.main.async { [weak self] in
@@ -450,6 +491,7 @@ package final class PaymentFormView: UIView {
         switch selection {
         case let .saved(id): return .saved(id)
         case .newCard: return .newCard
+        case .crypto: return .none
         }
     }
 
@@ -457,11 +499,13 @@ package final class PaymentFormView: UIView {
         guard selection != newSelection else { return }
         if newSelection == .newCard {
             cardForm?.resetErrors()
+        }
+        if newSelection == .newCard || newSelection == .crypto {
             isEditingSavedCards = false
             pendingDeleteId = nil
         }
         selection = newSelection
-        applySelection(animated: animated)
+        applySelection(animated: animated, reportHeightImmediately: true)
     }
 
     private func confirmDelete(_ card: SavedCard) {
@@ -497,6 +541,18 @@ package final class PaymentFormView: UIView {
             currency: state.orderInfo.currency,
             locale: config.options.locale
         )
+        if selection == .crypto {
+            let title = Strings.text("button.continue", locale: config.options.locale)
+            payButton.apply(theme: t, title: title, processing: false, enabled: interactionEnabled)
+            return
+        }
+        let enteringCard = selection == .newCard
+        let cardReady = cardForm?.isReady ?? !enteringCard
+        if enteringCard && !cardReady {
+            let prompt = Strings.text("sheet.enterCardDetails", locale: config.options.locale)
+            payButton.apply(theme: t, title: prompt, processing: false, enabled: interactionEnabled, dimmed: true)
+            return
+        }
         let title = Strings.submitButtonTitle(
             type: config.card.submitButton.type.rawValue,
             locale: config.options.locale,
@@ -509,16 +565,100 @@ package final class PaymentFormView: UIView {
         payTapped()
     }
 
+    package func refreshPersonalDetailsRow() {
+        personalDetailsRow?.apply(
+            completed: state.personalDetails.isComplete,
+            showsError: state.personalDetails.showsIncompleteError && !state.personalDetails.isComplete
+        )
+        publishHeightChange()
+    }
+
+    private var collectsPersonalDetails: Bool {
+        config.customerDetails.card && state.customerDetailsVisibility.isActive
+    }
+
+    private func personalDetailsPayload() -> CustomerDetails? {
+        guard collectsPersonalDetails else { return nil }
+        return state.personalDetails.committed?.makeCustomerDetails(visibility: state.customerDetailsVisibility)
+    }
+
+    private func ensurePersonalDetails() -> Bool {
+        guard collectsPersonalDetails else { return true }
+        if state.personalDetails.isComplete {
+            if state.personalDetails.showsIncompleteError {
+                state.personalDetails.showsIncompleteError = false
+                refreshPersonalDetailsRow()
+            }
+            return true
+        }
+        state.personalDetails.showsIncompleteError = true
+        refreshPersonalDetailsRow()
+        scrollIncompletePersonalDetailsIntoView()
+        return false
+    }
+
+    /// The entry row sits at the top. A Pay tap lower on the sheet can leave the error off screen.
+    private func scrollIncompletePersonalDetailsIntoView() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let row = self.personalDetailsRow else { return }
+            self.layoutIfNeeded()
+            guard let scrollView = Self.ancestorScrollView(from: row) else { return }
+            scrollView.layoutIfNeeded()
+            let fieldRect = row.convert(row.bounds, to: scrollView)
+            let visibleBottom = CGRect(
+                x: scrollView.bounds.minX,
+                y: scrollView.bounds.maxY,
+                width: scrollView.bounds.width,
+                height: 0
+            )
+            guard let target = KeyboardScroll.targetOffset(
+                fieldRect: fieldRect,
+                bounds: scrollView.bounds,
+                contentSize: scrollView.contentSize,
+                contentOffset: scrollView.contentOffset,
+                keyboardFrame: visibleBottom,
+                padding: 16
+            ) else { return }
+            scrollView.setContentOffset(target, animated: true)
+        }
+    }
+
+    private static func ancestorScrollView(from view: UIView) -> UIScrollView? {
+        var current = view.superview
+        while let candidate = current {
+            if let scroll = candidate as? UIScrollView { return scroll }
+            current = candidate.superview
+        }
+        return nil
+    }
+
+    private func publishHeightChange() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.layoutIfNeeded()
+            let width = self.bounds.width > 0 ? self.bounds.width : UIScreen.main.bounds.width
+            self.refreshCachedHeight(forWidth: width)
+            self.invalidateIntrinsicContentSize()
+            self.onContentSizeChange?()
+        }
+    }
+
     @objc private func payTapped() {
         guard !isProcessing, !isOrderConsumed, isUserInteractionEnabled else { return }
         switch selection {
         case let .saved(id):
             guard let card = state.savedCards.first(where: { $0.id == id }) else { return }
-            onSelectSaved?(card)
+            guard ensurePersonalDetails() else { return }
+            onSelectSaved?(card, personalDetailsPayload())
         case .newCard:
             guard let form = cardForm else { return }
-            guard form.validateAndShowErrors() else { return }
-            onPayCard?(form.currentInput)
+            let cardOK = form.validateAndShowErrors()
+            let detailsOK = ensurePersonalDetails()
+            guard cardOK, detailsOK else { return }
+            onPayCard?(form.currentInput, personalDetailsPayload())
+        case .crypto:
+            guard ensurePersonalDetails() else { return }
+            onPayCrypto?(personalDetailsPayload())
         }
     }
 

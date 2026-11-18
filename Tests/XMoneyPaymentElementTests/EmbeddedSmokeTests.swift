@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import XCTest
 @testable import XMoneyPaymentElement
 @testable import XMoneyCore
@@ -48,6 +49,524 @@ final class EmbeddedSmokeTests: XCTestCase {
         } else {
             XCTFail()
         }
+    }
+
+    @MainActor
+    func testPersonalDetailsFormStaysVisibleInTheSheet() {
+        let visibility = CustomerDetailsVisibility.resolve(
+            fields: ["firstName", "email", "phone", "country", "city", "zipCode", "address"]
+        )
+        let cases: [PaymentConfig] = [
+            PaymentConfig(publicKey: "pk_test_x"),
+            PaymentConfig(
+                publicKey: "pk_test_x",
+                card: .init(inputs: .init(grouping: .spaced))
+            ),
+            PaymentConfig(
+                publicKey: "pk_test_x",
+                options: .init(locale: "el-GR")
+            ),
+        ]
+        for config in cases {
+            let details = PersonalDetailsViewController(
+                config: config,
+                visibility: visibility,
+                initialValues: PersonalDetailsValues()
+            )
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 700))
+            window.rootViewController = details
+            window.makeKeyAndVisible()
+            details.view.layoutIfNeeded()
+
+            let scroll = details.view.firstScrollView()
+            XCTAssertGreaterThan(scroll?.bounds.height ?? 0, 200, config.options.locale)
+            XCTAssertGreaterThan(scroll?.firstTextField()?.bounds.height ?? 0, 0)
+            let title = details.view.firstMultilineLabel()
+            if config.options.locale == "el-GR" {
+                XCTAssertGreaterThan(
+                    title?.bounds.height ?? 0,
+                    40,
+                    "Greek title height \(title?.bounds.height ?? 0)"
+                )
+            }
+        }
+    }
+
+    @MainActor
+    func testCountryChangeShowsThePostalErrorBeforeSubmit() {
+        let visibility = CustomerDetailsVisibility.resolve(fields: ["country", "city", "zipCode", "address"])
+        let config = PaymentConfig(publicKey: "pk_test_x", card: .init(validationMode: .onSubmit))
+        let form = PersonalDetailsFormView(
+            theme: CheckoutTheme.resolve(config: config, isDark: false),
+            visibility: visibility,
+            validationMode: .onSubmit,
+            locale: "en",
+            grouping: .spaced,
+            values: PersonalDetailsValues(country: "US", postalCode: "12")
+        )
+        let postal = form.firstTextField(withText: "12")
+        form.textFieldDidEndEditing(postal!)
+        XCTAssertFalse(form.containsVisibleText("Please enter a valid ZIP code."))
+        form.setCountry("RO")
+        XCTAssertTrue(form.containsVisibleText("Please enter a valid postal code."))
+    }
+
+    @MainActor
+    func testCountryChangeUpdatesRegionAndPostalAccessibilityLabels() {
+        let visibility = CustomerDetailsVisibility.resolve(fields: ["country", "state", "zipCode", "address"])
+        let config = PaymentConfig(publicKey: "pk_test_x")
+        let form = PersonalDetailsFormView(
+            theme: CheckoutTheme.resolve(config: config, isDark: false),
+            visibility: visibility,
+            validationMode: .onSubmit,
+            locale: "en",
+            grouping: .spaced,
+            values: PersonalDetailsValues(country: "US")
+        )
+        XCTAssertNotNil(form.firstControl(accessibilityLabel: Strings.text("personalDetails.region.state", locale: "en")))
+        XCTAssertNotNil(form.firstControl(accessibilityLabel: Strings.text("personalDetails.postal.zipCode", locale: "en")))
+        form.setCountry("CA")
+        XCTAssertNil(form.firstControl(accessibilityLabel: Strings.text("personalDetails.region.state", locale: "en")))
+        XCTAssertNotNil(form.firstControl(accessibilityLabel: Strings.text("personalDetails.region.province", locale: "en")))
+        XCTAssertNotNil(form.firstControl(accessibilityLabel: Strings.text("personalDetails.postal.postalCode", locale: "en")))
+    }
+
+    @MainActor
+    func testCondensedFormShowsSectionErrorsOnSubmit() {
+        let visibility = CustomerDetailsVisibility.resolve(fields: ["firstName", "email", "country", "address"])
+        let config = PaymentConfig(publicKey: "pk_test_x")
+        let form = PersonalDetailsFormView(
+            theme: CheckoutTheme.resolve(config: config, isDark: false),
+            visibility: visibility,
+            validationMode: .onSubmit,
+            locale: "en",
+            grouping: .condensed,
+            values: PersonalDetailsValues()
+        )
+        XCTAssertFalse(form.validateAndShowErrors())
+        XCTAssertTrue(form.containsVisibleText(Strings.text("personalDetails.errors.fullNameRequired", locale: "en")))
+        XCTAssertTrue(form.containsVisibleText(Strings.text("personalDetails.errors.countryRequired", locale: "en")))
+    }
+
+    @MainActor
+    func testEmbeddedFormShowsThePersonalDetailsRow() {
+        let form = Self.detailsForm(savedCards: [])
+        form.frame = CGRect(x: 0, y: 0, width: 390, height: 800)
+        form.layoutIfNeeded()
+        XCTAssertNotNil(form.firstSubview(of: PersonalDetailsEntryRow.self))
+    }
+
+    @MainActor
+    func testNewCardPayStaysBlockedUntilPersonalDetailsAreComplete() {
+        let progress = PersonalDetailsProgress()
+        let form = Self.detailsForm(savedCards: [], progress: progress)
+        form.frame = CGRect(x: 0, y: 0, width: 390, height: 900)
+        form.layoutIfNeeded()
+        form.setTextField(accessibilityLabel: "Card Number", text: "4242424242424242")
+        form.setTextField(accessibilityLabel: "Expiration Date", text: "1230")
+        form.setTextField(accessibilityLabel: "CVV", text: "123")
+        form.setTextField(accessibilityLabel: "Cardholder Name", text: "Ada Lovelace")
+
+        var paid: CustomerDetails??
+        form.onPayCard = { _, details in paid = details }
+        form.confirm()
+        XCTAssertNil(paid)
+        XCTAssertTrue(form.containsVisibleText(Strings.text("personalDetails.completeDetails", locale: "en")))
+
+        progress.commit(PersonalDetailsValues(email: "ada@example.com"))
+        form.refreshPersonalDetailsRow()
+        form.confirm()
+        XCTAssertEqual(paid??.email, "ada@example.com")
+    }
+
+    @MainActor
+    func testSavedCardPayStaysBlockedUntilPersonalDetailsAreComplete() {
+        let progress = PersonalDetailsProgress()
+        let card = SavedCard(id: "card_1", cardNumber: "4242", cardType: "visa", cardExpiryDate: "12/30")
+        let form = Self.detailsForm(savedCards: [card], progress: progress)
+        form.frame = CGRect(x: 0, y: 0, width: 390, height: 900)
+        form.layoutIfNeeded()
+
+        var selected: CustomerDetails??
+        form.onSelectSaved = { _, details in selected = details }
+        form.confirm()
+        XCTAssertNil(selected)
+        XCTAssertTrue(form.containsVisibleText(Strings.text("personalDetails.completeDetails", locale: "en")))
+
+        progress.commit(PersonalDetailsValues(email: "ada@example.com"))
+        form.refreshPersonalDetailsRow()
+        form.confirm()
+        XCTAssertEqual(selected??.email, "ada@example.com")
+    }
+
+    @MainActor
+    func testHostConfirmValidatesAnOpenDetailsPageThenPays() {
+        let visibility = CustomerDetailsVisibility.resolve(fields: ["email"])
+        let state = SheetState(
+            sessionToken: "tok",
+            orderInfo: OrderPayloadInfo(
+                cardTransactionMode: nil,
+                isVerifyCard: false,
+                amount: 19.99,
+                currency: "EUR",
+                externalOrderId: "order-1",
+                isRecurring: false
+            ),
+            savedCards: [],
+            applePayAvailable: false,
+            customerDetailsVisibility: visibility
+        )
+        let payment = EmbeddedPayment(
+            configuration: PaymentConfig(publicKey: "pk_test_x", customerDetails: .init(card: true))
+        ) { _ in }
+        payment._controller.preview(state)
+        let element = PaymentElement(payment: payment) { _ in }
+        element.mountPreview()
+
+        let host = UIViewController()
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 900))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        element.translatesAutoresizingMaskIntoConstraints = false
+        host.view.addSubview(element)
+        NSLayoutConstraint.activate([
+            element.topAnchor.constraint(equalTo: host.view.topAnchor),
+            element.leadingAnchor.constraint(equalTo: host.view.leadingAnchor),
+            element.trailingAnchor.constraint(equalTo: host.view.trailingAnchor),
+        ])
+        host.view.layoutIfNeeded()
+        element.firstSubview(of: PersonalDetailsEntryRow.self)?.onTap?()
+        host.view.layoutIfNeeded()
+
+        element.confirm()
+        XCTAssertFalse(state.personalDetails.isComplete)
+        XCTAssertTrue(element.containsVisibleText(Strings.text("personalDetails.errors.emailRequired", locale: "en")))
+        XCTAssertTrue(element.containsVisibleText(Strings.text("personalDetails.continue", locale: "en")))
+        XCTAssertFalse(element.containsVisibleText(Strings.text("errors.cardNumberRequired", locale: "en")))
+
+        let filled = SheetState(
+            sessionToken: "tok",
+            orderInfo: state.orderInfo,
+            savedCards: [],
+            applePayAvailable: false,
+            customerDetailsVisibility: visibility
+        )
+        filled.personalDetails.draft = PersonalDetailsValues(email: "ada@example.com")
+        let filledPayment = EmbeddedPayment(
+            configuration: PaymentConfig(publicKey: "pk_test_x", customerDetails: .init(card: true))
+        ) { _ in }
+        filledPayment._controller.preview(filled)
+        let filledElement = PaymentElement(payment: filledPayment) { _ in }
+        filledElement.mountPreview()
+        filledElement.translatesAutoresizingMaskIntoConstraints = false
+        host.view.addSubview(filledElement)
+        NSLayoutConstraint.activate([
+            filledElement.topAnchor.constraint(equalTo: host.view.topAnchor),
+            filledElement.leadingAnchor.constraint(equalTo: host.view.leadingAnchor),
+            filledElement.trailingAnchor.constraint(equalTo: host.view.trailingAnchor),
+        ])
+        host.view.layoutIfNeeded()
+        filledElement.firstSubview(of: PersonalDetailsEntryRow.self)?.onTap?()
+        host.view.layoutIfNeeded()
+        filledElement.confirm()
+
+        XCTAssertTrue(filled.personalDetails.isComplete)
+        XCTAssertEqual(filled.personalDetails.committed?.email, "ada@example.com")
+        XCTAssertFalse(filledElement.containsVisibleText(Strings.text("personalDetails.continue", locale: "en")))
+        XCTAssertTrue(filledElement.containsVisibleText(Strings.text("errors.cardNumberRequired", locale: "en")))
+    }
+
+    @MainActor
+    func testCountrySelectExposesItsValueToAccessibility() {
+        let visibility = CustomerDetailsVisibility.resolve(fields: ["country"])
+        let config = PaymentConfig(publicKey: "pk_test_x")
+        let form = PersonalDetailsFormView(
+            theme: CheckoutTheme.resolve(config: config, isDark: false),
+            visibility: visibility,
+            validationMode: .onSubmit,
+            locale: "en",
+            grouping: .spaced,
+            values: PersonalDetailsValues()
+        )
+        form.setCountry("DE")
+        let match = form.firstAccessibilityElement { element in
+            element.accessibilityTraits.contains(.button)
+                && (element.accessibilityValue ?? "").contains("Germany")
+        }
+        XCTAssertNotNil(match)
+    }
+
+    private static func makeDetailsPage(
+        presentation: PersonalDetailsPresentation = .sheet
+    ) -> PersonalDetailsViewController {
+        let visibility = CustomerDetailsVisibility.resolve(
+            fields: ["firstName", "email", "phone", "country", "city", "zipCode", "address"]
+        )
+        return PersonalDetailsViewController(
+            config: PaymentConfig(publicKey: "pk_test_x"),
+            visibility: visibility,
+            initialValues: PersonalDetailsValues(),
+            presentation: presentation
+        )
+    }
+
+    private static func detailsForm(
+        savedCards: [SavedCard],
+        progress: PersonalDetailsProgress = PersonalDetailsProgress()
+    ) -> PaymentFormView {
+        let visibility = CustomerDetailsVisibility.resolve(fields: ["email"])
+        let state = SheetState(
+            sessionToken: "tok",
+            orderInfo: OrderPayloadInfo(
+                cardTransactionMode: nil,
+                isVerifyCard: false,
+                amount: 19.99,
+                currency: "EUR",
+                externalOrderId: "order-1",
+                isRecurring: false
+            ),
+            savedCards: savedCards,
+            applePayAvailable: false,
+            customerDetailsVisibility: visibility,
+            personalDetails: progress
+        )
+        return PaymentFormView(
+            config: PaymentConfig(
+                publicKey: "pk_test_x",
+                customerDetails: .init(card: true)
+            ),
+            state: state
+        )
+    }
+
+    @MainActor
+    func testPersonalDetailsScrollsOnlyWhenThePageOverflows() {
+        let fittedWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 2000))
+        let fitted = Self.makeDetailsPage()
+        fittedWindow.rootViewController = fitted
+        fittedWindow.makeKeyAndVisible()
+        fitted.view.layoutIfNeeded()
+        let fittedScroll = fitted.view.firstScrollView()
+        XCTAssertNotNil(fittedScroll)
+        XCTAssertEqual(fittedScroll?.showsVerticalScrollIndicator, false)
+        XCTAssertEqual(fittedScroll?.showsHorizontalScrollIndicator, false)
+        XCTAssertLessThanOrEqual(fittedScroll?.contentSize.height ?? 0, (fittedScroll?.bounds.height ?? 0) + 1)
+        XCTAssertEqual(fittedScroll?.isScrollEnabled, false)
+        XCTAssertEqual(fittedScroll?.bounces, false)
+
+        let shortWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 220))
+        let overflow = Self.makeDetailsPage()
+        shortWindow.rootViewController = overflow
+        shortWindow.makeKeyAndVisible()
+        overflow.view.layoutIfNeeded()
+        let overflowScroll = overflow.view.firstScrollView()
+        XCTAssertGreaterThan(
+            overflowScroll?.contentSize.height ?? 0,
+            (overflowScroll?.bounds.height ?? 0) + 1
+        )
+        XCTAssertEqual(overflowScroll?.isScrollEnabled, true)
+        XCTAssertEqual(overflowScroll?.showsVerticalScrollIndicator, false)
+
+        let inlineWindow = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 800))
+        let inline = Self.makeDetailsPage(presentation: .inline)
+        inlineWindow.rootViewController = inline
+        inlineWindow.makeKeyAndVisible()
+        inline.view.layoutIfNeeded()
+        XCTAssertNil(inline.view.firstScrollView())
+    }
+
+    @MainActor
+    func testEmbeddedElementSwapsInPersonalDetails() {
+        let visibility = CustomerDetailsVisibility.resolve(fields: ["email"])
+        let state = SheetState(
+            sessionToken: "tok",
+            orderInfo: OrderPayloadInfo(
+                cardTransactionMode: nil,
+                isVerifyCard: false,
+                amount: 19.99,
+                currency: "EUR",
+                externalOrderId: "order-1",
+                isRecurring: false
+            ),
+            savedCards: [],
+            applePayAvailable: false,
+            customerDetailsVisibility: visibility
+        )
+        let payment = EmbeddedPayment(
+            configuration: PaymentConfig(publicKey: "pk_test_x", customerDetails: .init(card: true))
+        ) { _ in }
+        payment._controller.preview(state)
+        let element = PaymentElement(payment: payment) { _ in }
+        element.mountPreview()
+
+        let host = UIViewController()
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 900))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        element.translatesAutoresizingMaskIntoConstraints = false
+        host.view.addSubview(element)
+        NSLayoutConstraint.activate([
+            element.topAnchor.constraint(equalTo: host.view.topAnchor),
+            element.leadingAnchor.constraint(equalTo: host.view.leadingAnchor),
+            element.trailingAnchor.constraint(equalTo: host.view.trailingAnchor),
+        ])
+        host.view.layoutIfNeeded()
+
+        let form = element.firstSubview(of: PaymentFormView.self)
+        let formHeight = element.intrinsicContentSize.height
+        XCTAssertNotNil(form)
+        XCTAssertGreaterThan(formHeight, 160)
+
+        var reported = formHeight
+        element.onContentSizeChange = { [weak element] in
+            reported = element?.intrinsicContentSize.height ?? 0
+        }
+
+        element.firstSubview(of: PersonalDetailsEntryRow.self)?.onTap?()
+        host.view.layoutIfNeeded()
+
+        let details = host.children.first { $0 is PersonalDetailsViewController } as? PersonalDetailsViewController
+        XCTAssertNotNil(details)
+        XCTAssertNil(form?.superview)
+        XCTAssertEqual(element.intrinsicContentSize.height, details?.contentHeight ?? -1)
+        XCTAssertEqual(reported, details?.contentHeight ?? -1)
+        XCTAssertTrue(element.containsVisibleText(Strings.text("personalDetails.continue", locale: "en")))
+
+        let back = element.firstButton(accessibilityLabel: Strings.text("personalDetails.back", locale: "en"))
+        XCTAssertNotNil(back)
+        back?.sendActions(for: .touchUpInside)
+        host.view.layoutIfNeeded()
+
+        XCTAssertTrue(host.children.isEmpty)
+        XCTAssertEqual(form?.superview, element)
+        XCTAssertFalse(element.containsVisibleText(Strings.text("personalDetails.continue", locale: "en")))
+        XCTAssertEqual(element.intrinsicContentSize.height, formHeight)
+    }
+
+    @MainActor
+    func testDetailsRowStaysPutWhenSwitchingToANewCard() {
+        let card = SavedCard(id: "card_1", cardNumber: "4242", cardType: "visa", cardExpiryDate: "12/30")
+        let visibility = CustomerDetailsVisibility.resolve(fields: ["email"])
+        let state = SheetState(
+            sessionToken: "tok",
+            orderInfo: OrderPayloadInfo(
+                cardTransactionMode: nil,
+                isVerifyCard: false,
+                amount: 19.99,
+                currency: "EUR",
+                externalOrderId: "order-1",
+                isRecurring: false
+            ),
+            savedCards: [card],
+            applePayAvailable: false,
+            customerDetailsVisibility: visibility
+        )
+        let payment = EmbeddedPayment(
+            configuration: PaymentConfig(publicKey: "pk_test_x", customerDetails: .init(card: true))
+        ) { _ in }
+        payment._controller.preview(state)
+        let element = PaymentElement(payment: payment) { _ in }
+        element.mountPreview()
+
+        let host = UIViewController()
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 900))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        element.translatesAutoresizingMaskIntoConstraints = false
+        host.view.addSubview(element)
+        NSLayoutConstraint.activate([
+            element.topAnchor.constraint(equalTo: host.view.topAnchor),
+            element.leadingAnchor.constraint(equalTo: host.view.leadingAnchor),
+            element.trailingAnchor.constraint(equalTo: host.view.trailingAnchor),
+        ])
+        host.view.layoutIfNeeded()
+
+        let heightLock = element.heightAnchor.constraint(equalToConstant: element.bounds.height)
+        heightLock.isActive = true
+        host.view.layoutIfNeeded()
+
+        let row = element.firstSubview(of: PersonalDetailsEntryRow.self)
+        XCTAssertNotNil(row)
+        let before = row?.convert(row?.bounds ?? .zero, to: element) ?? .zero
+        XCTAssertGreaterThan(before.height, 1)
+
+        element.firstSubview(of: PaymentMethodContainerView.self)?.onUseOtherCard?()
+        host.view.layoutIfNeeded()
+
+        let after = row?.convert(row?.bounds ?? .zero, to: element) ?? .zero
+        XCTAssertEqual(after.minY, before.minY, accuracy: 0.5)
+        XCTAssertEqual(after.height, before.height, accuracy: 0.5)
+        XCTAssertEqual(element.bounds.height, heightLock.constant, accuracy: 0.5)
+        let fitting = row?.systemLayoutSizeFitting(
+            CGSize(width: max(row?.bounds.width ?? 1, 1), height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        ).height ?? 0
+        XCTAssertEqual(after.height, fitting, accuracy: 1)
+    }
+
+    @MainActor
+    func testInlineCountryPickerOpensAsASheetWithoutResizing() {
+        let visibility = CustomerDetailsVisibility.resolve(fields: ["country"])
+        let state = SheetState(
+            sessionToken: "tok",
+            orderInfo: OrderPayloadInfo(
+                cardTransactionMode: nil,
+                isVerifyCard: false,
+                amount: 19.99,
+                currency: "EUR",
+                externalOrderId: "order-1",
+                isRecurring: false
+            ),
+            savedCards: [],
+            applePayAvailable: false,
+            customerDetailsVisibility: visibility
+        )
+        let payment = EmbeddedPayment(
+            configuration: PaymentConfig(publicKey: "pk_test_x", customerDetails: .init(card: true))
+        ) { _ in }
+        payment._controller.preview(state)
+        let element = PaymentElement(payment: payment) { _ in }
+        element.mountPreview()
+
+        let host = UIViewController()
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 900))
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        element.translatesAutoresizingMaskIntoConstraints = false
+        host.view.addSubview(element)
+        NSLayoutConstraint.activate([
+            element.topAnchor.constraint(equalTo: host.view.topAnchor),
+            element.leadingAnchor.constraint(equalTo: host.view.leadingAnchor),
+            element.trailingAnchor.constraint(equalTo: host.view.trailingAnchor),
+        ])
+        host.view.layoutIfNeeded()
+        element.firstSubview(of: PersonalDetailsEntryRow.self)?.onTap?()
+        host.view.layoutIfNeeded()
+
+        let details = host.children.first { $0 is PersonalDetailsViewController } as? PersonalDetailsViewController
+        let height = element.intrinsicContentSize.height
+        XCTAssertNotNil(details)
+        XCTAssertTrue(details?.view.isDescendant(of: element) == true)
+        XCTAssertGreaterThan(height, 160)
+
+        var resized = false
+        element.onContentSizeChange = { resized = true }
+        let country = Strings.text("personalDetails.country", locale: "en")
+        let select = element.firstControl(accessibilityLabel: country)
+        XCTAssertNotNil(select)
+        select?.sendActions(for: .touchUpInside)
+
+        let list = host.presentedViewController as? SelectionListViewController
+        XCTAssertNotNil(list)
+        XCTAssertEqual(list?.modalPresentationStyle, .pageSheet)
+        XCTAssertEqual(list?.sheetPresentationController?.prefersGrabberVisible, true)
+        XCTAssertEqual(list?.sheetPresentationController?.detents, [.large()])
+        XCTAssertTrue(details?.view.isDescendant(of: element) == true)
+        XCTAssertFalse(details?.view.isHidden == true)
+        XCTAssertEqual(element.intrinsicContentSize.height, height)
+        XCTAssertFalse(resized)
+        XCTAssertTrue(element.containsVisibleText(Strings.text("personalDetails.continue", locale: "en")))
     }
 
     @MainActor
@@ -1056,5 +1575,90 @@ final class EmbeddedSmokeTests: XCTestCase {
             orderPayload: OrderPayload("payload-\(suffix)"),
             orderChecksum: OrderChecksum("checksum-\(suffix)")
         )
+    }
+}
+
+private extension UIView {
+    func firstScrollView() -> UIScrollView? {
+        if let scroll = self as? UIScrollView { return scroll }
+        for subview in subviews {
+            if let found = subview.firstScrollView() { return found }
+        }
+        return nil
+    }
+
+    func firstMultilineLabel() -> UILabel? {
+        if let label = self as? UILabel, label.numberOfLines > 1 { return label }
+        for subview in subviews {
+            if let found = subview.firstMultilineLabel() { return found }
+        }
+        return nil
+    }
+
+    func firstTextField(withText text: String) -> UITextField? {
+        if let field = self as? UITextField, field.text == text { return field }
+        for subview in subviews {
+            if let found = subview.firstTextField(withText: text) { return found }
+        }
+        return nil
+    }
+
+    func containsVisibleText(_ text: String) -> Bool {
+        if let label = self as? UILabel, !label.isHidden, label.text == text { return true }
+        for subview in subviews where !subview.isHidden {
+            if subview.containsVisibleText(text) { return true }
+        }
+        return false
+    }
+
+    func firstSubview<T: UIView>(of type: T.Type) -> T? {
+        if let match = self as? T { return match }
+        for subview in subviews {
+            if let found = subview.firstSubview(of: type) { return found }
+        }
+        return nil
+    }
+
+    func setTextField(accessibilityLabel: String, text: String) {
+        func walk(_ view: UIView) -> UITextField? {
+            if let field = view as? UITextField, field.accessibilityLabel == accessibilityLabel { return field }
+            for subview in view.subviews {
+                if let found = walk(subview) { return found }
+            }
+            return nil
+        }
+        walk(self)?.text = text
+    }
+
+    func firstAccessibilityElement(where matches: (UIView) -> Bool) -> UIView? {
+        if isAccessibilityElement, matches(self) { return self }
+        for subview in subviews {
+            if let found = subview.firstAccessibilityElement(where: matches) { return found }
+        }
+        return nil
+    }
+
+    func firstControl(accessibilityLabel: String) -> UIControl? {
+        if let control = self as? UIControl, control.accessibilityLabel == accessibilityLabel { return control }
+        for subview in subviews {
+            if let found = subview.firstControl(accessibilityLabel: accessibilityLabel) { return found }
+        }
+        return nil
+    }
+
+    func firstButton(accessibilityLabel: String) -> UIButton? {
+        if let button = self as? UIButton, button.accessibilityLabel == accessibilityLabel { return button }
+        for subview in subviews {
+            if let found = subview.firstButton(accessibilityLabel: accessibilityLabel) { return found }
+        }
+        return nil
+    }
+
+    func firstTextField() -> UITextField? {
+        if let field = self as? UITextField { return field }
+        for subview in subviews {
+            if let found = subview.firstTextField() { return found }
+        }
+        return nil
     }
 }

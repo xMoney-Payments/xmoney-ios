@@ -2,7 +2,7 @@
   "defaultColors": {
     "light": {
       "primary": "#7c4dff",
-      "background": "#ffffff",
+      "background": "#f7f6ff",
       "error": "#ff6b6b"
     },
     "dark": {
@@ -71,7 +71,7 @@
         "colorsLight": { "primary": "#ff0000" },
         "colors": { "primary": "#00ff00" }
       },
-      "expected": { "primary": "#ff0000", "background": "#ffffff" }
+      "expected": { "primary": "#ff0000", "background": "#f7f6ff" }
     },
     {
       "isDark": true,

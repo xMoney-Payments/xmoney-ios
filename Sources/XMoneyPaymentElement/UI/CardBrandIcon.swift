@@ -86,16 +86,16 @@ package final class CardBrandIcon: UIImageView {
     private static func visaSize(_ size: CardBrandIconSize) -> (CGFloat, CGFloat) {
         switch size {
         case .fieldTrailing: return (34, 11)
-        case .savedCardRow: return (31, 10)
-        case .useOtherCardPair: return (28, 9)
+        case .savedCardRow: return (33, 10.725)
+        case .useOtherCardPair: return (30, 9.75)
         }
     }
 
     private static func mastercardSize(_ size: CardBrandIconSize) -> (CGFloat, CGFloat) {
         switch size {
         case .fieldTrailing: return (30, 19)
-        case .savedCardRow: return (29, 18)
-        case .useOtherCardPair: return (24, 15)
+        case .savedCardRow: return (30, 18.95)
+        case .useOtherCardPair: return (26, 16.42)
         }
     }
 

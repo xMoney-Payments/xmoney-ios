@@ -54,8 +54,8 @@ package final class PayCTAButton: UIView {
         NSLayoutConstraint.activate([
             height,
             titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 16),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
+            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 24),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -24),
             centerX,
             coinMarkContainer.trailingAnchor.constraint(equalTo: titleLabel.leadingAnchor, constant: -12),
             coinMarkContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -77,7 +77,7 @@ package final class PayCTAButton: UIView {
         updateFillPath()
     }
 
-    package func apply(theme: CheckoutTheme, title: String, processing: Bool, enabled: Bool) {
+    package func apply(theme: CheckoutTheme, title: String, processing: Bool, enabled: Bool, dimmed: Bool = false) {
         paintedFill = theme.primaryButtonBackground
         requestedRadius = theme.primaryButtonBorderRadius
         heightConstraint?.constant = theme.payButtonHeight
@@ -89,15 +89,16 @@ package final class PayCTAButton: UIView {
         titleLabel.isHidden = false
         titleLabel.text = title
         titleLabel.textColor = theme.primaryButtonText
-        titleLabel.font = theme.payFont(ofSize: 16, weight: .semibold)
-        let tracking = -0.01 * 16 * theme.fontScale
+        titleLabel.font = theme.payFont(ofSize: 18, weight: .semibold)
         titleLabel.attributedText = NSAttributedString(
             string: title,
-            attributes: [
-                .font: theme.payFont(ofSize: 16, weight: .semibold),
-                .foregroundColor: theme.primaryButtonText,
-                .kern: tracking,
-            ]
+            attributes: theme.titleAttributes(
+                size: 18,
+                weight: .semibold,
+                color: theme.primaryButtonText,
+                alignment: .center,
+                family: theme.primaryButtonFontFamily
+            )
         )
         titleCenterX?.constant = processing ? 12 : 0
         accessibilityLabel = title
@@ -107,6 +108,10 @@ package final class PayCTAButton: UIView {
             alpha = 0.9
             layer.shadowOpacity = 0
             showCoinMark(color: theme.primaryButtonText)
+        } else if dimmed {
+            alpha = 0.4
+            layer.shadowOpacity = 0
+            hideCoinMark()
         } else if enabled {
             alpha = 1
             layer.shadowColor = UIColor(red: 124 / 255, green: 77 / 255, blue: 255 / 255, alpha: 1).cgColor
@@ -116,7 +121,7 @@ package final class PayCTAButton: UIView {
             layer.masksToBounds = false
             hideCoinMark()
         } else {
-            alpha = 0.5
+            alpha = 0.4
             layer.shadowOpacity = 0
             hideCoinMark()
         }

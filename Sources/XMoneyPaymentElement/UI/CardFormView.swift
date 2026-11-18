@@ -60,7 +60,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
     private let containerStack = UIStackView()
     private let errorsStack = UIStackView()
     private var fields: [Field: FieldUI] = [:]
-    private var spacedErrorLabels: [Field: UILabel] = [:]
+    private var spacedErrorLabels: [Field: ErrorRowView] = [:]
     private var spacedBoxes: [Field: UIView] = [:]
     private let brandIcon = CardBrandIcon(size: .fieldTrailing)
     private let cvvIconView = CvvIconView()
@@ -155,7 +155,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
 
     private func setup() {
         outerStack.axis = .vertical
-        outerStack.spacing = 6
+        outerStack.spacing = 8
         outerStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(outerStack)
         NSLayoutConstraint.activate([
@@ -166,20 +166,24 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         ])
 
         if config.showCardDetailsCaption {
-            captionLabel.text = Strings.text("sheet.cardDetails", locale: config.locale)
-            captionLabel.font = theme.font(ofSize: 13, weight: .semibold)
-            captionLabel.textColor = theme.primaryText.withAlphaComponent(0.45)
+            theme.style(
+                captionLabel,
+                text: Strings.text("sheet.cardDetails", locale: config.locale),
+                size: 14,
+                weight: .semibold,
+                color: theme.sectionLabelColor
+            )
             let captionWrap = UIView()
             captionLabel.translatesAutoresizingMaskIntoConstraints = false
             captionWrap.addSubview(captionLabel)
             NSLayoutConstraint.activate([
                 captionLabel.topAnchor.constraint(equalTo: captionWrap.topAnchor),
-                captionLabel.leadingAnchor.constraint(equalTo: captionWrap.leadingAnchor, constant: 2),
+                captionLabel.leadingAnchor.constraint(equalTo: captionWrap.leadingAnchor),
                 captionLabel.trailingAnchor.constraint(equalTo: captionWrap.trailingAnchor),
                 captionLabel.bottomAnchor.constraint(equalTo: captionWrap.bottomAnchor),
             ])
             outerStack.addArrangedSubview(captionWrap)
-            outerStack.setCustomSpacing(9, after: captionWrap)
+            outerStack.setCustomSpacing(8, after: captionWrap)
         }
 
         if config.isSpaced {
@@ -192,31 +196,39 @@ package final class CardFormView: UIView, UITextFieldDelegate {
 
         if !config.isSpaced {
             errorsStack.axis = .vertical
-            errorsStack.spacing = 2
+            errorsStack.spacing = 8
+            outerStack.setCustomSpacing(0, after: container)
             outerStack.addArrangedSubview(errorsStack)
         }
 
         if config.showSaveOptIn {
+            if let last = outerStack.arrangedSubviews.last {
+                outerStack.setCustomSpacing(0, after: last)
+            }
             let saveRow = UIControl()
             let checkbox = CheckboxControl(theme: theme)
-            checkbox.setChecked(false, animated: false)
+            checkbox.setChecked(true, animated: false)
             saveCheckbox = checkbox
 
             let label = UILabel()
-            label.text = Strings.text("sheet.saveCardShort", locale: config.locale)
-            label.font = theme.font(ofSize: 14, weight: .semibold)
-            label.textColor = theme.primaryText
+            theme.style(
+                label,
+                text: Strings.text("sheet.saveCardShort", locale: config.locale),
+                size: 14,
+                weight: .semibold,
+                color: theme.primaryText
+            )
 
             let row = UIStackView(arrangedSubviews: [checkbox, label])
             row.axis = .horizontal
-            row.spacing = 11
+            row.spacing = 12
             row.alignment = .center
             row.isUserInteractionEnabled = false
             row.translatesAutoresizingMaskIntoConstraints = false
             saveRow.addSubview(row)
             NSLayoutConstraint.activate([
                 row.topAnchor.constraint(equalTo: saveRow.topAnchor, constant: 12),
-                row.leadingAnchor.constraint(equalTo: saveRow.leadingAnchor, constant: 2),
+                row.leadingAnchor.constraint(equalTo: saveRow.leadingAnchor),
                 row.trailingAnchor.constraint(lessThanOrEqualTo: saveRow.trailingAnchor),
                 row.bottomAnchor.constraint(equalTo: saveRow.bottomAnchor, constant: -12),
             ])
@@ -230,8 +242,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
     private func setupCondensedFields() {
         container.backgroundColor = theme.componentBackground
         container.layer.cornerRadius = theme.fieldGroupRadius
-        container.layer.borderWidth = theme.borderWidth
-        container.layer.borderColor = theme.fieldBorder.cgColor
+        container.layer.borderWidth = 0
         container.clipsToBounds = true
         container.translatesAutoresizingMaskIntoConstraints = false
         outerStack.addArrangedSubview(container)
@@ -263,11 +274,11 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             containerStack.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
 
+        containerStack.addArrangedSubview(makeHolderRow())
+        containerStack.addArrangedSubview(makeDivider())
         containerStack.addArrangedSubview(makeNumberRow())
         containerStack.addArrangedSubview(makeDivider())
         containerStack.addArrangedSubview(makeExpCvvRow())
-        containerStack.addArrangedSubview(makeDivider())
-        containerStack.addArrangedSubview(makeHolderRow())
     }
 
     private func setupSpacedFields() {
@@ -277,6 +288,11 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         spaced.translatesAutoresizingMaskIntoConstraints = false
         outerStack.addArrangedSubview(spaced)
 
+        spaced.addArrangedSubview(makeSpacedLabeledField(
+            field: .holder,
+            titleKey: "elements.cardholderName",
+            content: makeHolderRow()
+        ))
         spaced.addArrangedSubview(makeSpacedLabeledField(
             field: .number,
             titleKey: "elements.cardNumber",
@@ -298,22 +314,17 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             content: makeStandaloneCvvRow()
         ))
         spaced.addArrangedSubview(expCvvRow)
-        spaced.addArrangedSubview(makeSpacedLabeledField(
-            field: .holder,
-            titleKey: "elements.cardholderName",
-            content: makeHolderRow()
-        ))
     }
 
     private func makeSpacedLabeledField(field: Field, titleKey: String, content: UIView) -> UIView {
         let wrapper = UIStackView()
         wrapper.axis = .vertical
-        wrapper.spacing = 6
+        wrapper.spacing = 8
 
         let label = UILabel()
         label.text = Strings.text(titleKey, locale: config.locale)
-        label.font = theme.font(ofSize: 13, weight: .semibold)
-        label.textColor = theme.secondaryText
+        label.font = theme.font(ofSize: 14, weight: .semibold)
+        label.textColor = theme.primaryText
         label.isAccessibilityElement = false
 
         let box = UIView()
@@ -333,10 +344,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             content.bottomAnchor.constraint(equalTo: box.bottomAnchor),
         ])
 
-        let errorLabel = UILabel()
-        errorLabel.font = theme.font(ofSize: 12.5, weight: .semibold)
-        errorLabel.textColor = theme.errorText
-        errorLabel.numberOfLines = 0
+        let errorLabel = ErrorRowView(message: " ", theme: theme)
         errorLabel.isHidden = true
         spacedErrorLabels[field] = errorLabel
 
@@ -364,12 +372,21 @@ package final class CardFormView: UIView, UITextFieldDelegate {
     ) -> UITextField {
         let textField = UITextField()
         let placeholder = Strings.text(placeholderKey, locale: config.locale)
+        let valueFont = theme.font(ofSize: 18, weight: .regular)
+        let tracking = -0.18 * theme.fontScale
+        textField.defaultTextAttributes = [
+            .font: valueFont,
+            .foregroundColor: theme.primaryText,
+            .kern: tracking,
+        ]
         textField.attributedPlaceholder = NSAttributedString(
             string: placeholder,
-            attributes: [.foregroundColor: theme.placeholderText]
+            attributes: [
+                .foregroundColor: theme.sectionLabelColor,
+                .font: theme.font(ofSize: 18, weight: .regular),
+                .kern: tracking,
+            ]
         )
-        textField.font = theme.font(ofSize: 18, weight: .medium)
-        textField.textColor = theme.componentText
         textField.keyboardType = keyboard
         textField.borderStyle = .none
         textField.contentVerticalAlignment = .center
@@ -408,9 +425,9 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         row.addSubview(brandIcon)
 
         NSLayoutConstraint.activate([
-            brandIcon.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -14),
+            brandIcon.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -fieldInset),
             brandIcon.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            textField.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
+            textField.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: fieldInset),
             textField.trailingAnchor.constraint(equalTo: brandIcon.leadingAnchor, constant: -10),
             textField.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             textField.heightAnchor.constraint(equalTo: row.heightAnchor),
@@ -428,8 +445,8 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         )
         row.addSubview(textField)
         NSLayoutConstraint.activate([
-            textField.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
-            textField.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -14),
+            textField.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: fieldInset),
+            textField.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -fieldInset),
             textField.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             textField.heightAnchor.constraint(equalTo: row.heightAnchor),
         ])
@@ -452,11 +469,11 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         row.addSubview(textField)
         row.addSubview(cvvIconView)
         NSLayoutConstraint.activate([
-            cvvIconView.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -14),
+            cvvIconView.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -fieldInset),
             cvvIconView.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            cvvIconView.widthAnchor.constraint(equalToConstant: 20),
-            cvvIconView.heightAnchor.constraint(equalToConstant: 20),
-            textField.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
+            cvvIconView.widthAnchor.constraint(equalToConstant: 24),
+            cvvIconView.heightAnchor.constraint(equalToConstant: 24),
+            textField.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: fieldInset),
             textField.trailingAnchor.constraint(equalTo: cvvIconView.leadingAnchor, constant: -10),
             textField.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             textField.heightAnchor.constraint(equalTo: row.heightAnchor),
@@ -477,7 +494,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         expContainer.addSubview(expField)
         expField.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            expField.leadingAnchor.constraint(equalTo: expContainer.leadingAnchor, constant: 14),
+            expField.leadingAnchor.constraint(equalTo: expContainer.leadingAnchor, constant: fieldInset),
             expField.trailingAnchor.constraint(equalTo: expContainer.trailingAnchor, constant: -8),
             expField.centerYAnchor.constraint(equalTo: expContainer.centerYAnchor),
             expField.heightAnchor.constraint(equalTo: expContainer.heightAnchor),
@@ -503,11 +520,11 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         cvvContainer.addSubview(cvvIconView)
         cvvField.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            cvvIconView.trailingAnchor.constraint(equalTo: cvvContainer.trailingAnchor, constant: -14),
+            cvvIconView.trailingAnchor.constraint(equalTo: cvvContainer.trailingAnchor, constant: -fieldInset),
             cvvIconView.centerYAnchor.constraint(equalTo: cvvContainer.centerYAnchor),
-            cvvIconView.widthAnchor.constraint(equalToConstant: 20),
-            cvvIconView.heightAnchor.constraint(equalToConstant: 20),
-            cvvField.leadingAnchor.constraint(equalTo: cvvContainer.leadingAnchor, constant: 14),
+            cvvIconView.widthAnchor.constraint(equalToConstant: 24),
+            cvvIconView.heightAnchor.constraint(equalToConstant: 24),
+            cvvField.leadingAnchor.constraint(equalTo: cvvContainer.leadingAnchor, constant: fieldInset),
             cvvField.trailingAnchor.constraint(equalTo: cvvIconView.leadingAnchor, constant: -10),
             cvvField.centerYAnchor.constraint(equalTo: cvvContainer.centerYAnchor),
             cvvField.heightAnchor.constraint(equalTo: cvvContainer.heightAnchor),
@@ -545,13 +562,15 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         )
         row.addSubview(textField)
         NSLayoutConstraint.activate([
-            textField.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
-            textField.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -14),
+            textField.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: fieldInset),
+            textField.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -fieldInset),
             textField.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             textField.heightAnchor.constraint(equalTo: row.heightAnchor),
         ])
         return row
     }
+
+    private var fieldInset: CGFloat { config.isSpaced ? 16 : 14 }
 
     private func makeFieldRow() -> UIView {
         let row = UIView()
@@ -664,8 +683,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             container.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
             container.layer.borderColor = theme.primary.cgColor
         } else {
-            container.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
-            container.layer.borderColor = theme.fieldBorder.cgColor
+            container.layer.borderWidth = 0
         }
     }
 
@@ -680,10 +698,9 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             for field in Field.allCases {
                 guard let label = spacedErrorLabels[field] else { continue }
                 if let error = visibleError(for: field) {
-                    label.text = error.localizedMessage(locale: config.locale)
+                    label.setMessage(error.localizedMessage(locale: config.locale))
                     label.isHidden = false
                 } else {
-                    label.text = nil
                     label.isHidden = true
                 }
             }
@@ -695,8 +712,14 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             $0.removeFromSuperview()
         }
 
-        if let field = firstVisibleError(), let error = visibleError(for: field) {
-            let row = ErrorRowView(message: error.localizedMessage(locale: config.locale), theme: theme)
+        for field in Self.errorDisplayOrder {
+            guard let error = visibleError(for: field) else { continue }
+            // The first row also carries the 8pt column gap that sits above it in Figma.
+            let row = ErrorRowView(
+                message: error.localizedMessage(locale: config.locale),
+                theme: theme,
+                topInset: errorsStack.arrangedSubviews.isEmpty ? 16 : 8
+            )
             errorsStack.addArrangedSubview(row)
         }
     }

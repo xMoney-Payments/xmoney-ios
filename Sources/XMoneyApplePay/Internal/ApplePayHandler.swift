@@ -1,3 +1,4 @@
+import Contacts
 import Foundation
 import PassKit
 #if canImport(XMoneyCore)
@@ -117,7 +118,34 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
                 type: .final
             ),
         ]
+        applyCustomerDetailContactFields(request)
         return request
+    }
+
+    private var collectsCustomerDetails: Bool {
+        engine.configuration.customerDetails.applePay && engine.customerDetailsVisibility.isActive
+    }
+
+    private func applyCustomerDetailContactFields(_ request: PKPaymentRequest) {
+        guard collectsCustomerDetails else { return }
+        let visibility = engine.customerDetailsVisibility
+        var billing = Set<PKContactField>()
+        if visibility.showFullName { billing.insert(.name) }
+        if visibility.showAddressSection { billing.insert(.postalAddress) }
+        request.requiredBillingContactFields = billing
+
+        var shipping = Set<PKContactField>()
+        if visibility.showEmail { shipping.insert(.emailAddress) }
+        if visibility.showPhone { shipping.insert(.phoneNumber) }
+        request.requiredShippingContactFields = shipping
+    }
+
+    private func customerDetails(from payment: PKPayment) -> CustomerDetails? {
+        guard collectsCustomerDetails else { return nil }
+        return CustomerDetails.mergingWallet(
+            billing: payment.billingContact.map(WalletContactParts.init),
+            shipping: payment.shippingContact.map(WalletContactParts.init)
+        )?.pruned(to: engine.customerDetailsVisibility)
     }
 
     private func failureResult(message: String) -> EngineResult {
@@ -167,7 +195,8 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
                 let result = try await self.engine.submitWallet(
                     walletType: "applePay",
                     token: token,
-                    presenter: SheetHandoffPresenter(inner: self.presenter, handler: self)
+                    presenter: SheetHandoffPresenter(inner: self.presenter, handler: self),
+                    customerDetails: self.customerDetails(from: payment)
                 )
                 self.completePassKit(with: result)
                 self.resolve(result)
@@ -248,5 +277,27 @@ final class SheetHandoffPresenter: ThreeDSPresenter {
 
     func dismissThreeDS() {
         inner.dismissThreeDS()
+    }
+}
+
+extension WalletContactParts {
+    init(_ contact: PKContact) {
+        let postal = contact.postalAddress
+        let lines = postal?.street
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+        self.init(
+            firstName: contact.name?.givenName ?? "",
+            lastName: contact.name?.familyName ?? "",
+            email: contact.emailAddress ?? "",
+            phone: contact.phoneNumber?.stringValue ?? "",
+            line1: lines.first ?? "",
+            line2: lines.dropFirst().joined(separator: ", "),
+            city: postal?.city ?? "",
+            state: postal?.state ?? "",
+            postalCode: postal?.postalCode ?? "",
+            countryCode: postal?.isoCountryCode ?? ""
+        )
     }
 }

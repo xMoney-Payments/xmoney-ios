@@ -253,6 +253,75 @@ final class ApiResponseModelsTests: XCTestCase {
         }
     }
 
+    func testParseTreatsCryptoRedirectAsThreeDS() throws {
+        let stripeURL = "https://pm-redirects.stripe.com/authorize/acct_1UYPf73UukRSbFJH/pa_nonce_Ve3VdjdMuWVqEj5CX1AoeRId4qufr1c"
+        let parsed = try makePaymentService().parse(ConfirmPaymentResponse(apiMap: [
+            "code": 201,
+            "message": "Created",
+            "data": [
+                "orderId": 201342,
+                "transactionId": 728772,
+                "is3d": 1,
+                "isRedirect": true,
+                "redirect": [
+                    "url": stripeURL,
+                    "formMethod": "GET",
+                    "params": [String: Any](),
+                ],
+                "customerId": 63393,
+            ],
+        ]))
+        guard case let .needs3DS(url) = parsed.submission else {
+            return XCTFail("expected needs3DS")
+        }
+        XCTAssertEqual(url.absoluteString, stripeURL)
+        XCTAssertEqual(parsed.transactionId, "728772")
+    }
+
+    func testParseAppendsGatewayRedirectParamsForGet() throws {
+        let parsed = try makePaymentService().parse(ConfirmPaymentResponse(apiMap: [
+            "code": 201,
+            "data": [
+                "transactionId": "5",
+                "isRedirect": true,
+                "redirect": [
+                    "url": "https://gateway.example/authorize?a=1",
+                    "formMethod": "get",
+                    "params": ["b": "2"],
+                ],
+            ],
+        ]))
+        guard case let .needs3DS(url) = parsed.submission else {
+            return XCTFail("expected needs3DS")
+        }
+        XCTAssertEqual(url.absoluteString, "https://gateway.example/authorize?a=1&b=2")
+    }
+
+    func testParseRejectsPostGatewayRedirect() {
+        let response = ConfirmPaymentResponse(apiMap: [
+            "code": 201,
+            "data": [
+                "transactionId": 5,
+                "isRedirect": true,
+                "redirect": ["url": "https://acs.example/challenge", "formMethod": "POST"],
+            ],
+        ])
+        XCTAssertThrowsError(try makePaymentService().parse(response)) { error in
+            XCTAssertEqual((error as? PaymentError)?.code, "THREE_DS_ERROR")
+        }
+    }
+
+    func testCryptoFieldsSendCryptoTransactionType() {
+        let fields = makePaymentService().cryptoFields(orderPayload: "payload", orderChecksum: "checksum")
+        XCTAssertEqual(fields["jsonRequest"], "payload")
+        XCTAssertEqual(fields["checksum"], "checksum")
+        XCTAssertEqual(fields["transactionType"], "crypto")
+        XCTAssertNil(fields["transactionOption"])
+        XCTAssertNil(fields["cardNumber"])
+        XCTAssertNil(fields["cardId"])
+        XCTAssertNil(fields["digitalWalletType"])
+    }
+
     private func makePaymentService() -> PaymentService {
         PaymentService(http: HTTPClient(), env: PaymentEnvironment(publicKey: "pk_test_stub")!)
     }

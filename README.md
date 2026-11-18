@@ -374,6 +374,24 @@ Pay uses current field validity. Cardholder name is always collected.
 
 **Locale** — `options.locale` sets UI copy and pay-button amount punctuation. Supported languages: `en`, `el`, `ro`, `bg`, `hu`, `pl`. Region tags (`en-US`, `pl-PL`) work; unknown languages fall back to English.
 
+## Customer details
+
+`customerDetails` asks the shopper for the fields your account requires. If that list cannot be loaded, checkout continues without the form. Pass `fields` to choose the blocks yourself; that replaces the account list, and a flag you leave off is not collected. `defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Apple Pay does not use them.
+
+```swift
+PaymentConfig(
+    publicKey: "pk_test_…",
+    customerDetails: .init(
+        card: true,
+        applePay: true,
+        fields: .init(fullName: true, email: true, address: true),
+        defaultValues: .init(fullName: "Jane Doe", email: "jane@example.com", country: "US", region: "CA")
+    )
+)
+```
+
+Card and saved-card Pay stay blocked until those fields are valid. An embedded `PaymentElement` shows the page in place and reports the new height through `onContentSizeChange`; size the element from that callback so the page is not clipped. Apple Pay does not block: it requests the matching contact fields and sends them with the payment.
+
 ## Card holder verification
 
 Optional pre-pay name check. Requires the site to have name-check validation enabled.
