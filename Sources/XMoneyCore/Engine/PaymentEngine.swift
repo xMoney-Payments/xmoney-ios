@@ -110,22 +110,63 @@ package final class PaymentEngine {
         let showSavedCards = configuration.card.savedCards.enabled
             && !orderInfo.isVerifyCard
             && !orderInfo.isRecurring
+        let applePayEnabled = configuration.paymentMethods.applePay.enabled
+        let configService = configService
+        let cards = cards
+        let wallets = wallets
 
-        // `async let x = try? foo()` crashes the Swift 5.10 runtime (Xcode 16 CI).
-        async let siteConfigTask: SiteConfig = {
-            (try? await self.configService.getSiteConfig(sessionToken: token)) ?? SiteConfig()
-        }()
-        async let savedCardsTask: [SavedCard] = {
-            guard showSavedCards else { return [] }
-            return (try? await self.cards.getCards(sessionToken: token)) ?? []
-        }()
-        async let applePayParamsTask = fetchApplePayParamsIfEnabled()
-        async let customerFieldsTask = fetchCustomerDetailFieldsIfEnabled(sessionToken: token)
+        let customerFieldsSource = customerDetailFieldsSource()
+        let inlineFields = inlineFields
 
-        let siteConfig = await siteConfigTask
-        let savedCards = await savedCardsTask
-        let applePayParams = await applePayParamsTask
-        let customerFields = await customerFieldsTask
+        // No `async let` here: optimized builds abort in the runtime's task
+        // allocator when these bindings finish (Xcode 16 and Xcode 26).
+        var siteConfig = SiteConfig()
+        var savedCards: [SavedCard] = []
+        var applePayParams: WalletParams?
+        var customerFields: [String] = []
+        await withTaskGroup(of: LoadPart.self) { group in
+            group.addTask {
+                do {
+                    return .siteConfig(try await configService.getSiteConfig(sessionToken: token))
+                } catch {
+                    return .siteConfig(SiteConfig())
+                }
+            }
+            group.addTask {
+                guard showSavedCards else { return .savedCards([]) }
+                do {
+                    return .savedCards(try await cards.getCards(sessionToken: token))
+                } catch {
+                    return .savedCards([])
+                }
+            }
+            group.addTask {
+                guard applePayEnabled else { return .applePayParams(nil) }
+                do {
+                    return .applePayParams(
+                        try await wallets.getParams(walletType: "applePay", sessionToken: token)
+                    )
+                } catch {
+                    return .applePayParams(nil)
+                }
+            }
+            group.addTask {
+                switch customerFieldsSource {
+                case .resolved(let fields):
+                    return .customerFields(fields)
+                case .inlineCheckout:
+                    return .customerFields(await inlineFields.getFields(sessionToken: token))
+                }
+            }
+            for await part in group {
+                switch part {
+                case .siteConfig(let config): siteConfig = config
+                case .savedCards(let list): savedCards = list
+                case .applePayParams(let params): applePayParams = params
+                case .customerFields(let fields): customerFields = fields
+                }
+            }
+        }
         nameCheckValidationEnabled = siteConfig.nameCheckValidationEnabled
         customerDetailsVisibility = CustomerDetailsVisibility.resolve(fields: customerFields)
         personalDetails.defaults = CustomerDetailsResolver.resolve(
@@ -255,21 +296,16 @@ package final class PaymentEngine {
         return try await cards.getCards(sessionToken: sessionToken)
     }
 
-    private func fetchCustomerDetailFieldsIfEnabled(sessionToken: String) async -> [String] {
-        guard configuration.customerDetails.isAnyEnabled else { return [] }
+    private func customerDetailFieldsSource() -> CustomerFieldsSource {
+        guard configuration.customerDetails.isAnyEnabled else { return .resolved([]) }
         if let fields = configuration.customerDetails.fields {
             let resolved = CustomerDetailsResolver.inlineCheckoutFields(fields)
             if resolved.isEmpty {
                 Self.logger.debug("[customer-details] customerDetails.fields has every field disabled.")
             }
-            return resolved
+            return .resolved(resolved)
         }
-        return await inlineFields.getFields(sessionToken: sessionToken)
-    }
-
-    private func fetchApplePayParamsIfEnabled() async -> WalletParams? {
-        guard configuration.paymentMethods.applePay.enabled else { return nil }
-        return try? await wallets.getParams(walletType: "applePay", sessionToken: sessionToken)
+        return .inlineCheckout
     }
 
     package func validateApplePayMerchant(validationURL: String) async throws -> [String: Any] {
@@ -303,6 +339,18 @@ package final class PaymentEngine {
         }
         let tx = try await transactions.poll(transactionId: transactionId, sessionToken: sessionToken)
         return resultFromTransaction(tx)
+    }
+
+    private enum LoadPart {
+        case siteConfig(SiteConfig)
+        case savedCards([SavedCard])
+        case applePayParams(WalletParams?)
+        case customerFields([String])
+    }
+
+    private enum CustomerFieldsSource {
+        case resolved([String])
+        case inlineCheckout
     }
 
     private enum ThreeDSEvent {

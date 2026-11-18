@@ -19,7 +19,8 @@ package enum PaymentFontFamily {
         didRegister = true
 
         for face in faces {
-            guard let url = fontURL(named: face.file) else { continue }
+            guard UIFont(name: face.postScript, size: 12) == nil,
+                  let url = fontURL(named: face.file) else { continue }
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         }
     }

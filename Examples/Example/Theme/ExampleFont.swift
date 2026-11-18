@@ -10,8 +10,15 @@ enum ExampleRoobert {
     static func registerIfNeeded() {
         guard !didRegister else { return }
         didRegister = true
-        for name in ["roobert_regular", "roobert_medium", "roobert_semibold", "roobert_bold"] {
-            guard let url = fontURL(named: name) else { continue }
+        let faces = [
+            ("roobert_regular", "RoobertPRO-Regular"),
+            ("roobert_medium", "RoobertPRO-Medium"),
+            ("roobert_semibold", "RoobertPRO-SemiBold"),
+            ("roobert_bold", "RoobertPRO-Bold"),
+        ]
+        for (name, postScript) in faces {
+            guard UIFont(name: postScript, size: 12) == nil,
+                  let url = fontURL(named: name) else { continue }
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         }
     }

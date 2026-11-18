@@ -11,6 +11,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `PaymentConfig.customerDetails.fields` replaces the account field list. Leave it unset to keep using `/inline-checkout/fields`. A flag left off is not collected.
 - `PaymentConfig.customerDetails.defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Apple Pay does not use them.
 
+## [1.1.1] - 2026-11-18
+
+### Fixed
+
+- Release builds no longer crash with `SIGABRT` in the Swift concurrency runtime while the payment sheet loads (`PaymentEngine.load()`). Site config, saved cards, and Apple Pay params still load in parallel, now through a task group instead of `async let`.
+- CocoaPods: the `Core` and `PaymentElement` subspecs ship their asset catalogs, localizations, and fonts in the `XMoneyCore` and `XMoneyPaymentElement` resource bundles instead of copying them into the app target. Apps with their own asset catalog no longer fail with "Multiple commands produce Assets.car" under static linkage (React Native, Expo prebuild).
+- In the "Use other card" row, the Mastercard logo keeps its own height instead of shrinking to match the Visa logo.
+- The payment form no longer logs Auto Layout conflicts ("Unable to simultaneously satisfy constraints") while the sheet lays out for the first time.
+- The Roobert fonts are registered only once, even if the host app also registers them. This removes the "GSFont: file already registered" console warnings.
+
 ## [1.1.0] - 2026-10-16
 
 ### Added

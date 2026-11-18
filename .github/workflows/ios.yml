@@ -22,3 +22,8 @@ jobs:
         run: |
           chmod +x scripts/xcode-ios-test.sh
           scripts/xcode-ios-test.sh
+
+      - name: Build and test optimized (iOS Simulator, -O)
+        env:
+          OPTIMIZED: '1'
+        run: scripts/xcode-ios-test.sh

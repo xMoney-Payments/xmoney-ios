@@ -296,15 +296,18 @@ package final class PaymentFormView: UIView {
         rootStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(rootStack)
 
+        // Below required so UIKit's transient 0x0 layout pass doesn't log conflicts.
         let bottom = rootStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -contentInsets.bottom)
-        // Embedded hosts own the height and apply it a frame later. A required bottom pin
+        // Embedded hosts own the height and apply it a frame later. A high-priority bottom pin
         // squeezes the details row while that height is still the previous one.
-        if isEmbedded { bottom.priority = .defaultLow - 1 }
+        bottom.priority = isEmbedded ? .defaultLow - 1 : UILayoutPriority(999)
         rootBottomConstraint = bottom
+        let trailing = rootStack.trailingAnchor.constraint(equalTo: trailingAnchor)
+        trailing.priority = UILayoutPriority(999)
         NSLayoutConstraint.activate([
             rootStack.topAnchor.constraint(equalTo: topAnchor, constant: contentInsets.top),
             rootStack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            rootStack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            trailing,
             bottom,
         ])
 
