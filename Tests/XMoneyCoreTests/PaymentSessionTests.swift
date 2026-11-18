@@ -242,6 +242,48 @@ final class PaymentSessionTests: XCTestCase {
         XCTAssertTrue(state.applePayReady)
     }
 
+    func testLoadFallsBackToDefaultsWhenSecondaryRequestsFail() async throws {
+        DigitalWalletFactory.canMakePayments = { true }
+        let session = try makeSession(applePayEnabled: true, savedCardsEnabled: true) { request in
+            let path = request.url?.path ?? ""
+            if path.contains("session-token") {
+                return (200, StubHTTP.json(["token": "sess-1"]))
+            }
+            return (500, StubHTTP.json(["error": "fail"]))
+        }
+        let state = try await session.bind(intent: session.intent)
+        XCTAssertEqual(state.sessionToken, "sess-1")
+        XCTAssertEqual(state.savedCards, [])
+        XCTAssertFalse(state.applePayAvailable)
+        XCTAssertFalse(state.applePayReady)
+        XCTAssertFalse(state.nameCheckValidationEnabled)
+    }
+
+    func testCancelledBindStopsInFlightSecondaryRequests() async throws {
+        let session = try makeSession(applePayEnabled: true, savedCardsEnabled: true) { request in
+            let path = request.url?.path ?? ""
+            if path.contains("session-token") {
+                return (200, StubHTTP.json(["token": "sess-1"]))
+            }
+            try await Task.sleep(nanoseconds: 5_000_000_000)
+            return (200, StubHTTP.json([:]))
+        }
+        let started = Date()
+        let task = Task {
+            try await session.bind(intent: session.intent)
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("cancelled bind should throw")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+        XCTAssertNil(session.state)
+    }
+
     func testDeleteSavedCardNon2xxThrows() async throws {
         let session = try makeSession(applePayEnabled: false) { request in
             let path = request.url?.path ?? ""

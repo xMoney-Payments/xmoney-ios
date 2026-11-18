@@ -95,20 +95,50 @@ package final class PaymentEngine {
         let showSavedCards = configuration.card.savedCards.enabled
             && !orderInfo.isVerifyCard
             && !orderInfo.isRecurring
+        let applePayEnabled = configuration.paymentMethods.applePay.enabled
+        let configService = configService
+        let cards = cards
+        let wallets = wallets
 
-        // `async let x = try? foo()` crashes the Swift 5.10 runtime (Xcode 16 CI).
-        async let siteConfigTask: SiteConfig = {
-            (try? await self.configService.getSiteConfig(sessionToken: token)) ?? SiteConfig()
-        }()
-        async let savedCardsTask: [SavedCard] = {
-            guard showSavedCards else { return [] }
-            return (try? await self.cards.getCards(sessionToken: token)) ?? []
-        }()
-        async let applePayParamsTask = fetchApplePayParamsIfEnabled()
-
-        let siteConfig = await siteConfigTask
-        let savedCards = await savedCardsTask
-        let applePayParams = await applePayParamsTask
+        // No `async let` here: optimized builds abort in the runtime's task
+        // allocator when these bindings finish (Xcode 16 and Xcode 26).
+        var siteConfig = SiteConfig()
+        var savedCards: [SavedCard] = []
+        var applePayParams: WalletParams?
+        await withTaskGroup(of: LoadPart.self) { group in
+            group.addTask {
+                do {
+                    return .siteConfig(try await configService.getSiteConfig(sessionToken: token))
+                } catch {
+                    return .siteConfig(SiteConfig())
+                }
+            }
+            group.addTask {
+                guard showSavedCards else { return .savedCards([]) }
+                do {
+                    return .savedCards(try await cards.getCards(sessionToken: token))
+                } catch {
+                    return .savedCards([])
+                }
+            }
+            group.addTask {
+                guard applePayEnabled else { return .applePayParams(nil) }
+                do {
+                    return .applePayParams(
+                        try await wallets.getParams(walletType: "applePay", sessionToken: token)
+                    )
+                } catch {
+                    return .applePayParams(nil)
+                }
+            }
+            for await part in group {
+                switch part {
+                case .siteConfig(let config): siteConfig = config
+                case .savedCards(let list): savedCards = list
+                case .applePayParams(let params): applePayParams = params
+                }
+            }
+        }
         nameCheckValidationEnabled = siteConfig.nameCheckValidationEnabled
 
         var applePayAvailable = false
@@ -202,11 +232,6 @@ package final class PaymentEngine {
         return try await cards.getCards(sessionToken: sessionToken)
     }
 
-    private func fetchApplePayParamsIfEnabled() async -> WalletParams? {
-        guard configuration.paymentMethods.applePay.enabled else { return nil }
-        return try? await wallets.getParams(walletType: "applePay", sessionToken: sessionToken)
-    }
-
     package func validateApplePayMerchant(validationURL: String) async throws -> [String: Any] {
         try await wallets.validateMerchant(validationURL: validationURL, sessionToken: sessionToken)
     }
@@ -238,6 +263,12 @@ package final class PaymentEngine {
         }
         let tx = try await transactions.poll(transactionId: transactionId, sessionToken: sessionToken)
         return resultFromTransaction(tx)
+    }
+
+    private enum LoadPart {
+        case siteConfig(SiteConfig)
+        case savedCards([SavedCard])
+        case applePayParams(WalletParams?)
     }
 
     private enum ThreeDSEvent {

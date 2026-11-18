@@ -300,12 +300,16 @@ package final class PaymentFormView: UIView {
         rootStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(rootStack)
 
+        // Below required so UIKit's transient 0x0 layout pass doesn't log conflicts.
         let bottom = rootStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -contentInsets.bottom)
+        bottom.priority = UILayoutPriority(999)
         rootBottomConstraint = bottom
+        let trailing = rootStack.trailingAnchor.constraint(equalTo: trailingAnchor)
+        trailing.priority = UILayoutPriority(999)
         NSLayoutConstraint.activate([
             rootStack.topAnchor.constraint(equalTo: topAnchor, constant: contentInsets.top),
             rootStack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            rootStack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            trailing,
             bottom,
         ])
 

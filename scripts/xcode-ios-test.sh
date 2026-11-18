@@ -2,9 +2,13 @@
 # Run package tests on a real iPhone simulator (never macOS).
 # Swift package schemes on CI often only list placeholder destinations in
 # `xcodebuild -showdestinations`; simctl is the source of truth.
+#
+# OPTIMIZED=1 builds the Debug configuration with -O, so `#if DEBUG` test hooks
+# still compile while the code under test is optimized like a Release build.
 set -eu
 
 SCHEME="${1:-XMoneyPaymentSheet-Package}"
+OPTIMIZED="${OPTIMIZED:-0}"
 
 echo "==> Simulator devices (available)"
 xcrun simctl list devices available || true
@@ -63,8 +67,18 @@ echo "==> Booting $UDID"
 xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$UDID" -b
 
-echo "==> Testing $SCHEME on iOS Simulator id=$UDID"
-xcodebuild test \
-  -scheme "$SCHEME" \
-  -destination "platform=iOS Simulator,id=$UDID" \
-  -parallel-testing-enabled NO
+if [ "$OPTIMIZED" = "1" ]; then
+  echo "==> Testing $SCHEME (optimized -O) on iOS Simulator id=$UDID"
+  xcodebuild test \
+    -scheme "$SCHEME" \
+    -destination "platform=iOS Simulator,id=$UDID" \
+    -parallel-testing-enabled NO \
+    SWIFT_OPTIMIZATION_LEVEL=-O \
+    ENABLE_TESTABILITY=YES
+else
+  echo "==> Testing $SCHEME on iOS Simulator id=$UDID"
+  xcodebuild test \
+    -scheme "$SCHEME" \
+    -destination "platform=iOS Simulator,id=$UDID" \
+    -parallel-testing-enabled NO
+fi

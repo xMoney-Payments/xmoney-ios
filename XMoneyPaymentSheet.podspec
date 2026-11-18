@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'XMoneyPaymentSheet'
-  s.version          = '1.1.0'
+  s.version          = '1.1.1'
   s.summary          = 'Native xMoney checkout SDK for iOS'
   s.description      = 'Drop-in payment sheet, embedded Payment Element, and Apple Pay for xMoney.'
   s.homepage         = 'https://github.com/xMoney-Payments/xmoney-ios'
@@ -22,8 +22,9 @@ Pod::Spec.new do |s|
 
   s.subspec 'Core' do |core|
     core.source_files = 'Sources/XMoneyCore/**/*.swift'
-    core.resources    = 'Resources/**/*', 'Sources/XMoneyCore/Resources/**/*'
-    core.resource_bundles = { 'XMoneyCore' => 'PrivacyInfo.xcprivacy' }
+    core.resource_bundles = {
+      'XMoneyCore' => ['PrivacyInfo.xcprivacy', 'Resources/XMoneyCoreAssets.xcassets', 'Resources/*.lproj']
+    }
     core.frameworks   = 'UIKit', 'SafariServices'
     core.pod_target_xcconfig = pod_swift_xcconfig
   end
@@ -38,10 +39,12 @@ Pod::Spec.new do |s|
   s.subspec 'PaymentElement' do |emb|
     emb.source_files = 'Sources/XMoneyPaymentElement/**/*.swift'
     emb.dependency 'XMoneyPaymentSheet/Core'
-    emb.resources    = [
-      'Sources/XMoneyPaymentElement/Resources/XMoneyAssets.xcassets',
-      'Sources/XMoneyPaymentElement/Resources/Fonts/*',
-    ]
+    emb.resource_bundles = {
+      'XMoneyPaymentElement' => [
+        'Sources/XMoneyPaymentElement/Resources/XMoneyAssets.xcassets',
+        'Sources/XMoneyPaymentElement/Resources/Fonts/*.otf',
+      ]
+    }
     emb.frameworks   = 'PassKit'
     emb.pod_target_xcconfig = pod_swift_xcconfig
   end
