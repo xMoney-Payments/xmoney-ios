@@ -8,27 +8,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- Appearance overrides are painted as sent. `textColor` is no longer replaced with ink or paper when it misses 4.5:1. A debug build still logs the contrast.
-- Appearance is now `PaymentConfig.Appearance`: `brandColor`, `accentColor`, `backgroundColor`, `neutralTint`, optional semantic `overrides`, `typography`, `borders`, `shape`, and `colorScheme`. `typography` holds `fontFamily`. `borders` holds `width`. `shape` holds `corners` and `pillButtons`. The previous `colors`, `colorsLight`, `colorsDark`, `shapes`, `primaryButton`, `font.scale`, `options.style`, and `updateStyle` APIs are removed. An empty appearance is the built-in xMoney light and dark themes. The pay button uses `brandColor` as sent. Links, the focus ring, and radios are adjusted so they stay readable, and other unsent colors are derived. An empty appearance uses a 24pt methods container; the previous default was 20.
+- Appearance is now `PaymentConfig.Appearance`: `brandColor`, `accentColor`, `backgroundColor`, `neutralTint`, `overrides`, `typography.fontFamily`, `borders.width`, `shape` (`corners`, `pillButtons`), and `colorScheme`. Removed: `colors`, `colorsLight`, `colorsDark`, `shapes`, `primaryButton`, `font.scale`, `options.style`, and `updateStyle`. An empty appearance is the built-in light and dark themes. The methods container radius defaults to 24. Overrides are painted as sent; a debug build logs a contrast problem and does not change the color.
 - The save-card checkbox starts unchecked.
-- Embedded `PaymentElement` shows personal details in place. Its height follows that page, so apply `onContentSizeChange`.
-- Checkout copy is compiled into the SDK. The unused `.lproj` files were removed.
 
 ### Added
 
-- `PaymentConfig.Borders.width` sets the idle field stroke, from 0 to 4. The default is 1. Error and focus stay at least 1.5. When `borderColor` is set, the methods container uses the same width.
-- `PaymentConfig.customerDetails` collects shopper details for card payments and Apple Pay. Which fields appear comes from your account. Card, saved-card, and crypto Pay stay blocked until the details page is valid when `customerDetails.card` is on and the field list is active. Apple Pay requests the matching contact fields and sends them with the payment.
-- `PaymentConfig.customerDetails.fields` replaces the account field list. Leave it unset to keep using `/inline-checkout/fields`. A flag left off is not collected. If that request fails while `customerDetails.card` is on, checkout shows the load failure and Pay stays disabled.
-- `PaymentConfig.customerDetails.defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Apple Pay does not use them.
-- `PaymentConfig.paymentMethods.crypto` adds a crypto payment method. It is off unless enabled. Continue opens the hosted page, and closing that page consumes the order.
-- Card, saved-card, and crypto submit reject a payload that is missing a required customer-details field (`PaymentError.invalidCustomerDetails`).
+- `PaymentConfig.customerDetails` collects shopper details for card and Apple Pay. The field list comes from the account, or from `fields` when set. `defaultValues` prefills the card form. Card, saved-card, and crypto Pay stay blocked until the details are valid when `customerDetails.card` is on. A new order rechecks an open details page. Apple Pay requests the matching contact fields. A missing required field fails with `PaymentError.invalidCustomerDetails`. Embedded `PaymentElement` shows the page in place and reports the new height through `onContentSizeChange`.
+- `PaymentConfig.paymentMethods.crypto`. Off unless enabled. Continue opens the hosted page; closing that page consumes the order.
 
 ### Fixed
 
-- In dark mode, the "Keep it" button in the remove-card prompt shows its label again instead of white text on a white button. The label contrasts with the text color, so a custom `backgroundColor` no longer hides it.
-- Appearance colors apply again in light mode. `brandColor` tints the pay button. Links and the focus ring are contrast-adjusted from the accent. `textColor` is painted as sent. Saved-card meta, section labels, the "or" label, the powered-by footer, and placeholders follow `neutralTint` and `backgroundColor`.
-- The remove-card prompt buttons and the Apple Pay button (when its own radius is unset) follow `shape.corners` and `shape.pillButtons`, so every button has the same shape. The sheet corner stays 32.
-- Embedded checkout rebuilds an open personal-details page when a new order brings a different field list. Continue will not save values that miss a newly required field.
+- In dark mode, the remove-card prompt's "Keep it" button shows its label again.
 
 ## [1.1.1] - 2026-11-18
 

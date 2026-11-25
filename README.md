@@ -331,7 +331,7 @@ Copy-paste sample: [`ApplePaySampleView.swift`](Examples/Example/Samples/ApplePa
 
 ## Crypto
 
-Pay with crypto is part of Payment Sheet and Payment Element. It is off until you enable it. There is no separate module and no button appearance to set.
+Off until `paymentMethods.crypto.enabled`. There is no separate module.
 
 ```swift
 paymentMethods: .init(
@@ -339,9 +339,7 @@ paymentMethods: .init(
 )
 ```
 
-The shopper sees “Pay with crypto” and “Secure crypto payment”. Selecting it shows “You’ll be redirected to a secure page to complete your payment.” and the button title becomes Continue. Continue does not collect card fields. If `customerDetails.card` is on, Continue stays blocked until those fields are valid, and they are sent with the payment.
-
-Continue opens the hosted page in an `SFSafariViewController`. The SDK polls until the payment completes and delivers the same `PaymentResult`. Closing that page after Continue has started consumes the order. `confirm()` submits crypto when that row is selected. Apple Pay still uses its own button.
+Continue opens the hosted page in an `SFSafariViewController` and polls to the same `PaymentResult`. It sends customer details when `customerDetails.card` is on. Closing the page after Continue has started consumes the order.
 
 ## Configuration
 
@@ -386,21 +384,13 @@ PaymentConfig(
 
 Pay uses current field validity. Cardholder name is always collected.
 
-**Appearance** — colors resolve in order: the built-in theme, then your seeds, then colors the SDK derives, then `overrides`. An override is painted as sent. A debug build logs a contrast problem and does not change the color.
-
-Set `brandColor`, `accentColor`, `backgroundColor`, and `neutralTint`. Each accepts one hex color or a light/dark pair. The pay button uses `brandColor` as sent. Links, the focus ring, and radios are adjusted so they stay readable when the SDK derives them. Other unset text, borders, and button states are derived. `overrides` replace one role each: `onBrandColor`, `textColor` (primary text on the sheet and on cards), `linkColor`, `borderColor`, `componentColor`, `selectedColor`, and `secondaryButtonColor`. Saved-card meta, section labels, the "or" label, the powered-by line, and placeholders follow `neutralTint` and `backgroundColor`.
-
-`borders.width` is the idle field stroke, from 0 to 4, default 1. Error and focus stay at least 1.5. When `borderColor` is set, the methods container uses the same width. `0` removes that stroke. A later stroke role is another field on `borders`.
-
-`typography.fontFamily` is a face the app has already registered, through Info.plist `UIAppFonts` or Core Text. A family name or a PostScript name both work. Checkout asks that family for regular, medium, semibold, and bold. A missing name keeps the built-in payment face and logs once in a debug build. Dynamic Type sets the size. There is no per-label font size. Later weight and heading fields belong on `typography`.
-
-`shape.corners` is `sharp`, `default`, `rounded`, or a number from 0 to 24. The default methods container radius is 24. `shape.pillButtons` keeps the pay button fully round. The sheet corner stays 32. `colorScheme` is `automatic`, `light`, or `dark`. On a mounted Element, call `updateAppearance` / `updateWalletAppearance`. Unknown keys, including a flat `fontFamily`, `borderWidth`, `corners`, or `pillButtons`, are ignored. Add a new field inside the group that owns it. An empty group is today's checkout. See [`exampleAppearance()`](Examples/Example/SampleHelpers.swift).
+**Appearance** — set `brandColor`, `accentColor`, `backgroundColor`, and `neutralTint` (one hex color or a light/dark pair). The pay button uses `brandColor`. Other unset colors are derived. `overrides` (`onBrandColor`, `textColor`, `linkColor`, `borderColor`, `componentColor`, `selectedColor`, `secondaryButtonColor`) are painted as sent. `borders.width` is the idle field stroke, from 0 to 4, default 1. `typography.fontFamily` is a face the app has already registered. `shape.corners` is `sharp`, `default`, `rounded`, or a number from 0 to 24; the methods container defaults to 24. `shape.pillButtons` keeps the pay button fully round. `colorScheme` is `automatic`, `light`, or `dark`. On a mounted Element, call `updateAppearance` / `updateWalletAppearance`. See [`exampleAppearance()`](Examples/Example/SampleHelpers.swift).
 
 **Locale** — `options.locale` sets UI copy and pay-button amount punctuation. Supported languages: `en`, `el`, `ro`, `bg`, `hu`, `pl`. Region tags (`en-US`, `pl-PL`) work; unknown languages fall back to English.
 
 ## Customer details
 
-`customerDetails` asks the shopper for the fields your account requires. If that list cannot be loaded and `customerDetails.card` is on, checkout shows the load failure and Pay stays disabled. Pass `fields` to choose the blocks yourself; that replaces the account list, and a flag you leave off is not collected. `defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Crypto Continue uses that same card form. Apple Pay does not use them. The save-card checkbox starts unchecked.
+`customerDetails` asks the shopper for the fields your account requires. Pass `fields` to replace that list; a flag left off is not collected. If the account list cannot be loaded and `customerDetails.card` is on, Pay stays disabled. `defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Apple Pay does not use them.
 
 ```swift
 PaymentConfig(
@@ -414,7 +404,7 @@ PaymentConfig(
 )
 ```
 
-Card, saved-card, and crypto Continue stay blocked while `customerDetails.card` is on and the field list is active, until those fields are valid. They are not blocked when `customerDetails.card` is off. An embedded `PaymentElement` shows the page in place and reports the new height through `onContentSizeChange`; size the element from that callback so the page is not clipped. Apple Pay does not block: it requests the matching contact fields and sends them with the payment.
+Card, saved-card, and crypto Pay stay blocked until those fields are valid when `customerDetails.card` is on. An embedded `PaymentElement` shows the page in place and reports the new height through `onContentSizeChange`. Apple Pay requests the matching contact fields and sends them with the payment.
 
 ## Card holder verification
 
