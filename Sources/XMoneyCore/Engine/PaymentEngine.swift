@@ -55,6 +55,7 @@ package struct SheetState {
 
 package final class PaymentEngine {
     private static let logger = Logger(subsystem: "com.xmoney.paymentsheet", category: "customer-details")
+    private static let paymentLogger = Logger(subsystem: "com.xmoney.paymentsheet", category: "payment")
 
     package let configuration: PaymentConfig
     package let intent: PaymentIntent
@@ -313,8 +314,29 @@ package final class PaymentEngine {
     }
 
     private func submit(fields: [String: String], presenter: ThreeDSPresenter) async throws -> EngineResult {
-        let response = try await payment.confirmPayment(fields: fields)
-        let parsed = try payment.parse(response)
+        let kind = Self.paymentKind(fields)
+        Self.paymentLogger.info("submit \(kind, privacy: .public)")
+        let response: ConfirmPaymentResponse
+        do {
+            response = try await payment.confirmPayment(fields: fields)
+        } catch {
+            Self.paymentLogger.error(
+                "submit \(kind, privacy: .public) failed before a payment result: \(String(describing: error), privacy: .public)"
+            )
+            throw error
+        }
+        let parsed: PaymentService.ParsedResponse
+        do {
+            parsed = try payment.parse(response)
+        } catch {
+            Self.paymentLogger.error(
+                "submit \(kind, privacy: .public) response parse failed code=\(response.code ?? -1) status=\(response.status ?? "", privacy: .public) error=\(String(describing: error), privacy: .public)"
+            )
+            throw error
+        }
+        Self.paymentLogger.info(
+            "submit \(kind, privacy: .public) accepted transaction=\(parsed.transactionId ?? "", privacy: .public)"
+        )
 
         switch parsed.submission {
         case let .needs3DS(url):
@@ -339,6 +361,13 @@ package final class PaymentEngine {
         }
         let tx = try await transactions.poll(transactionId: transactionId, sessionToken: sessionToken)
         return resultFromTransaction(tx)
+    }
+
+    private static func paymentKind(_ fields: [String: String]) -> String {
+        if let type = fields["paymentMethod"] { return type }
+        if let wallet = fields["digitalWalletType"] { return wallet }
+        if fields["cardId"] != nil { return "saved-card" }
+        return "card"
     }
 
     private enum LoadPart {

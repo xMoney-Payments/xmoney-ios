@@ -59,7 +59,11 @@ final class PickerAndChromeLayoutTests: XCTestCase {
         let gap = secondRow.convert(secondRow.bounds, to: table).minY - firstRow.convert(firstRow.bounds, to: table).maxY
         XCTAssertEqual(gap, 12, accuracy: 0.5)
         let radios = find(RadioIndicator.self, in: firstRow)
-        XCTAssertEqual(radios.first?.backgroundColor, theme.primary)
+        let radio = try XCTUnwrap(radios.first)
+        XCTAssertEqual(radio.backgroundColor, .clear)
+        XCTAssertTrue(radio.selectionDotIsVisible)
+        XCTAssertEqual(radio.selectionDotColor, theme.primary)
+        XCTAssertEqual(radio.selectionDotSide, 14)
 
         var picked: String?
         list.onSelect = { picked = $0 }

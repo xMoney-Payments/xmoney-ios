@@ -145,7 +145,9 @@ final class EmbeddedSmokeTests: XCTestCase {
         )
         XCTAssertFalse(form.validateAndShowErrors())
         XCTAssertTrue(form.containsVisibleText(Strings.text("personalDetails.errors.fullNameRequired", locale: "en")))
+        XCTAssertTrue(form.containsVisibleText(Strings.text("personalDetails.errors.emailRequired", locale: "en")))
         XCTAssertTrue(form.containsVisibleText(Strings.text("personalDetails.errors.countryRequired", locale: "en")))
+        XCTAssertTrue(form.containsVisibleText(Strings.text("personalDetails.errors.addressRequired", locale: "en")))
     }
 
     @MainActor
@@ -164,7 +166,7 @@ final class EmbeddedSmokeTests: XCTestCase {
         form.layoutIfNeeded()
         form.setTextField(accessibilityLabel: "Card Number", text: "4242424242424242")
         form.setTextField(accessibilityLabel: "Expiration Date", text: "1230")
-        form.setTextField(accessibilityLabel: "CVV", text: "123")
+        form.setTextField(accessibilityLabel: "CVC", text: "123")
         form.setTextField(accessibilityLabel: "Cardholder Name", text: "Ada Lovelace")
 
         var paid: CustomerDetails??

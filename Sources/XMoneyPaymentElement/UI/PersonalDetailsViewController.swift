@@ -32,6 +32,7 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
     private var measuredHeight: CGFloat = 560
     private var preparedSafeBottom: CGFloat = 0
     private var lastMeasuredWidth: CGFloat = 0
+    private var lastMeasuredSafeTop: CGFloat = -1
     private var lastMeasuredSafeBottom: CGFloat = -1
     private var contentSizeNotifyScheduled = false
     private weak var focusedFieldView: UIView?
@@ -117,10 +118,14 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
 
     private func updateMeasuredHeightForSafeArea() {
         guard presentation == .sheet, view.window != nil, view.bounds.width > 1 else { return }
-        let safe = view.safeAreaInsets.bottom
+        let safeTop = view.safeAreaInsets.top
+        let safeBottom = view.safeAreaInsets.bottom
         let width = view.bounds.width
-        guard abs(safe - lastMeasuredSafeBottom) > 0.5 || abs(width - lastMeasuredWidth) > 0.5 else { return }
-        lastMeasuredSafeBottom = safe
+        guard abs(safeTop - lastMeasuredSafeTop) > 0.5
+            || abs(safeBottom - lastMeasuredSafeBottom) > 0.5
+            || abs(width - lastMeasuredWidth) > 0.5 else { return }
+        lastMeasuredSafeTop = safeTop
+        lastMeasuredSafeBottom = safeBottom
         lastMeasuredWidth = width
         remeasure(notify: true)
     }
@@ -241,7 +246,7 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
             header.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
             back.leadingAnchor.constraint(
                 equalTo: header.leadingAnchor,
-                constant: presentation == .inline ? 0 : 6 - horizontalInset
+                constant: presentation == .inline ? 0 : 8 - horizontalInset
             ),
             back.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             back.widthAnchor.constraint(equalToConstant: 44),
@@ -286,7 +291,7 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
                 hairline.leadingAnchor.constraint(equalTo: footer.leadingAnchor, constant: -horizontalInset),
                 hairline.trailingAnchor.constraint(equalTo: footer.trailingAnchor, constant: horizontalInset),
                 hairline.heightAnchor.constraint(equalToConstant: 1),
-                footerStack.topAnchor.constraint(equalTo: hairline.bottomAnchor, constant: 12),
+                footerStack.topAnchor.constraint(equalTo: hairline.bottomAnchor, constant: 16),
             ])
         } else {
             footerConstraints.append(
@@ -299,6 +304,9 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
         stack.axis = .vertical
         stack.spacing = 12
         stack.setCustomSpacing(0, after: header)
+        if showsFooterHairline {
+            stack.setCustomSpacing(0, after: formHost)
+        }
         stack.translatesAutoresizingMaskIntoConstraints = false
         contentStack = stack
         view.addSubview(stack)
@@ -334,12 +342,17 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
         }
         form.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(form)
+        scroll.setContentHuggingPriority(.required, for: .vertical)
+        scroll.setContentCompressionResistancePriority(.defaultHigh, for: .vertical)
+        let contentMatch = scroll.heightAnchor.constraint(equalTo: form.heightAnchor)
+        contentMatch.priority = UILayoutPriority(999)
         activate([
             form.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
             form.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
             form.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
             form.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
             form.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
+            contentMatch,
         ])
         scrollView = scroll
         return scroll
@@ -453,8 +466,8 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
             safeBottom = view.safeAreaInsets.bottom
         }
         let verticalPad: CGFloat = presentation == .inline ? 0 : 8
-        let hairline = showsFooterHairline ? 1.0 : 0
-        let next = ceil(safeTop + verticalPad + headerHeight + 20 + formHeight + 12 + hairline + footerHeight + verticalPad + safeBottom)
+        let formToFooter: CGFloat = showsFooterHairline ? 0 : 12
+        let next = ceil(safeTop + verticalPad + headerHeight + formHeight + formToFooter + footerHeight + verticalPad + safeBottom)
         guard abs(next - measuredHeight) > 1 else { return }
         measuredHeight = next
         guard notify, !contentSizeNotifyScheduled else { return }

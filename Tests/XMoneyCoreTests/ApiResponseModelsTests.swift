@@ -253,6 +253,25 @@ final class ApiResponseModelsTests: XCTestCase {
         }
     }
 
+    func testParseAcceptsStringSuccessCode() throws {
+        let parsed = try makePaymentService().parse(ConfirmPaymentResponse(apiMap: [
+            "code": "201",
+            "message": "Created",
+            "data": [
+                "transactionId": 728772,
+                "isRedirect": true,
+                "redirect": [
+                    "url": "https://pm-redirects.stripe.com/authorize/example",
+                    "formMethod": "GET",
+                ],
+            ],
+        ]))
+        guard case .needs3DS = parsed.submission else {
+            return XCTFail("expected needs3DS")
+        }
+        XCTAssertEqual(parsed.transactionId, "728772")
+    }
+
     func testParseTreatsCryptoRedirectAsThreeDS() throws {
         let stripeURL = "https://pm-redirects.stripe.com/authorize/acct_1UYPf73UukRSbFJH/pa_nonce_Ve3VdjdMuWVqEj5CX1AoeRId4qufr1c"
         let parsed = try makePaymentService().parse(ConfirmPaymentResponse(apiMap: [
@@ -311,11 +330,51 @@ final class ApiResponseModelsTests: XCTestCase {
         }
     }
 
-    func testCryptoFieldsSendCryptoTransactionType() {
+    func testCryptoConfirmRequestsJSONInsteadOfTheHostedPage() async throws {
+        let http = HTTPClient(execute: { @Sendable request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
+            let response = HTTPURLResponse(
+                url: request.url ?? URL(string: "https://secure-stage.xmoney.com/payment-request")!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            let body = Data(#"{"code":201,"data":{"transactionId":"9"}}"#.utf8)
+            return (body, response)
+        })
+        let service = PaymentService(http: http, env: PaymentEnvironment(publicKey: "pk_test_stub")!)
+        let response = try await service.confirmPayment(
+            fields: service.cryptoFields(orderPayload: "payload", orderChecksum: "checksum")
+        )
+        XCTAssertEqual(response.code, 201)
+    }
+
+    func testCardConfirmKeepsBrowserAcceptHeader() async throws {
+        let http = HTTPClient(execute: { @Sendable request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "*/*")
+            let response = HTTPURLResponse(
+                url: request.url ?? URL(string: "https://secure-stage.xmoney.com/payment-request")!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            return (Data(#"{"code":200,"data":{"transactionId":"1"}}"#.utf8), response)
+        })
+        let service = PaymentService(http: http, env: PaymentEnvironment(publicKey: "pk_test_stub")!)
+        let response = try await service.confirmPayment(fields: service.cardFields(
+            card: CardInput(number: "4111111111111111", expiryMonth: "12", expiryYear: "30", cvv: "123"),
+            orderPayload: "payload",
+            orderChecksum: "checksum"
+        ))
+        XCTAssertEqual(response.code, 200)
+    }
+
+    func testCryptoFieldsSendCryptoPaymentMethod() {
         let fields = makePaymentService().cryptoFields(orderPayload: "payload", orderChecksum: "checksum")
         XCTAssertEqual(fields["jsonRequest"], "payload")
         XCTAssertEqual(fields["checksum"], "checksum")
-        XCTAssertEqual(fields["transactionType"], "crypto")
+        XCTAssertEqual(fields["paymentMethod"], "crypto")
+        XCTAssertNil(fields["transactionType"])
         XCTAssertNil(fields["transactionOption"])
         XCTAssertNil(fields["cardNumber"])
         XCTAssertNil(fields["cardId"])

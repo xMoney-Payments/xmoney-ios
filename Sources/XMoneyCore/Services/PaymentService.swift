@@ -72,7 +72,7 @@ struct PaymentService {
         var fields: [String: String] = [
             "jsonRequest": orderPayload,
             "checksum": orderChecksum,
-            "transactionType": "crypto",
+            "paymentMethod": "crypto",
         ]
         appendCustomerDetails(customerDetails, to: &fields)
         DeviceMetadata.fields().forEach { fields[$0.key] = $0.value }

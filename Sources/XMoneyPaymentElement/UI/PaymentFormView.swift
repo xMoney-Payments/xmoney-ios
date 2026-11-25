@@ -347,7 +347,7 @@ package final class PaymentFormView: UIView {
             if let radius = config.paymentMethods.applePay.appearance.radius {
                 applePayButton.cornerRadius = CGFloat(radius)
             } else {
-                applePayButton.cornerRadius = t.walletButtonHeight / 2
+                applePayButton.cornerRadius = t.buttonRadius(forHeight: t.walletButtonHeight)
             }
             if t.isDark {
                 applePayButton.layer.shadowOpacity = 0
@@ -389,9 +389,6 @@ package final class PaymentFormView: UIView {
             grouping: config.card.inputs.grouping
         )
         let form = CardFormView(theme: t, config: formConfig)
-        form.onValidationChange = { [weak self] _ in
-            self?.updatePayButtonAppearance()
-        }
         form.onContentSizeChange = { [weak self] in
             guard let self else { return }
             let width = self.bounds.width > 0 ? self.bounds.width : UIScreen.main.bounds.width
@@ -544,13 +541,6 @@ package final class PaymentFormView: UIView {
         if selection == .crypto {
             let title = Strings.text("button.continue", locale: config.options.locale)
             payButton.apply(theme: t, title: title, processing: false, enabled: interactionEnabled)
-            return
-        }
-        let enteringCard = selection == .newCard
-        let cardReady = cardForm?.isReady ?? !enteringCard
-        if enteringCard && !cardReady {
-            let prompt = Strings.text("sheet.enterCardDetails", locale: config.options.locale)
-            payButton.apply(theme: t, title: prompt, processing: false, enabled: interactionEnabled, dimmed: true)
             return
         }
         let title = Strings.submitButtonTitle(

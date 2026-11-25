@@ -73,6 +73,24 @@ final class PersonalDetailsSheetHeightTests: XCTestCase {
             "sheet=\(sheet.preferredSheetHeight) overflow=\(overflow) safe=\(details.view.safeAreaInsets)"
         )
         XCTAssertEqual(scroll?.isScrollEnabled, false)
+
+        let form = scroll?.subviews.first { $0 is PersonalDetailsFormView }
+        let button = details.view.firstDescendant { $0.accessibilityLabel == "Continue" }
+        XCTAssertNotNil(form)
+        XCTAssertNotNil(button)
+        if let form, let button {
+            let formBottom = form.convert(form.bounds, to: details.view).maxY
+            let buttonTop = button.convert(button.bounds, to: details.view).minY
+            XCTAssertEqual(buttonTop - formBottom, 16, accuracy: 1)
+        }
+
+        let powered = details.view.firstDescendant { $0 is PoweredByFooterView }
+        XCTAssertNotNil(powered)
+        if let powered {
+            let poweredBottom = powered.convert(powered.bounds, to: details.view).maxY
+            let safeBottom = details.view.bounds.maxY - details.view.safeAreaInsets.bottom
+            XCTAssertEqual(safeBottom - poweredBottom, 8, accuracy: 1)
+        }
     }
 }
 
@@ -81,6 +99,14 @@ private extension UIView {
         if let scroll = self as? UIScrollView { return scroll }
         for subview in subviews {
             if let found = subview.firstDescendantScrollView() { return found }
+        }
+        return nil
+    }
+
+    func firstDescendant(where matches: (UIView) -> Bool) -> UIView? {
+        if matches(self) { return self }
+        for subview in subviews {
+            if let found = subview.firstDescendant(where: matches) { return found }
         }
         return nil
     }

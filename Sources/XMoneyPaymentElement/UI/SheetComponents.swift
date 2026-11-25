@@ -16,7 +16,7 @@ package final class GrabberView: UIView {
         addSubview(pill)
         NSLayoutConstraint.activate([
             pill.centerXAnchor.constraint(equalTo: centerXAnchor),
-            pill.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            pill.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             pill.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
             pill.widthAnchor.constraint(equalToConstant: 38),
             pill.heightAnchor.constraint(equalToConstant: 4),
@@ -70,7 +70,7 @@ final class OrDividerView: UIView {
 
         let stack = UIStackView(arrangedSubviews: [left, text, right])
         stack.axis = .horizontal
-        stack.spacing = 14
+        stack.spacing = 16
         stack.alignment = .center
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
@@ -98,15 +98,17 @@ final class OrDividerView: UIView {
 // MARK: - Radio
 
 final class RadioIndicator: UIView {
+    private let ring = CAShapeLayer()
     private let dot = UIView()
 
     init(theme: CheckoutTheme) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        layer.cornerRadius = 12
-        clipsToBounds = true
-        dot.backgroundColor = .white
-        dot.layer.cornerRadius = 5
+        backgroundColor = .clear
+        ring.fillColor = UIColor.clear.cgColor
+        ring.lineWidth = 2
+        layer.addSublayer(ring)
+        dot.layer.cornerRadius = 7
         dot.translatesAutoresizingMaskIntoConstraints = false
         addSubview(dot)
         NSLayoutConstraint.activate([
@@ -114,24 +116,33 @@ final class RadioIndicator: UIView {
             heightAnchor.constraint(equalToConstant: 24),
             dot.centerXAnchor.constraint(equalTo: centerXAnchor),
             dot.centerYAnchor.constraint(equalTo: centerYAnchor),
-            dot.widthAnchor.constraint(equalToConstant: 10),
-            dot.heightAnchor.constraint(equalToConstant: 10),
+            dot.widthAnchor.constraint(equalToConstant: 14),
+            dot.heightAnchor.constraint(equalToConstant: 14),
         ])
         setSelected(false, theme: theme, animated: false)
     }
 
+    /// Selected state is a 14pt accent dot inside the ring. The indicator itself stays clear.
+    package var selectionDotIsVisible: Bool { dot.alpha > 0.5 }
+    package var selectionDotColor: UIColor? { dot.backgroundColor }
+    package var selectionDotSide: CGFloat { 14 }
+
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        ring.frame = bounds
+        let inset = ring.lineWidth / 2
+        ring.path = UIBezierPath(ovalIn: bounds.insetBy(dx: inset, dy: inset)).cgPath
+    }
+
     func setSelected(_ selected: Bool, theme: CheckoutTheme, animated: Bool) {
         let updates = {
-            if selected {
-                self.backgroundColor = theme.primary
-                self.dot.alpha = 1
-            } else {
-                self.backgroundColor = theme.radioIdle
-                self.dot.alpha = 0
-            }
+            let stroke = (selected ? theme.primary : theme.radioIdle).cgColor
+            self.ring.strokeColor = stroke
+            self.dot.backgroundColor = theme.primary
+            self.dot.alpha = selected ? 1 : 0
         }
         if animated {
             UIView.animate(withDuration: 0.2, animations: updates)
@@ -152,7 +163,7 @@ final class CheckboxControl: UIControl {
     init(theme: CheckoutTheme) {
         self.theme = theme
         super.init(frame: .zero)
-        box.layer.cornerRadius = 7
+        box.layer.cornerRadius = 8
         box.layer.borderWidth = 1.5
         box.isUserInteractionEnabled = false
         box.translatesAutoresizingMaskIntoConstraints = false
@@ -270,7 +281,7 @@ final class BrandTileView: UIView {
             backgroundColor = theme.accentIconBackground
             iconView.image = EmbeddedAssets.image(named: "plus")?
                 .withRenderingMode(.alwaysTemplate)
-            iconView.tintColor = theme.primary
+            iconView.tintColor = theme.iconBrand
             iconView.translatesAutoresizingMaskIntoConstraints = false
             addSubview(iconView)
             NSLayoutConstraint.activate([
@@ -297,7 +308,7 @@ final class BrandTileView: UIView {
             let glyph = UILabel()
             glyph.text = "₿"
             glyph.font = theme.font(ofSize: 18, weight: .bold)
-            glyph.textColor = theme.primary
+            glyph.textColor = theme.iconBrand
             glyph.translatesAutoresizingMaskIntoConstraints = false
             addSubview(glyph)
             cryptoGlyph = glyph
@@ -311,7 +322,7 @@ final class BrandTileView: UIView {
     private func addCardIcon(theme: CheckoutTheme) {
         iconView.image = EmbeddedAssets.image(named: "card-generic")?
             .withRenderingMode(.alwaysTemplate)
-        iconView.tintColor = theme.primary
+        iconView.tintColor = theme.iconBrand
         iconView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(iconView)
         NSLayoutConstraint.activate([
@@ -346,7 +357,7 @@ final class ErrorRowView: UIView {
         badge.font = theme.font(ofSize: 10, weight: badgeWeight)
         badge.textColor = .white
         badge.textAlignment = .center
-        badge.backgroundColor = theme.errorText
+        badge.backgroundColor = theme.errorBadge
         badge.layer.cornerRadius = 7.5
         badge.clipsToBounds = true
         badge.translatesAutoresizingMaskIntoConstraints = false
@@ -359,7 +370,7 @@ final class ErrorRowView: UIView {
 
         let stack = UIStackView(arrangedSubviews: [badge, label])
         stack.axis = .horizontal
-        stack.spacing = 6
+        stack.spacing = 8
         stack.alignment = .center
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
@@ -405,7 +416,7 @@ final class PoweredByFooterView: UIView {
 
         let stack = UIStackView(arrangedSubviews: [label, logo])
         stack.axis = .horizontal
-        stack.spacing = 6
+        stack.spacing = 8
         stack.alignment = .bottom
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)

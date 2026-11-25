@@ -84,7 +84,7 @@ final class ThemeResolutionTests: XCTestCase {
         XCTAssertEqual(theme.borderRadius, 12, accuracy: 0.001)
         XCTAssertEqual(theme.borderWidth, 2, accuracy: 0.001)
         XCTAssertEqual(theme.formFieldRadius, 12, accuracy: 0.001)
-        XCTAssertEqual(theme.paymentContainerRadius, 12, accuracy: 0.001)
+        XCTAssertEqual(theme.paymentContainerRadius, CheckoutTheme.defaultPaymentContainerRadius, accuracy: 0.001)
         XCTAssertEqual(theme.primaryButtonBorderRadius, 8, accuracy: 0.001)
         XCTAssertEqual(theme.primaryButtonBorderWidth, 1, accuracy: 0.001)
     }
@@ -105,11 +105,19 @@ final class ThemeResolutionTests: XCTestCase {
             isDark: false
         )
         XCTAssertEqual(theme.formFieldRadius, 4, accuracy: 0.001)
-        XCTAssertEqual(theme.paymentContainerRadius, 4, accuracy: 0.001)
-        XCTAssertEqual(theme.rowRadius, 12, accuracy: 0.001)
+        XCTAssertEqual(theme.paymentContainerRadius, CheckoutTheme.defaultPaymentContainerRadius, accuracy: 0.001)
+        XCTAssertEqual(theme.rowRadius, CheckoutTheme.defaultRowRadius, accuracy: 0.001)
         XCTAssertEqual(theme.borderWidth, 2.5, accuracy: 0.001)
         XCTAssertEqual(theme.fieldStrokeWidth(hasError: false), 2.5, accuracy: 0.001)
         XCTAssertEqual(theme.fieldStrokeWidth(hasError: true), 2.5, accuracy: 0.001)
+    }
+
+    func testButtonRadiusFollowsPrimaryButtonShape() {
+        XCTAssertEqual(resolve(isDark: false).buttonRadius(forHeight: 48), 24, accuracy: 0.001)
+        let square = resolve(appearance: ["primaryButton": ["shapes": ["borderRadius": 0]]], isDark: false)
+        XCTAssertEqual(square.buttonRadius(forHeight: 48), 0, accuracy: 0.001)
+        let rounded = resolve(appearance: ["primaryButton": ["shapes": ["borderRadius": 8]]], isDark: false)
+        XCTAssertEqual(rounded.buttonRadius(forHeight: 52), 8, accuracy: 0.001)
     }
 
     func testZeroBorderWidthStillShowsErrorRing() {
@@ -133,8 +141,9 @@ final class ThemeResolutionTests: XCTestCase {
 
     func testOmittedErrorKeepsBrandedFieldChrome() {
         let theme = resolve(isDark: false)
-        XCTAssertEqual(theme.errorBorder.hexString, "#ef4444")
+        XCTAssertEqual(theme.errorBorder.hexString, "#dc2626")
         XCTAssertEqual(theme.errorText.hexString, "#dc2626")
+        XCTAssertEqual(theme.errorBadge.hexString, "#dc2626")
     }
 
     func testPrimaryButtonFontFallsBackToAppearanceFont() {
@@ -149,12 +158,75 @@ final class ThemeResolutionTests: XCTestCase {
     func testSelectedWashesDeriveFromPrimary() {
         let theme = resolve(appearance: ["colors": ["primary": "#0E7C66"]], isDark: false)
         let primary = color("#0E7C66")
-        XCTAssertEqual(theme.selectedBackground.hexString, "#f7f6ff")
-        XCTAssertEqual(theme.accentIconBackground.hexString, "#ece5ff")
+        XCTAssertEqual(theme.selectedBackground.hexRGBA, primary.withAlphaComponent(0x0F / 255.0).hexRGBA)
+        XCTAssertEqual(theme.accentIconBackground.hexRGBA, primary.withAlphaComponent(0x1F / 255.0).hexRGBA)
+        XCTAssertEqual(theme.radioIdle.hexRGBA, theme.unselectedRing.hexRGBA)
+        XCTAssertEqual(theme.textBrand.hexRGBA, primary.hexRGBA)
+        XCTAssertEqual(theme.iconBrand.hexRGBA, primary.hexRGBA)
 
         let dark = resolve(appearance: ["colors": ["primary": "#0E7C66"]], isDark: true)
         XCTAssertEqual(dark.selectedBackground.hexRGBA, primary.withAlphaComponent(0x2E / 255.0).hexRGBA)
         XCTAssertEqual(dark.accentIconBackground.hexRGBA, primary.withAlphaComponent(0x3D / 255.0).hexRGBA)
+    }
+
+    func testOmittedPrimaryKeepsBrandedWashes() {
+        let theme = resolve(isDark: false)
+        XCTAssertEqual(theme.selectedBackground.hexString, "#f7f6ff")
+        XCTAssertEqual(theme.accentIconBackground.hexString, "#ece5ff")
+        XCTAssertEqual(theme.radioIdle.hexRGBA, color("#7C4DFF").withAlphaComponent(CGFloat(0xCC) / 255.0).hexRGBA)
+        XCTAssertEqual(theme.textBrand.hexString, "#7a4bfb")
+        XCTAssertEqual(theme.iconBrand.hexString, "#7c4dff")
+    }
+
+    func testSecondaryTextOverridesSecondaryCopy() {
+        let theme = resolve(appearance: ["colors": ["secondaryText": "#335577"]], isDark: false)
+        let secondary = color("#335577")
+        XCTAssertEqual(theme.metaText.hexString, secondary.hexString)
+        XCTAssertEqual(theme.sectionLabelColor.hexString, secondary.hexString)
+        XCTAssertEqual(theme.orLabel.hexRGBA, secondary.withAlphaComponent(0.40).hexRGBA)
+        XCTAssertEqual(theme.poweredByText.hexRGBA, secondary.withAlphaComponent(0.30).hexRGBA)
+        XCTAssertEqual(theme.poweredByLogo.hexRGBA, secondary.withAlphaComponent(0.42).hexRGBA)
+    }
+
+    func testOmittedSecondaryTextKeepsBrandedCopy() {
+        let theme = resolve(isDark: false)
+        XCTAssertEqual(theme.metaText.hexString, "#63606d")
+        XCTAssertEqual(theme.sectionLabelColor.hexString, "#6b6779")
+        XCTAssertEqual(theme.orLabel.hexString, "#63606d")
+        XCTAssertEqual(theme.poweredByText.hexString, "#9691a3")
+    }
+
+    func testPlaceholderTextOverridesInputPlaceholder() {
+        let light = resolve(appearance: ["colors": ["placeholderText": "#AA3300"]], isDark: false)
+        XCTAssertEqual(light.inputPlaceholder.hexString, color("#AA3300").hexString)
+        let dark = resolve(appearance: ["colorsDark": ["placeholderText": "#00AA33"]], isDark: true)
+        XCTAssertEqual(dark.inputPlaceholder.hexString, color("#00AA33").hexString)
+
+        XCTAssertEqual(resolve(isDark: false).inputPlaceholder.hexString, "#9691a3")
+        XCTAssertEqual(resolve(isDark: true).inputPlaceholder.hexString, "#69696f")
+    }
+
+    func testInverseTextContrastsWithPrimaryText() {
+        XCTAssertEqual(resolve(isDark: false).inverseText.hexString, "#f7f6ff")
+        XCTAssertEqual(resolve(isDark: true).inverseText.hexString, "#09090b")
+        let custom = resolve(
+            appearance: ["colors": ["primaryText": "#FFFFFF", "background": "#FFFFFF"]],
+            isDark: false
+        )
+        XCTAssertEqual(custom.inverseText.hexString, "#16141a")
+    }
+
+    func testDangerTintsUseErrorRedAtFixedAlphas() {
+        let wash = color("#EF4444")
+        let light = resolve(isDark: false)
+        XCTAssertEqual(light.dangerTint.hexRGBA, wash.withAlphaComponent(0.08).hexRGBA)
+        XCTAssertEqual(light.dangerTintStrong.hexRGBA, wash.withAlphaComponent(0.09).hexRGBA)
+        let dark = resolve(isDark: true)
+        XCTAssertEqual(dark.dangerTint.hexRGBA, wash.withAlphaComponent(0.15).hexRGBA)
+        XCTAssertEqual(dark.dangerTintStrong.hexRGBA, wash.withAlphaComponent(0.30).hexRGBA)
+        let overridden = resolve(appearance: ["colors": ["error": "#00AA55"]], isDark: false)
+        XCTAssertEqual(overridden.dangerTint.hexRGBA, light.dangerTint.hexRGBA)
+        XCTAssertEqual(overridden.errorBorder.hexString, "#00aa55")
     }
 
     func testEightDigitHexIsARGBMatchingAndroid() {
@@ -204,7 +276,7 @@ final class ThemeResolutionTests: XCTestCase {
         XCTAssertEqual(light.footerBorder.hexRGBA, lightInk.withAlphaComponent(0x0F / 255.0).hexRGBA)
         XCTAssertEqual(light.fieldBorder.hexString, "#e3e1e8")
         XCTAssertEqual(light.fieldDivider.hexString, "#e3e1e8")
-        XCTAssertEqual(light.mutedIcon.hexRGBA, lightInk.withAlphaComponent(0x52 / 255.0).hexRGBA)
+        XCTAssertEqual(light.mutedIcon.hexString, "#9691a3")
         XCTAssertEqual(light.unselectedRing.hexRGBA, lightInk.withAlphaComponent(0x29 / 255.0).hexRGBA)
         XCTAssertEqual(light.orDivider.hexString, "#e3e1e8")
         XCTAssertEqual(light.grabber.hexString, "#e3e1e8")
@@ -213,30 +285,36 @@ final class ThemeResolutionTests: XCTestCase {
         XCTAssertEqual(light.componentDivider.hexString, "#d1cddb")
         XCTAssertEqual(light.primaryButtonBorderRadius, CheckoutTheme.defaultPrimaryButtonRadius, accuracy: 0.001)
         XCTAssertEqual(light.errorText.hexString, "#dc2626")
-        XCTAssertEqual(light.errorBorder.hexString, "#ef4444")
+        XCTAssertEqual(light.errorBorder.hexString, "#dc2626")
         XCTAssertEqual(light.formFieldRadius, CheckoutTheme.defaultFormFieldRadius, accuracy: 0.001)
         XCTAssertEqual(light.paymentContainerRadius, CheckoutTheme.defaultPaymentContainerRadius, accuracy: 0.001)
-        XCTAssertEqual(light.rowRadius, 12, accuracy: 0.001)
+        XCTAssertEqual(light.rowRadius, CheckoutTheme.defaultRowRadius, accuracy: 0.001)
+        XCTAssertEqual(light.brandTileRadius, CheckoutTheme.defaultBrandTileRadius, accuracy: 0.001)
         XCTAssertNil(light.visaTint)
 
         let dark = resolve(isDark: true)
         let darkInk = color("#F7F6F9")
         let white = UIColor.white
         XCTAssertEqual(dark.background.hexString, "#18181b")
-        XCTAssertEqual(dark.componentBackground.hexString, "#18181b")
-        XCTAssertEqual(dark.primaryText.hexString, "#f7f6f9")
+        XCTAssertEqual(dark.componentBackground.hexString, "#1f1f23")
+        XCTAssertEqual(dark.primaryText.hexString, "#fafafa")
         XCTAssertEqual(dark.componentBorder.hexString, "#3f3b48")
         XCTAssertEqual(dark.containerBorder.hexRGBA, darkInk.withAlphaComponent(0x17 / 255.0).hexRGBA)
         XCTAssertEqual(dark.footerBorder.hexRGBA, white.withAlphaComponent(0x14 / 255.0).hexRGBA)
-        XCTAssertEqual(dark.fieldBorder.hexRGBA, darkInk.withAlphaComponent(0x1A / 255.0).hexRGBA)
-        XCTAssertEqual(dark.fieldDivider.hexRGBA, darkInk.withAlphaComponent(0x14 / 255.0).hexRGBA)
-        XCTAssertEqual(dark.mutedIcon.hexRGBA, color("#797585").hexRGBA)
+        XCTAssertEqual(dark.fieldBorder.hexRGBA, white.withAlphaComponent(0x1A / 255.0).hexRGBA)
+        XCTAssertEqual(dark.fieldDivider.hexRGBA, white.withAlphaComponent(0x1A / 255.0).hexRGBA)
+        XCTAssertEqual(dark.mutedIcon.hexString, "#69696f")
         XCTAssertEqual(dark.unselectedRing.hexRGBA, white.withAlphaComponent(0x33 / 255.0).hexRGBA)
         XCTAssertEqual(dark.checkboxRing.hexRGBA, white.withAlphaComponent(0x3D / 255.0).hexRGBA)
-        XCTAssertEqual(dark.grabber.hexRGBA, white.withAlphaComponent(0x29 / 255.0).hexRGBA)
+        XCTAssertEqual(dark.grabber.hexRGBA, white.withAlphaComponent(0x1A / 255.0).hexRGBA)
         XCTAssertEqual(dark.orDivider.hexRGBA, white.withAlphaComponent(0x1A / 255.0).hexRGBA)
+        XCTAssertEqual(dark.selectedBackground.hexString, "#2a2a2f")
+        XCTAssertEqual(dark.accentIconBackground.hexString, "#24124c")
+        XCTAssertEqual(dark.textBrand.hexString, "#926bff")
+        XCTAssertEqual(dark.poweredByText.hexString, "#605c70")
+        XCTAssertEqual(dark.errorText.hexString, "#ef4444")
+        XCTAssertEqual(dark.errorBadge.hexString, "#dc2626")
         XCTAssertEqual(dark.neutralChip.hexRGBA, darkInk.withAlphaComponent(0x0D / 255.0).hexRGBA)
-        XCTAssertEqual(dark.errorText.hexString, "#dc2626")
         XCTAssertEqual(dark.errorBorder.hexString, "#ef4444")
         XCTAssertEqual(dark.visaTint?.hexString, "#ffffff")
         XCTAssertEqual(dark.brandTileBackground.hexString, "#1f1f23")

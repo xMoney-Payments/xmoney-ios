@@ -34,9 +34,9 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     private var postalLabel: UILabel?
     private let contactGroup = UIView()
     private let addressGroup = UIView()
-    private var contactErrorRow: ErrorRowView?
-    private var addressErrorRow: ErrorRowView?
-    private var lastErrorVisible = false
+    private var contactErrorStack: UIStackView?
+    private var addressErrorStack: UIStackView?
+    private var renderedErrorSignature = ""
 
     package init(
         theme: CheckoutTheme,
@@ -134,9 +134,14 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     private let fieldHeight: CGFloat = 48
     private let fieldInset: CGFloat = 16
 
-    private var restingFieldBorder: UIColor {
-        UIColor(hex: "#E3E1E8") ?? theme.fieldBorder
+    /// Below required so a hidden stack row can collapse while fitting. A visible row still lays out at this height.
+    private func constrainHeight(_ view: UIView, to height: CGFloat) {
+        let constraint = view.heightAnchor.constraint(equalToConstant: height)
+        constraint.priority = UILayoutPriority(999)
+        constraint.isActive = true
     }
+
+    private var restingFieldBorder: UIColor { theme.fieldBorder }
 
     private var placeholderColor: UIColor { theme.inputPlaceholder }
 
@@ -154,26 +159,26 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         ])
 
         if visibility.showsContactSection {
-            let errorRow = isSpaced ? nil : makeSectionError()
-            contactErrorRow = errorRow
+            let errorStack = isSpaced ? nil : makeSectionErrorStack()
+            contactErrorStack = errorStack
             stack.addArrangedSubview(section(
                 heading("personalDetails.contactInfoHeading"),
                 body: isSpaced ? padded(spacedContact(), top: 4, bottom: 4) : condensedContact(),
-                error: errorRow
+                error: errorStack
             ))
         }
         if visibility.showAddressSection {
-            let errorRow = isSpaced ? nil : makeSectionError()
-            addressErrorRow = errorRow
+            let errorStack = isSpaced ? nil : makeSectionErrorStack()
+            addressErrorStack = errorStack
             stack.addArrangedSubview(section(
                 heading("personalDetails.addressHeading"),
                 body: isSpaced ? padded(spacedAddress(), top: 4) : condensedAddress(),
-                error: errorRow
+                error: errorStack
             ))
         }
     }
 
-    private func section(_ title: UIView, body: UIView, error: ErrorRowView?) -> UIView {
+    private func section(_ title: UIView, body: UIView, error: UIView?) -> UIView {
         let stack = UIStackView()
         stack.axis = .vertical
         stack.spacing = 8
@@ -181,7 +186,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         if let error {
             let bodyStack = UIStackView(arrangedSubviews: [body, error])
             bodyStack.axis = .vertical
-            bodyStack.spacing = 6
+            bodyStack.spacing = 8
             stack.addArrangedSubview(bodyStack)
         } else {
             stack.addArrangedSubview(body)
@@ -189,10 +194,12 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         return stack
     }
 
-    private func makeSectionError() -> ErrorRowView {
-        let row = ErrorRowView(message: " ", theme: theme)
-        row.isHidden = true
-        return row
+    private func makeSectionErrorStack() -> UIStackView {
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.spacing = 8
+        stack.isHidden = true
+        return stack
     }
 
     private func heading(_ key: String) -> UIView {
@@ -380,7 +387,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         let line = UIView()
         line.backgroundColor = restingFieldBorder
         line.translatesAutoresizingMaskIntoConstraints = false
-        line.heightAnchor.constraint(equalToConstant: 1).isActive = true
+        constrainHeight(line, to: 1)
         return line
     }
 
@@ -438,7 +445,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     ) -> UIView {
         let row = UIView()
         row.translatesAutoresizingMaskIntoConstraints = false
-        row.heightAnchor.constraint(equalToConstant: fieldHeight).isActive = true
+        constrainHeight(row, to: fieldHeight)
         let input = makeTextField(field, placeholder: placeholder, keyboard: keyboard, contentType: contentType, cap: cap)
         row.addSubview(input)
         pinField(input, in: row)
@@ -448,7 +455,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
     private func plainSelect(_ field: PersonalDetailsField, placeholder: String) -> UIView {
         let row = UIView()
         row.translatesAutoresizingMaskIntoConstraints = false
-        row.heightAnchor.constraint(equalToConstant: fieldHeight).isActive = true
+        constrainHeight(row, to: fieldHeight)
         let select = makeSelect(field, placeholder: placeholder)
         row.addSubview(select)
         pinField(select, in: row)
@@ -463,7 +470,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         box.layer.borderColor = restingFieldBorder.cgColor
         box.clipsToBounds = true
         box.translatesAutoresizingMaskIntoConstraints = false
-        box.heightAnchor.constraint(equalToConstant: fieldHeight).isActive = true
+        constrainHeight(box, to: fieldHeight)
         return box
     }
 
@@ -703,27 +710,40 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
                 errorLabels[field]?.isHidden = error == nil
             }
         } else {
-            applySectionError(contactErrorRow, fields: CustomerDetailsValidator.contactOrder)
-            applySectionError(addressErrorRow, fields: CustomerDetailsValidator.addressOrder(countryCode: values.country))
+            applySectionError(contactErrorStack, fields: CustomerDetailsValidator.contactOrder)
+            applySectionError(addressErrorStack, fields: CustomerDetailsValidator.addressOrder(countryCode: values.country))
         }
         updateBorders()
-        let errorVisible = hasVisibleError()
-        if errorVisible != lastErrorVisible {
-            lastErrorVisible = errorVisible
+        let signature = visibleErrorSignature()
+        if signature != renderedErrorSignature {
+            renderedErrorSignature = signature
             onContentSizeChange?()
         }
     }
 
-    private func applySectionError(_ row: ErrorRowView?, fields: [PersonalDetailsField]) {
-        guard let row else { return }
-        let message = fields.compactMap { visibleError($0)?.localizedMessage(locale: locale) }.first
-        row.setMessage(message ?? "")
-        row.isHidden = message == nil
+    /// Every visible message under the group, in field order. The first row's inset plus the
+    /// 8pt stack spacing above the group matches the card group's 16pt gap.
+    private func applySectionError(_ stack: UIStackView?, fields: [PersonalDetailsField]) {
+        guard let stack else { return }
+        stack.arrangedSubviews.forEach {
+            stack.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
+        for field in fields {
+            guard let error = visibleError(field) else { continue }
+            stack.addArrangedSubview(ErrorRowView(
+                message: error.localizedMessage(locale: locale),
+                theme: theme,
+                topInset: 8
+            ))
+        }
+        stack.isHidden = stack.arrangedSubviews.isEmpty
     }
 
-    private func hasVisibleError() -> Bool {
+    private func visibleErrorSignature() -> String {
         CustomerDetailsValidator.activeFields(visibility: visibility, countryCode: values.country)
-            .contains { visibleError($0) != nil }
+            .compactMap { visibleError($0)?.localizedMessage(locale: locale) }
+            .joined(separator: "\n")
     }
 
     private func updateBorders() {
@@ -829,7 +849,7 @@ private final class SelectControl: UIControl {
             string: shown,
             attributes: [
                 .font: theme.font(ofSize: 18, weight: filled ? .medium : .regular),
-                .foregroundColor: filled ? theme.primaryText : (UIColor(hex: "#D1CDDB") ?? theme.placeholderText),
+                .foregroundColor: filled ? theme.primaryText : theme.inputPlaceholder,
             ]
         )
     }

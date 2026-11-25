@@ -41,7 +41,6 @@ package final class CardFormView: UIView, UITextFieldDelegate {
     private let theme: CheckoutTheme
     private let config: Configuration
 
-    package var onValidationChange: ((Bool) -> Void)?
     package var onContentSizeChange: (() -> Void)?
 
     private var showErrors = false
@@ -142,17 +141,6 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         validateAll().isEmpty
     }
 
-    package var isReady: Bool {
-        let input = currentInput
-        let digits = CardFieldValidators.normalizeDigits(input.number)
-        let expDigits = CardFieldValidators.normalizeDigits(
-            (fields[.expiry]?.field.text ?? "").replacingOccurrences(of: " / ", with: "")
-        )
-        let cvcDigits = CardFieldValidators.normalizeDigits(input.cvv)
-        let holderOk = !(input.holderName?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
-        return digits.count == 16 && expDigits.count >= 4 && cvcDigits.count >= 3 && holderOk
-    }
-
     private func setup() {
         outerStack.axis = .vertical
         outerStack.spacing = 8
@@ -171,7 +159,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
                 text: Strings.text("sheet.cardDetails", locale: config.locale),
                 size: 14,
                 weight: .semibold,
-                color: theme.sectionLabelColor
+                color: theme.metaText
             )
             let captionWrap = UIView()
             captionLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -382,7 +370,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         textField.attributedPlaceholder = NSAttributedString(
             string: placeholder,
             attributes: [
-                .foregroundColor: theme.sectionLabelColor,
+                .foregroundColor: theme.metaText,
                 .font: theme.font(ofSize: 18, weight: .regular),
                 .kern: tracking,
             ]
@@ -570,7 +558,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         return row
     }
 
-    private var fieldInset: CGFloat { config.isSpaced ? 16 : 14 }
+    private var fieldInset: CGFloat { config.isSpaced ? 16 : 12 }
 
     private func makeFieldRow() -> UIView {
         let row = UIView()
@@ -594,7 +582,6 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             field.text = String(CardFieldValidators.normalizeDigits(field.text ?? "").prefix(4))
         }
         revalidate(changedField: fieldFor(textField: field), trigger: .change)
-        onValidationChange?(isReady)
     }
 
     private func fieldFor(textField: UITextField) -> Field? {
@@ -751,7 +738,6 @@ package final class CardFormView: UIView, UITextFieldDelegate {
     package func validateAndShowErrors() -> Bool {
         showErrors = true
         revalidate(changedField: nil, trigger: .submit)
-        onValidationChange?(isReady)
         return isValid
     }
 
@@ -774,7 +760,6 @@ package final class CardFormView: UIView, UITextFieldDelegate {
         ui.blurred = true
         fields[field] = ui
         revalidate(changedField: field, trigger: .blur)
-        onValidationChange?(isReady)
     }
 
     private func parseExpiry(_ text: String) -> (String, String) {

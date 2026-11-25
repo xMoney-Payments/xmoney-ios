@@ -42,12 +42,12 @@ package final class PersonalDetailsEntryRow: UIView {
             attributes: theme.titleAttributes(
                 size: 16,
                 weight: .bold,
-                color: completed ? theme.primaryText : theme.primary,
+                color: completed ? theme.primaryText : theme.textBrand,
                 lineBreakMode: .byWordWrapping
             )
         )
         button.layer.borderWidth = showError ? 1 : 0
-        button.layer.borderColor = theme.errorText.cgColor
+        button.layer.borderColor = theme.errorBorder.cgColor
         button.isAccessibilityElement = true
         button.accessibilityTraits = .button
         button.accessibilityLabel = title
@@ -71,9 +71,9 @@ package final class PersonalDetailsEntryRow: UIView {
         ])
 
         button.backgroundColor = theme.componentBackground
-        button.layer.cornerRadius = 16
+        button.layer.cornerRadius = theme.containerRadius
         button.layer.borderWidth = 0
-        button.layer.borderColor = theme.errorText.cgColor
+        button.layer.borderColor = theme.errorBorder.cgColor
         button.addAction(UIAction { [weak self] _ in self?.onTap?() }, for: .touchUpInside)
 
         plusTile.apply(style: .addCard, theme: theme)
@@ -87,7 +87,7 @@ package final class PersonalDetailsEntryRow: UIView {
             personTile.heightAnchor.constraint(equalToConstant: 34),
         ])
         personIcon.image = EmbeddedAssets.image(named: "person")?.withRenderingMode(.alwaysTemplate)
-        personIcon.tintColor = theme.metaText
+        personIcon.tintColor = theme.iconBrand
         personIcon.translatesAutoresizingMaskIntoConstraints = false
         personTile.addSubview(personIcon)
         badge.backgroundColor = theme.primary
@@ -121,7 +121,7 @@ package final class PersonalDetailsEntryRow: UIView {
         titleLabel.isAccessibilityElement = false
         chevron.isAccessibilityElement = false
         chevron.image = EmbeddedAssets.image(named: "chevron-down")?.withRenderingMode(.alwaysTemplate)
-        chevron.tintColor = theme.primary
+        chevron.tintColor = theme.iconBrand
         chevron.contentMode = .scaleAspectFit
         chevron.transform = CGAffineTransform(rotationAngle: -.pi / 2)
         chevron.translatesAutoresizingMaskIntoConstraints = false
@@ -156,7 +156,7 @@ package final class PersonalDetailsEntryRow: UIView {
             message: Strings.text("personalDetails.completeDetails", locale: locale),
             theme: theme,
             topInset: 8,
-            leadingInset: 4,
+            leadingInset: 2,
             badgeWeight: .medium,
             messageSize: 12
         )

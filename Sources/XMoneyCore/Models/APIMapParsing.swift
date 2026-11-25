@@ -39,6 +39,7 @@ enum APIMap {
     static func intValue(_ value: Any?) -> Int? {
         if let number = value as? NSNumber { return number.intValue }
         if let int = value as? Int { return int }
+        if let string = value as? String { return Int(string.trimmingCharacters(in: .whitespacesAndNewlines)) }
         return nil
     }
 

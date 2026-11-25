@@ -8,7 +8,14 @@ final class PaymentOptionRow: UIControl {
     private let radio: RadioIndicator
     private let theme: CheckoutTheme
 
-    init(theme: CheckoutTheme, tile: BrandTileStyle, title: String, subtitle: String) {
+    init(
+        theme: CheckoutTheme,
+        tile: BrandTileStyle,
+        title: String,
+        subtitle: String,
+        subtitleColor: UIColor? = nil
+    ) {
+        let subtitleColor = subtitleColor ?? theme.metaText
         self.theme = theme
         radio = RadioIndicator(theme: theme)
         super.init(frame: .zero)
@@ -19,7 +26,7 @@ final class PaymentOptionRow: UIControl {
         let titleLabel = UILabel()
         theme.style(titleLabel, text: title, size: 16, weight: .bold, color: theme.primaryText)
         let subtitleLabel = UILabel()
-        theme.style(subtitleLabel, text: subtitle, size: 14, weight: .medium, color: theme.metaText)
+        theme.style(subtitleLabel, text: subtitle, size: 14, weight: .medium, color: subtitleColor)
 
         let textStack = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
         textStack.axis = .vertical
@@ -51,14 +58,14 @@ final class PaymentOptionRow: UIControl {
     }
 }
 
-/// White method card with a 6pt inset. The selected option inside it gets the tinted 12pt panel.
+/// White method card with an 8pt inset. The selected option inside it gets the tinted 16pt panel.
 class PaymentOptionPanel: UIView {
     let theme: CheckoutTheme
     let row: PaymentOptionRow
     let block = UIView()
     let blockStack = UIStackView()
     var onSelect: (() -> Void)?
-    /// Sits below the tinted panel, on the card's white fill, with a 6pt gap.
+    /// Sits below the tinted panel, on the card's white fill, with an 8pt gap.
     private let insetStack = UIStackView()
     private var footerView: UIView?
 
@@ -72,11 +79,11 @@ class PaymentOptionPanel: UIView {
         layer.borderWidth = theme.containerBorderWidth
 
         insetStack.axis = .vertical
-        insetStack.spacing = 6
+        insetStack.spacing = 8
         insetStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(insetStack)
 
-        block.layer.cornerRadius = 12
+        block.layer.cornerRadius = theme.rowRadius
         block.clipsToBounds = true
         block.translatesAutoresizingMaskIntoConstraints = false
         insetStack.addArrangedSubview(block)
@@ -88,10 +95,10 @@ class PaymentOptionPanel: UIView {
         blockStack.addArrangedSubview(row)
 
         NSLayoutConstraint.activate([
-            insetStack.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            insetStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            insetStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-            insetStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            insetStack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            insetStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            insetStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            insetStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
             blockStack.topAnchor.constraint(equalTo: block.topAnchor),
             blockStack.leadingAnchor.constraint(equalTo: block.leadingAnchor),
             blockStack.trailingAnchor.constraint(equalTo: block.trailingAnchor),
@@ -157,7 +164,8 @@ final class CryptoOptionPanel: PaymentOptionPanel {
             theme: theme,
             tile: .crypto,
             title: Strings.text("sheet.payWithCrypto", locale: locale),
-            subtitle: Strings.text("sheet.cryptoSubtitle", locale: locale)
+            subtitle: Strings.text("sheet.cryptoSubtitle", locale: locale),
+            subtitleColor: theme.sectionLabelColor
         )
         super.init(theme: theme, row: row)
 
@@ -174,10 +182,10 @@ final class CryptoOptionPanel: PaymentOptionPanel {
         label.translatesAutoresizingMaskIntoConstraints = false
         notice.addSubview(label)
         NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: notice.topAnchor, constant: 10),
+            label.topAnchor.constraint(equalTo: notice.topAnchor, constant: 8),
             label.leadingAnchor.constraint(equalTo: notice.leadingAnchor, constant: 12),
             label.trailingAnchor.constraint(equalTo: notice.trailingAnchor, constant: -12),
-            label.bottomAnchor.constraint(equalTo: notice.bottomAnchor, constant: -10),
+            label.bottomAnchor.constraint(equalTo: notice.bottomAnchor, constant: -8),
         ])
         setFooter(notice)
     }

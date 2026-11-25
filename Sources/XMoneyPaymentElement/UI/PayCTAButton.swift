@@ -77,7 +77,7 @@ package final class PayCTAButton: UIView {
         updateFillPath()
     }
 
-    package func apply(theme: CheckoutTheme, title: String, processing: Bool, enabled: Bool, dimmed: Bool = false) {
+    package func apply(theme: CheckoutTheme, title: String, processing: Bool, enabled: Bool) {
         paintedFill = theme.primaryButtonBackground
         requestedRadius = theme.primaryButtonBorderRadius
         heightConstraint?.constant = theme.payButtonHeight
@@ -108,10 +108,6 @@ package final class PayCTAButton: UIView {
             alpha = 0.9
             layer.shadowOpacity = 0
             showCoinMark(color: theme.primaryButtonText)
-        } else if dimmed {
-            alpha = 0.4
-            layer.shadowOpacity = 0
-            hideCoinMark()
         } else if enabled {
             alpha = 1
             layer.shadowColor = UIColor(red: 124 / 255, green: 77 / 255, blue: 255 / 255, alpha: 1).cgColor

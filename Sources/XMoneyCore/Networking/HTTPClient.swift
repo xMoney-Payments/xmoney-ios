@@ -85,6 +85,12 @@ final class HTTPClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         applyBrowserHeaders(&request)
+        if fields["paymentMethod"] == "crypto" {
+            // Accept */* plus a Safari user agent makes TwisPay return the hosted HTML page.
+            // Crypto has no card data, so that page is the whole response and parse never sees a code.
+            // The form field browserAcceptHeader still sends */* for the gateway's browser record.
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+        }
         request.setValue(
             "multipart/form-data; boundary=\(boundary)",
             forHTTPHeaderField: "Content-Type"
@@ -101,6 +107,7 @@ final class HTTPClient {
         body.append("--\(boundary)--\r\n")
         request.httpBody = body
 
+        Self.logOutgoingMultipart(url: url, fields: fields)
         return try await sendExpectingJSON(request)
     }
 
@@ -116,17 +123,34 @@ final class HTTPClient {
                 (data, response) = try await session.data(for: request)
             }
         } catch {
-            throw Self.mappedCancellation(error)
+            let mapped = Self.mappedCancellation(error)
+            if !(mapped is CancellationError) {
+                Self.logTransportFailure(request: request, error: error)
+            }
+            throw mapped
         }
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
 
         Self.log(request: request, statusCode: statusCode, responseBody: data)
+        Self.logUnreadablePaymentResponse(
+            request: request,
+            statusCode: statusCode,
+            json: json,
+            responseBody: data,
+            contentType: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")
+        )
 
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             let message = (json["message"] as? String)
                 ?? (json["error"] as? String)
                 ?? "Request failed with status \(http.statusCode)"
+            Self.logHTTPFailure(
+                request: request,
+                statusCode: http.statusCode,
+                message: message,
+                responseBody: data
+            )
             let error = PaymentError.network(message)
             if exposingStatus {
                 throw HTTPStatusFailure(statusCode: http.statusCode, error: error)
@@ -147,6 +171,85 @@ final class HTTPClient {
             return CancellationError()
         }
         return error
+    }
+
+    /// Field names only. Values such as the order payload, checksum, and card data stay out of the log.
+    private static func logOutgoingMultipart(url: URL, fields: [String: String]) {
+        let kind = fields["paymentMethod"]
+            ?? fields["digitalWalletType"]
+            ?? (fields["cardId"] != nil ? "saved-card" : "card")
+        let names = fields.keys.sorted().joined(separator: ",")
+        let payloadChars = fields["jsonRequest"]?.count ?? 0
+        let accept = fields["paymentMethod"] == "crypto" ? "application/json" : "*/*"
+        logger.info(
+            "POST \(url.absoluteString, privacy: .public) kind=\(kind, privacy: .public) accept=\(accept, privacy: .public) jsonRequestChars=\(payloadChars) fields=\(names, privacy: .public)"
+        )
+    }
+
+    /// A 2xx payment body with no numeric `code` is what `parse` reports as "Invalid payment result".
+    private static func logUnreadablePaymentResponse(
+        request: URLRequest,
+        statusCode: Int,
+        json: [String: Any],
+        responseBody: Data,
+        contentType: String?
+    ) {
+        guard request.url?.absoluteString.contains("payment-request") == true else { return }
+        guard !isPaymentSuccessCode(json["code"]) else { return }
+        let keys = json.keys.sorted().joined(separator: ",")
+        let detail = visibleHTMLText(responseBody) ?? failureSnippet(responseBody)
+        logger.error(
+            "payment-request http=\(statusCode) content-type=\(contentType ?? "", privacy: .public) missing code keys=\(keys, privacy: .public) body=\(detail, privacy: .public)"
+        )
+    }
+
+    /// The hosted TwisPay page is HTML. The stylesheet links hide the message the page actually shows.
+    private static func visibleHTMLText(_ data: Data) -> String? {
+        guard let html = String(data: data, encoding: .utf8) else { return nil }
+        let prefix = html.prefix(64).lowercased()
+        guard prefix.contains("<!doctype") || prefix.contains("<html") else { return nil }
+        var text = html
+        for pattern in ["(?is)<script\\b[^>]*>.*?</script>", "(?is)<style\\b[^>]*>.*?</style>", "(?is)<[^>]+>"] {
+            text = text.replacingOccurrences(of: pattern, with: " ", options: .regularExpression)
+        }
+        let collapsed = text.split { $0.isWhitespace }.joined(separator: " ")
+        guard !collapsed.isEmpty else { return nil }
+        return collapsed.count > 400 ? String(collapsed.prefix(400)) + "…" : collapsed
+    }
+
+    private static func isPaymentSuccessCode(_ value: Any?) -> Bool {
+        guard let code = APIMap.intValue(value) else { return false }
+        return code == 200 || code == 201
+    }
+
+    private static func logTransportFailure(request: URLRequest, error: Error) {
+        let ns = error as NSError
+        logger.error(
+            "request failed \(request.httpMethod ?? "?", privacy: .public) \(request.url?.absoluteString ?? "?", privacy: .public) domain=\(ns.domain, privacy: .public) code=\(ns.code) \(error.localizedDescription, privacy: .public)"
+        )
+    }
+
+    private static func logHTTPFailure(
+        request: URLRequest,
+        statusCode: Int,
+        message: String,
+        responseBody: Data
+    ) {
+        let snippet = failureSnippet(responseBody)
+        logger.error(
+            "request failed \(request.httpMethod ?? "?", privacy: .public) \(request.url?.absoluteString ?? "?", privacy: .public) status=\(statusCode) message=\(message, privacy: .public) body=\(snippet, privacy: .public)"
+        )
+    }
+
+    private static func failureSnippet(_ responseBody: Data) -> String {
+        let raw: String
+        if let json = try? JSONSerialization.jsonObject(with: responseBody),
+           let redacted = redactSensitiveValues(in: json) {
+            raw = String(describing: redacted)
+        } else {
+            raw = String(data: responseBody, encoding: .utf8) ?? "<\(responseBody.count) bytes>"
+        }
+        return raw.count > 500 ? String(raw.prefix(500)) + "…(truncated)" : raw
     }
 
     /// Opt-in request/response logging. Request bodies are never logged (multipart)

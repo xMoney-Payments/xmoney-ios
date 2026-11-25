@@ -4,7 +4,7 @@ import XCTest
 @testable import XMoneyPaymentElement
 
 /// Asserts the crypto and card panels against the Figma frames:
-/// card form sits 16pt under its row, the crypto notice sits 6pt below the tint,
+/// card form sits 16pt under its row, the crypto notice sits 8pt below the tint,
 /// and the card chip shadow is light-mode only.
 @MainActor
 final class CryptoPanelLayoutTests: XCTestCase {
@@ -13,6 +13,7 @@ final class CryptoPanelLayoutTests: XCTestCase {
         layout(form)
         let gap = verticalGap(from: control(in: form, prefix: "Pay with card"), to: label(in: form, text: "Card details"))
         XCTAssertEqual(gap, 16, accuracy: 1)
+        XCTAssertEqual(fieldInset(in: form, placeholder: "Cardholder name"), 12, accuracy: 0.5)
         let cardTile = brandTile(in: control(in: form, prefix: "Pay with card"))
         XCTAssertEqual(cardTile.layer.shadowOpacity, 0.04, accuracy: 0.001)
         XCTAssertEqual(cardTile.layer.shadowOffset, CGSize(width: 0, height: 1))
@@ -30,11 +31,11 @@ final class CryptoPanelLayoutTests: XCTestCase {
 
         let notice = label(in: form, containing: "redirected").superview!
         let stack = notice.superview as? UIStackView
-        XCTAssertEqual(stack?.spacing, 6)
+        XCTAssertEqual(stack?.spacing, 8)
         XCTAssertEqual(stack?.arrangedSubviews.count, 2)
         let block = stack!.arrangedSubviews[0]
         XCTAssertFalse(notice.isDescendant(of: block))
-        XCTAssertEqual(notice.frame.minY - block.frame.maxY, 6, accuracy: 0.5)
+        XCTAssertEqual(notice.frame.minY - block.frame.maxY, 8, accuracy: 0.5)
         var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
         block.backgroundColor?.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
         XCTAssertEqual(red, 0xF7 / 255, accuracy: 0.01)
@@ -183,7 +184,7 @@ final class CryptoPanelLayoutTests: XCTestCase {
             return false
         }
         let primary = CheckoutTheme.resolve(config: PaymentConfig(publicKey: "pk"), isDark: false).primary
-        return radio.backgroundColor == primary
+        return radio.selectionDotIsVisible && radio.selectionDotColor == primary
     }
 
     private func radios(in view: UIView) -> [RadioIndicator] {
@@ -218,6 +219,26 @@ final class CryptoPanelLayoutTests: XCTestCase {
         var found: [UIControl] = []
         if let control = view as? UIControl { found.append(control) }
         view.subviews.forEach { found.append(contentsOf: controls(in: $0)) }
+        return found
+    }
+
+    private func fieldInset(in root: UIView, placeholder: String) -> CGFloat {
+        guard let field = textFields(in: root).first(where: {
+            $0.placeholder == placeholder || $0.attributedPlaceholder?.string == placeholder
+        }) else {
+            XCTFail("missing field \(placeholder)")
+            return -1
+        }
+        let leading = field.superview?.constraints.first {
+            $0.firstAttribute == .leading && ($0.firstItem as? UIView) === field
+        }
+        return leading?.constant ?? -1
+    }
+
+    private func textFields(in view: UIView) -> [UITextField] {
+        var found: [UITextField] = []
+        if let field = view as? UITextField { found.append(field) }
+        view.subviews.forEach { found.append(contentsOf: textFields(in: $0)) }
         return found
     }
 

@@ -122,11 +122,11 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
 
     package var preferredSheetHeight: CGFloat {
         if let personalDetails {
-            // Grabber 16 (10+4+2) + 6 gap. The details view fills the rest.
-            return ceil(16 + 6 + personalDetails.contentHeight)
+            // Grabber is 8 + 4 + 2. The details view fills the rest.
+            return ceil(14 + personalDetails.contentHeight)
         }
-        // Grabber 16 (10+4+2) + 54 close row.
-        let headerChrome: CGFloat = 16 + 54
+        // Grabber 14 (8+4+2) + 52 close row.
+        let headerChrome: CGFloat = 14 + 52
         return ceil(headerChrome + (formView?.contentHeight ?? 280))
     }
 
@@ -170,9 +170,9 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         headerRow = header
         header.addSubview(close)
         NSLayoutConstraint.activate([
-            header.heightAnchor.constraint(equalToConstant: 54),
-            close.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 6),
-            close.topAnchor.constraint(equalTo: header.topAnchor, constant: 10),
+            header.heightAnchor.constraint(equalToConstant: 52),
+            close.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 8),
+            close.topAnchor.constraint(equalTo: header.topAnchor, constant: 8),
         ])
 
         formView = PaymentFormView(config: config, state: state, contentInsets: .sheet)

@@ -11,6 +11,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `PaymentConfig.customerDetails.fields` replaces the account field list. Leave it unset to keep using `/inline-checkout/fields`. A flag left off is not collected.
 - `PaymentConfig.customerDetails.defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Apple Pay does not use them.
 
+### Fixed
+
+- In dark mode, the "Keep it" button in the remove-card prompt shows its label again instead of white text on a white button. Its label now contrasts with `primaryText`, so a custom `background` no longer hides it.
+- Appearance colors apply again in light mode. `primary` tints the selected saved-card row and radio buttons, `secondaryText` colors saved-card details, section labels, the "or" divider label, and the powered-by footer, and `placeholderText` colors empty fields, including the personal-details form. The new default colors are used only when these are unset.
+- The remove-card prompt buttons and the Apple Pay button (when its own `radius` is unset) use `primaryButton.borderRadius`, so every button has the same shape.
+
 ## [1.1.1] - 2026-11-18
 
 ### Fixed

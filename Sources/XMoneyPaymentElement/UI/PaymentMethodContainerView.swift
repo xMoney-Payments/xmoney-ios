@@ -92,17 +92,17 @@ final class PaymentMethodContainerView: UIView {
             rootStack.leadingAnchor.constraint(equalTo: leadingAnchor),
             rootStack.trailingAnchor.constraint(equalTo: trailingAnchor),
             rootStack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            inner.topAnchor.constraint(equalTo: outerContainer.topAnchor, constant: 6),
-            inner.leadingAnchor.constraint(equalTo: outerContainer.leadingAnchor, constant: 6),
-            inner.trailingAnchor.constraint(equalTo: outerContainer.trailingAnchor, constant: -6),
-            inner.bottomAnchor.constraint(equalTo: outerContainer.bottomAnchor, constant: -6),
+            inner.topAnchor.constraint(equalTo: outerContainer.topAnchor, constant: 8),
+            inner.leadingAnchor.constraint(equalTo: outerContainer.leadingAnchor, constant: 8),
+            inner.trailingAnchor.constraint(equalTo: outerContainer.trailingAnchor, constant: -8),
+            inner.bottomAnchor.constraint(equalTo: outerContainer.bottomAnchor, constant: -8),
         ])
     }
 
     private func setupHeader() {
         headerTitle.attributedText = NSAttributedString(
             string: Strings.text("sheet.savedCards", locale: locale),
-            attributes: theme.titleAttributes(size: 14, weight: .semibold, color: theme.metaText)
+            attributes: theme.titleAttributes(size: 14, weight: .semibold, color: theme.sectionLabelColor)
         )
         headerTitle.translatesAutoresizingMaskIntoConstraints = false
 
@@ -144,7 +144,7 @@ final class PaymentMethodContainerView: UIView {
             attributes: theme.titleAttributes(
                 size: 14,
                 weight: .semibold,
-                color: isEditing ? theme.sectionLabelColor : theme.metaText
+                color: theme.sectionLabelColor
             )
         )
         if expanded {
@@ -161,7 +161,7 @@ final class PaymentMethodContainerView: UIView {
         editButton.setAttributedTitle(
             NSAttributedString(
                 string: Strings.text(key, locale: locale),
-                attributes: theme.titleAttributes(size: 14, weight: .semibold, color: theme.primary)
+                attributes: theme.titleAttributes(size: 14, weight: .semibold, color: theme.textBrand)
             ),
             for: .normal
         )
@@ -335,7 +335,7 @@ final class PaymentMethodContainerView: UIView {
     }
 
     private static let savedCardRowHeight: CGFloat = 64
-    private static let confirmPanelHeight: CGFloat = 102
+    private static let confirmPanelHeight: CGFloat = 104
     private static let maxVisibleSavedCards = 3
     private static let expandedHeaderHeight: CGFloat = 44
     private static let trashSize: CGFloat = 32
@@ -347,7 +347,7 @@ final class PaymentMethodContainerView: UIView {
 
         let block = UIView()
         block.backgroundColor = theme.selectedBackground
-        block.layer.cornerRadius = 12
+        block.layer.cornerRadius = theme.rowRadius
         block.clipsToBounds = true
         block.translatesAutoresizingMaskIntoConstraints = false
         newCardBlock = block
@@ -435,7 +435,7 @@ final class PaymentMethodContainerView: UIView {
             text: SavedCardFormatting.savedCardMeta(card, locale: locale),
             size: 14,
             weight: .medium,
-            color: theme.primaryText.withAlphaComponent(Self.expandedMetaAlpha)
+            color: theme.sectionLabelColor
         )
 
         let textStack = UIStackView(arrangedSubviews: [titleRow, subtitleLabel])
@@ -466,7 +466,7 @@ final class PaymentMethodContainerView: UIView {
 
         let overlay = UIView()
         overlay.backgroundColor = isAsking
-            ? theme.errorBorder.withAlphaComponent(0.08)
+            ? theme.dangerTint
             : theme.selectedBackground
         overlay.isUserInteractionEnabled = false
         overlay.layer.cornerRadius = theme.rowRadius
@@ -518,7 +518,7 @@ final class PaymentMethodContainerView: UIView {
     private func makeTrashButton(card: SavedCard) -> UIButton {
         let button = UIButton(type: .system)
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.backgroundColor = theme.errorBorder.withAlphaComponent(0.09)
+        button.backgroundColor = theme.dangerTintStrong
         button.layer.cornerRadius = Self.trashSize / 2
         button.tintColor = theme.errorText
         let image = EmbeddedAssets.image(named: "trash")?.withRenderingMode(.alwaysTemplate)
@@ -541,7 +541,7 @@ final class PaymentMethodContainerView: UIView {
 
     private func makeConfirmPanel(card: SavedCard) -> UIView {
         let panel = UIView()
-        panel.backgroundColor = theme.errorBorder.withAlphaComponent(0.08)
+        panel.backgroundColor = theme.dangerTint
         panel.layer.cornerRadius = theme.rowRadius
         panel.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         panel.isAccessibilityElement = false
@@ -560,7 +560,7 @@ final class PaymentMethodContainerView: UIView {
 
         let remove = makeConfirmPill(
             title: Strings.text("sheet.remove", locale: locale),
-            background: theme.errorText,
+            background: theme.errorBadge,
             titleColor: .white
         )
         remove.isEnabled = !isDeleting
@@ -571,7 +571,7 @@ final class PaymentMethodContainerView: UIView {
         let keep = makeConfirmPill(
             title: Strings.text("sheet.keepIt", locale: locale),
             background: theme.primaryText,
-            titleColor: Self.keepItText
+            titleColor: theme.inverseText
         )
         keep.isEnabled = !isDeleting
         keep.addAction(UIAction { [weak self] _ in
@@ -588,21 +588,18 @@ final class PaymentMethodContainerView: UIView {
         panel.addSubview(buttons)
         NSLayoutConstraint.activate([
             prompt.topAnchor.constraint(equalTo: panel.topAnchor, constant: 4),
-            prompt.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 13),
-            prompt.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -13),
+            prompt.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 12),
+            prompt.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -12),
             buttons.topAnchor.constraint(equalTo: prompt.bottomAnchor, constant: 12),
-            buttons.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 13),
-            buttons.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -13),
-            buttons.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -14),
+            buttons.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 12),
+            buttons.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -12),
+            buttons.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -16),
             buttons.heightAnchor.constraint(equalToConstant: Self.confirmButtonHeight),
         ])
         return panel
     }
 
     private static let confirmButtonHeight: CGFloat = 48
-    private static let keepItText = UIColor(hex: "#F7F6F9") ?? .white
-    private static let expandedMetaAlpha: CGFloat = 0.45
-
     private func makeConfirmPill(
         title: String,
         background: UIColor,
@@ -610,7 +607,7 @@ final class PaymentMethodContainerView: UIView {
     ) -> UIButton {
         let button = UIButton(type: .system)
         button.backgroundColor = background
-        button.layer.cornerRadius = Self.confirmButtonHeight / 2
+        button.layer.cornerRadius = theme.buttonRadius(forHeight: Self.confirmButtonHeight)
         button.setAttributedTitle(
             NSAttributedString(
                 string: title,
@@ -634,7 +631,7 @@ final class PaymentMethodContainerView: UIView {
         let title = UILabel()
         title.attributedText = NSAttributedString(
             string: Strings.text("sheet.useAnotherCard", locale: locale),
-            attributes: theme.titleAttributes(color: theme.primary)
+            attributes: theme.titleAttributes(color: theme.textBrand)
         )
 
         let visa = CardBrandIcon(size: .useOtherCardPair)
@@ -683,7 +680,7 @@ final class PaymentMethodContainerView: UIView {
 
         let subtitle = UILabel()
         let subtitleText = card.map { SavedCardFormatting.savedCardMeta($0, locale: locale) } ?? ""
-        theme.style(subtitle, text: subtitleText, size: 14, weight: .medium, color: theme.metaText)
+        theme.style(subtitle, text: subtitleText, size: 14, weight: .medium, color: theme.sectionLabelColor)
         subtitle.isHidden = subtitleText.isEmpty
 
         let textStack = UIStackView(arrangedSubviews: [title, subtitle])
@@ -693,7 +690,7 @@ final class PaymentMethodContainerView: UIView {
         let chevron = UIImageView()
         chevron.image = EmbeddedAssets.image(named: "chevron-down")?
             .withRenderingMode(.alwaysTemplate)
-        chevron.tintColor = theme.primary
+        chevron.tintColor = theme.iconBrand
         chevron.contentMode = .scaleAspectFit
         chevron.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -737,7 +734,7 @@ final class PaymentMethodContainerView: UIView {
             text: Strings.text("sheet.visaOrMastercard", locale: locale),
             size: 14,
             weight: .medium,
-            color: theme.sectionLabelColor
+            color: theme.metaText
         )
 
         let textStack = UIStackView(arrangedSubviews: [title, subtitle])
