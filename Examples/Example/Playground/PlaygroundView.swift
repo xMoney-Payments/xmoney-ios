@@ -197,7 +197,7 @@ struct PlaygroundView: View {
 
     private var appearanceWithFont: PaymentConfig.Appearance {
         var next = appearance
-        next.fontFamily = fontFamily.isEmpty ? nil : fontFamily
+        next.typography.fontFamily = fontFamily.isEmpty ? nil : fontFamily
         next.colorScheme = playgroundStyle(style.value)
         return next
     }
@@ -330,7 +330,7 @@ struct PlaygroundView: View {
 
     private func applyPreset(_ preset: AppearancePreset) {
         appearance = preset.appearance
-        fontFamily = preset.appearance.fontFamily ?? ""
+        fontFamily = preset.appearance.typography.fontFamily ?? ""
         selectedPresetId = preset.id
     }
 
@@ -565,7 +565,7 @@ private struct AppearancePlaygroundView: View {
                         .font(ExampleFont.titleMedium)
                     PlaygroundPresetSwatches(selectedId: selectedPresetId) { preset in
                         appearance = preset.appearance
-                        fontFamily = preset.appearance.fontFamily ?? ""
+                        fontFamily = preset.appearance.typography.fontFamily ?? ""
                         selectedPresetId = preset.id
                     }
                     HexColorField(
@@ -627,7 +627,7 @@ private struct AppearancePlaygroundView: View {
 
     private var previewAppearance: PaymentConfig.Appearance {
         var next = appearance
-        next.fontFamily = fontFamily.isEmpty ? nil : fontFamily
+        next.typography.fontFamily = fontFamily.isEmpty ? nil : fontFamily
         next.colorScheme = playgroundStyle(style.value)
         return next
     }
@@ -662,10 +662,10 @@ private struct AppearancePlaygroundView: View {
 
     private var pill: Binding<Bool> {
         Binding(
-            get: { appearance.pillButtons },
+            get: { appearance.shape.pillButtons },
             set: { value in
                 var next = appearance
-                next.pillButtons = value
+                next.shape.pillButtons = value
                 appearance = next
             }
         )
@@ -674,7 +674,7 @@ private struct AppearancePlaygroundView: View {
     private var corner: Binding<Int> {
         Binding(
             get: {
-                switch appearance.corners {
+                switch appearance.shape.corners {
                 case .sharp: return 0
                 case .rounded: return 2
                 default: return 1
@@ -682,7 +682,7 @@ private struct AppearancePlaygroundView: View {
             },
             set: { value in
                 var next = appearance
-                next.corners = value == 0 ? .sharp : value == 2 ? .rounded : .default
+                next.shape.corners = value == 0 ? .sharp : value == 2 ? .rounded : .default
                 appearance = next
             }
         )

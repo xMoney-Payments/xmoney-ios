@@ -8,8 +8,13 @@ enum ApplePayBootstrap {
         DigitalWalletFactory.canMakePayments = {
             PKPaymentAuthorizationController.canMakePayments()
         }
-        DigitalWalletFactory.makeApplePay = { engine, presenter, orderInfo in
-            ApplePayHandler(engine: engine, presenter: presenter, orderInfo: orderInfo)
+        DigitalWalletFactory.makeApplePay = { engine, presenter, orderInfo, visibility in
+            ApplePayHandler(
+                engine: engine,
+                presenter: presenter,
+                orderInfo: orderInfo,
+                customerDetailsVisibility: visibility
+            )
         }
     }
 }

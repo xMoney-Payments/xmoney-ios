@@ -34,7 +34,7 @@ func exampleAppearance(
         brandColor: brand,
         backgroundColor: background,
         overrides: .init(onBrandColor: PaymentConfig.ThemeColor(hex: buttonText.toAppearanceHex())),
-        corners: .rounded
+        shape: .init(corners: .rounded)
     )
 }
 

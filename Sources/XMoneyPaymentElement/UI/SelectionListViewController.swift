@@ -20,7 +20,7 @@ package final class SelectionListViewController: UIViewController, UITableViewDa
     package var onBack: (() -> Void)?
 
     private static let rowHeight: CGFloat = 48
-    private static let rowSpacing: CGFloat = 12
+    fileprivate static let rowSpacing: CGFloat = 12
 
     private let titleText: String
     private let options: [SelectionListOption]
@@ -79,7 +79,8 @@ package final class SelectionListViewController: UIViewController, UITableViewDa
         tableView.delegate = self
         tableView.backgroundColor = .clear
         tableView.separatorStyle = .none
-        tableView.rowHeight = Self.rowHeight + Self.rowSpacing
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = Self.rowHeight + Self.rowSpacing
         tableView.showsVerticalScrollIndicator = false
         tableView.keyboardDismissMode = .onDrag
         tableView.translatesAutoresizingMaskIntoConstraints = false
@@ -98,7 +99,9 @@ package final class SelectionListViewController: UIViewController, UITableViewDa
             searchBox.topAnchor.constraint(equalTo: close.bottomAnchor, constant: 16),
             searchBox.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             searchBox.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            searchBox.heightAnchor.constraint(equalToConstant: 48),
+            searchBox.heightAnchor.constraint(
+                greaterThanOrEqualToConstant: max(48, ceil((searchField.font?.lineHeight ?? 22) + 16))
+            ),
             tableView.topAnchor.constraint(equalTo: searchBox.bottomAnchor, constant: 16),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
@@ -110,7 +113,7 @@ package final class SelectionListViewController: UIViewController, UITableViewDa
         let box = UIView()
         box.backgroundColor = theme.componentBackground
         box.layer.cornerRadius = 16
-        box.layer.borderWidth = 1
+        box.layer.borderWidth = theme.borderWidth
         box.layer.borderColor = theme.fieldBorder.cgColor
         box.translatesAutoresizingMaskIntoConstraints = false
 
@@ -208,9 +211,12 @@ final class SelectionOptionCell: UITableViewCell {
             container.topAnchor.constraint(equalTo: contentView.topAnchor),
             container.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             container.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            container.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -SelectionListViewController.rowSpacing),
             titleLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 12),
-            titleLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            titleLabel.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            titleLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -12),
         ])
+        titleLabel.numberOfLines = 0
     }
 
     @available(*, unavailable)
@@ -218,7 +224,7 @@ final class SelectionOptionCell: UITableViewCell {
 
     func configure(title: String, selected: Bool, theme: CheckoutTheme, rowHeight: CGFloat) {
         if heightConstraint == nil {
-            let height = container.heightAnchor.constraint(equalToConstant: rowHeight)
+            let height = container.heightAnchor.constraint(greaterThanOrEqualToConstant: rowHeight)
             height.isActive = true
             heightConstraint = height
         }

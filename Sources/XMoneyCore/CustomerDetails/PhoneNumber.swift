@@ -5,6 +5,10 @@ import Foundation
 /// not formatting, so a pasted international number stays invalid.
 package enum PhoneNumber {
     package static let minDigits = 6
+
+    private static func isASCIIDigit(_ character: Character) -> Bool {
+        character.isASCII && character.isNumber
+    }
     package static let maxDigits = 15
 
     package static func normalizeNationalDigits(_ nationalInput: String) -> String {
@@ -13,7 +17,7 @@ package enum PhoneNumber {
             with: "",
             options: .regularExpression
         )
-        return withoutFormatting.filter(\.isNumber)
+        return withoutFormatting.filter(Self.isASCIIDigit)
     }
 
     /// Drops one leading 0 only when 6–15 digits remain.
@@ -35,7 +39,7 @@ package enum PhoneNumber {
             with: "",
             options: .regularExpression
         )
-        guard withoutFormatting.allSatisfy(\.isNumber), !withoutFormatting.isEmpty else { return false }
+        guard withoutFormatting.allSatisfy(Self.isASCIIDigit), !withoutFormatting.isEmpty else { return false }
         return withoutFormatting.count >= minDigits && withoutFormatting.count <= maxDigits
     }
 

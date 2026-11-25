@@ -650,7 +650,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
                     box.layer.borderWidth = theme.fieldStrokeWidth(hasError: true)
                     box.layer.borderColor = theme.errorBorder.cgColor
                 } else if focused {
-                    box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
+                    box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false, focused: true)
                     box.layer.borderColor = theme.focusRing.cgColor
                 } else {
                     box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
@@ -667,7 +667,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             container.layer.borderWidth = theme.fieldStrokeWidth(hasError: true)
             container.layer.borderColor = theme.errorBorder.cgColor
         } else if anyFocused {
-            container.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
+            container.layer.borderWidth = theme.fieldStrokeWidth(hasError: false, focused: true)
             container.layer.borderColor = theme.focusRing.cgColor
         } else {
             container.layer.borderWidth = 0

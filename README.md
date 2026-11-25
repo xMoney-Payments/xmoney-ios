@@ -369,8 +369,7 @@ PaymentConfig(
         appearance: .init(
             colorScheme: .automatic,
             brandColor: .init(hex: "#1D4ED8"),
-            corners: .custom(12),
-            pillButtons: false
+            shape: .init(corners: .custom(12), pillButtons: false)
         )
     )
 )
@@ -387,7 +386,15 @@ PaymentConfig(
 
 Pay uses current field validity. Cardholder name is always collected.
 
-**Appearance** — set `brandColor`, `accentColor`, `backgroundColor`, and `neutralTint`. Each accepts one hex color or a light/dark pair. The pay button uses `brandColor` as sent. Links, the focus ring, and radios are adjusted so they stay readable. Other unset text, borders, and button states are derived. `overrides` replace one role each: `onBrandColor`, `textColor` (primary text), `linkColor`, `borderColor`, `componentColor`, `selectedColor`, and `secondaryButtonColor`. Saved-card meta, section labels, the "or" label, the powered-by line, and placeholders follow `neutralTint` and `backgroundColor`. `fontFamily` is a face already registered in the app. `corners` is `sharp`, `default`, `rounded`, or a number from 0 to 24. The default methods container radius is 24. `pillButtons` keeps the pay button fully round. The sheet corner stays 32. `colorScheme` is `automatic`, `light`, or `dark`. On a mounted Element, call `updateAppearance` / `updateWalletAppearance`. See [`exampleAppearance()`](Examples/Example/SampleHelpers.swift).
+**Appearance** — colors resolve in order: the built-in theme, then your seeds, then colors the SDK derives, then `overrides`. An override is painted as sent. A debug build logs a contrast problem and does not change the color.
+
+Set `brandColor`, `accentColor`, `backgroundColor`, and `neutralTint`. Each accepts one hex color or a light/dark pair. The pay button uses `brandColor` as sent. Links, the focus ring, and radios are adjusted so they stay readable when the SDK derives them. Other unset text, borders, and button states are derived. `overrides` replace one role each: `onBrandColor`, `textColor` (primary text on the sheet and on cards), `linkColor`, `borderColor`, `componentColor`, `selectedColor`, and `secondaryButtonColor`. Saved-card meta, section labels, the "or" label, the powered-by line, and placeholders follow `neutralTint` and `backgroundColor`.
+
+`borders.width` is the idle field stroke, from 0 to 4, default 1. Error and focus stay at least 1.5. When `borderColor` is set, the methods container uses the same width. `0` removes that stroke. A later stroke role is another field on `borders`.
+
+`typography.fontFamily` is a face the app has already registered, through Info.plist `UIAppFonts` or Core Text. A family name or a PostScript name both work. Checkout asks that family for regular, medium, semibold, and bold. A missing name keeps the built-in payment face and logs once in a debug build. Dynamic Type sets the size. There is no per-label font size. Later weight and heading fields belong on `typography`.
+
+`shape.corners` is `sharp`, `default`, `rounded`, or a number from 0 to 24. The default methods container radius is 24. `shape.pillButtons` keeps the pay button fully round. The sheet corner stays 32. `colorScheme` is `automatic`, `light`, or `dark`. On a mounted Element, call `updateAppearance` / `updateWalletAppearance`. Unknown keys, including a flat `fontFamily`, `borderWidth`, `corners`, or `pillButtons`, are ignored. Add a new field inside the group that owns it. An empty group is today's checkout. See [`exampleAppearance()`](Examples/Example/SampleHelpers.swift).
 
 **Locale** — `options.locale` sets UI copy and pay-button amount punctuation. Supported languages: `en`, `el`, `ro`, `bg`, `hu`, `pl`. Region tags (`en-US`, `pl-PL`) work; unknown languages fall back to English.
 

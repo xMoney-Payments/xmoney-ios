@@ -9,6 +9,8 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
     private let engine: PaymentEngine
     private let presenter: ThreeDSPresenter
     private let orderInfo: OrderPayloadInfo
+    /// Captured on the main actor with the sheet state. Not read from the engine later.
+    private let customerDetailsVisibility: CustomerDetailsVisibility
 
     private var controller: PKPaymentAuthorizationController?
     private var continuation: CheckedContinuation<EngineResult, Never>?
@@ -29,10 +31,16 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
     /// Pre-authorize sheet dismiss is canceled without this flag.
     package private(set) var didAuthorizePayment = false
 
-    package init(engine: PaymentEngine, presenter: ThreeDSPresenter, orderInfo: OrderPayloadInfo) {
+    package init(
+        engine: PaymentEngine,
+        presenter: ThreeDSPresenter,
+        orderInfo: OrderPayloadInfo,
+        customerDetailsVisibility: CustomerDetailsVisibility
+    ) {
         self.engine = engine
         self.presenter = presenter
         self.orderInfo = orderInfo
+        self.customerDetailsVisibility = customerDetailsVisibility
         super.init()
     }
 
@@ -123,21 +131,27 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
     }
 
     private var collectsCustomerDetails: Bool {
-        engine.configuration.customerDetails.applePay && engine.customerDetailsVisibility.isActive
+        engine.configuration.customerDetails.applePay && customerDetailsVisibility.isActive
     }
 
     private func applyCustomerDetailContactFields(_ request: PKPaymentRequest) {
-        guard collectsCustomerDetails else { return }
-        let visibility = engine.customerDetailsVisibility
+        let fields = Self.contactFields(collects: collectsCustomerDetails, visibility: customerDetailsVisibility)
+        request.requiredBillingContactFields = fields.billing
+        request.requiredShippingContactFields = fields.shipping
+    }
+
+    package static func contactFields(
+        collects: Bool,
+        visibility: CustomerDetailsVisibility
+    ) -> (billing: Set<PKContactField>, shipping: Set<PKContactField>) {
+        guard collects else { return ([], []) }
         var billing = Set<PKContactField>()
         if visibility.showFullName { billing.insert(.name) }
         if visibility.showAddressSection { billing.insert(.postalAddress) }
-        request.requiredBillingContactFields = billing
-
         var shipping = Set<PKContactField>()
         if visibility.showEmail { shipping.insert(.emailAddress) }
         if visibility.showPhone { shipping.insert(.phoneNumber) }
-        request.requiredShippingContactFields = shipping
+        return (billing, shipping)
     }
 
     private func customerDetails(from payment: PKPayment) -> CustomerDetails? {
@@ -145,7 +159,7 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
         return CustomerDetails.mergingWallet(
             billing: payment.billingContact.map(WalletContactParts.init),
             shipping: payment.shippingContact.map(WalletContactParts.init)
-        )?.pruned(to: engine.customerDetailsVisibility)
+        )?.pruned(to: customerDetailsVisibility)
     }
 
     private func failureResult(message: String) -> EngineResult {

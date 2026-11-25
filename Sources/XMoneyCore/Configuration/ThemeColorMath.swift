@@ -1,8 +1,8 @@
 import Foundation
 
-public extension PaymentConfig.SRGBColor {
+package extension PaymentConfig.SRGBColor {
     /// Opaque mix of `self` over `base` by `weight` (0 = base, 1 = self).
-    public func mixed(over base: PaymentConfig.SRGBColor, weight: Double) -> PaymentConfig.SRGBColor {
+    func mixed(over base: PaymentConfig.SRGBColor, weight: Double) -> PaymentConfig.SRGBColor {
         let t = min(max(weight, 0), 1)
         return PaymentConfig.SRGBColor(
             red: red * t + base.red * (1 - t),
@@ -12,14 +12,14 @@ public extension PaymentConfig.SRGBColor {
         )
     }
 
-    public func withAlpha(_ alpha: Double) -> PaymentConfig.SRGBColor {
+    func withAlpha(_ alpha: Double) -> PaymentConfig.SRGBColor {
         var copy = self
         copy.alpha = alpha
         return copy
     }
 
     /// Composite this color over an opaque base.
-    public func composited(over base: PaymentConfig.SRGBColor) -> PaymentConfig.SRGBColor {
+    func composited(over base: PaymentConfig.SRGBColor) -> PaymentConfig.SRGBColor {
         let a = min(max(alpha, 0), 1)
         return PaymentConfig.SRGBColor(
             red: red * a + base.red * (1 - a),
@@ -29,14 +29,14 @@ public extension PaymentConfig.SRGBColor {
         )
     }
 
-    public var relativeLuminance: Double {
+    var relativeLuminance: Double {
         func linear(_ channel: Double) -> Double {
             channel <= 0.04045 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
         }
         return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
     }
 
-    public func contrast(against other: PaymentConfig.SRGBColor) -> Double {
+    func contrast(against other: PaymentConfig.SRGBColor) -> Double {
         let a = relativeLuminance
         let b = other.relativeLuminance
         let lighter = max(a, b)
@@ -45,14 +45,14 @@ public extension PaymentConfig.SRGBColor {
     }
 
     /// Contrast after this color is painted over `base`. Alpha is part of the result.
-    public func contrast(
+    func contrast(
         against surface: PaymentConfig.SRGBColor,
         compositedOver base: PaymentConfig.SRGBColor
     ) -> Double {
         composited(over: base).contrast(against: surface)
     }
 
-    public var isAchromatic: Bool {
+    var isAchromatic: Bool {
         let maxC = max(red, green, blue)
         let minC = min(red, green, blue)
         return maxC - minC < 0.04
@@ -62,7 +62,7 @@ public extension PaymentConfig.SRGBColor {
     /// Stops at the smallest lightness change that clears `target`. Chroma is reduced per
     /// sample so one out-of-gamut lightness does not dull the rest of the search.
     /// When the target is unreachable, returns ink or paper, whichever contrasts more.
-    public func withContrast(atLeast target: Double, against surface: PaymentConfig.SRGBColor) -> PaymentConfig.SRGBColor {
+    func withContrast(atLeast target: Double, against surface: PaymentConfig.SRGBColor) -> PaymentConfig.SRGBColor {
         if contrast(against: surface) >= target { return self }
         let oklch = OKLCH(self)
         let towardWhite = PaymentConfig.SRGBColor.white.contrast(against: surface)

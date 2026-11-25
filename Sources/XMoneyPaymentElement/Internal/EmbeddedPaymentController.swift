@@ -41,12 +41,20 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     private(set) var isStaleOrder = false {
         didSet { publishOrderLock(oldValue: isUpdatingOrder || oldValue) }
     }
+    #if DEBUG
     /// State used when tests mount a form without binding an order.
     private var previewState: SheetState?
+    #endif
 
     var isOrderLocked: Bool { isUpdatingOrder || isStaleOrder }
 
-    var sheetState: SheetState? { session?.state ?? previewState }
+    var sheetState: SheetState? {
+        #if DEBUG
+        session?.state ?? previewState
+        #else
+        session?.state
+        #endif
+    }
     var boundIntent: PaymentIntent? {
         guard let session, session.isBound else { return nil }
         return session.intent
@@ -59,14 +67,20 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
             guard !isOrderLocked, session.isBound else { return false }
             return session.isInteractionEnabled
         }
+        #if DEBUG
         return !isOrderLocked && previewState != nil
+        #else
+        return false
+        #endif
     }
 
+    #if DEBUG
     /// Installs config and state so a form can render without a network bind.
     func preview(_ state: SheetState) {
         paymentConfig = liveConfiguration
         previewState = state
     }
+    #endif
 
     init(
         configuration: PaymentConfig,

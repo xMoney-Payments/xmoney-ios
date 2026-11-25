@@ -124,8 +124,12 @@ final class ContractTests: XCTestCase {
             let appearance = PaymentConfig.Appearance.from(sent)
             let expected = item["expected"] as! [String: String]
             let isDark = item["isDark"] as! Bool
-            if sent["brandColor"] != nil {
-                XCTAssertEqual(Self.hex(appearance.brandColor?.resolved(isDark: isDark)), expected["primary"])
+            if let brand = sent["brandColor"] as? String {
+                let resolved = appearance.brandColor?.resolved(isDark: isDark)
+                XCTAssertEqual(Self.hex(resolved), expected["primary"])
+                if brand.count == 9 {
+                    XCTAssertEqual(resolved?.alpha ?? 0, 128.0 / 255.0, accuracy: 0.001)
+                }
             } else {
                 XCTAssertNil(appearance.brandColor)
             }

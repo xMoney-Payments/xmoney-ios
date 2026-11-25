@@ -13,7 +13,9 @@ extension PaymentConfig {
             case "dark", "alwaysdark": return .dark
             case "auto", "automatic": return .automatic
             default:
-                if raw != nil { AppearanceLog.warn("unknown colorScheme '\(raw!)', using automatic") }
+                if let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    AppearanceLog.warn("unknown colorScheme '\(raw)', using automatic")
+                }
                 return .automatic
             }
         }
@@ -35,8 +37,8 @@ extension PaymentConfig {
 
         public static let white = SRGBColor(red: 1, green: 1, blue: 1)
         public static let black = SRGBColor(red: 0, green: 0, blue: 0)
-        public static let ink = SRGBColor(red: 0x16 / 255, green: 0x14 / 255, blue: 0x1A / 255)
-        public static let paper = SRGBColor(red: 0xFA / 255, green: 0xFA / 255, blue: 0xFA / 255)
+        package static let ink = SRGBColor(red: 0x16 / 255, green: 0x14 / 255, blue: 0x1A / 255)
+        package static let paper = SRGBColor(red: 0xFA / 255, green: 0xFA / 255, blue: 0xFA / 255)
 
         public var hex: String {
             func byte(_ channel: Double) -> Int {
@@ -164,8 +166,14 @@ extension PaymentConfig {
             self.secondaryButtonColor = secondaryButtonColor
         }
 
+        package static let dictionaryKeys: Set<String> = [
+            "onBrandColor", "textColor", "linkColor", "borderColor",
+            "componentColor", "selectedColor", "secondaryButtonColor",
+        ]
+
         static func from(_ value: Any?) -> AppearanceOverrides {
             guard let dict = appearanceDictionary(value) else { return .init() }
+            warnUnknown(dict, known: dictionaryKeys, group: "overrides")
             return AppearanceOverrides(
                 onBrandColor: ThemeColor.from(dict["onBrandColor"]),
                 textColor: ThemeColor.from(dict["textColor"]),
@@ -178,6 +186,79 @@ extension PaymentConfig {
         }
     }
 
+    /// Type family. Later weights and a heading face are fields here.
+    public struct Typography: Equatable, Sendable {
+        public var fontFamily: String?
+
+        public init(fontFamily: String? = nil) {
+            self.fontFamily = fontFamily
+        }
+
+        package static let dictionaryKeys: Set<String> = ["fontFamily"]
+
+        static func from(_ value: Any?) -> Typography {
+            guard let dict = appearanceDictionary(value) else { return .init() }
+            warnUnknown(dict, known: dictionaryKeys, group: "typography")
+            return Typography(fontFamily: (dict["fontFamily"] as? String)?.nilIfEmpty)
+        }
+    }
+
+    /// Strokes. `width` is the idle field stroke, in points, clamped to 0...4.
+    public struct Borders: Equatable, Sendable {
+        public var width: Double
+
+        public init(width: Double = 1) {
+            self.width = Self.clamped(width, warn: false)
+        }
+
+        package static let dictionaryKeys: Set<String> = ["width"]
+
+        static func from(_ value: Any?) -> Borders {
+            guard let dict = appearanceDictionary(value) else { return .init() }
+            warnUnknown(dict, known: dictionaryKeys, group: "borders")
+            return Borders(width: width(from: dict["width"]))
+        }
+
+        /// Numbers only. Booleans are rejected. Missing or invalid values stay at 1.
+        static func width(from value: Any?) -> Double {
+            guard let value else { return 1 }
+            if let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() {
+                return clamped(number.doubleValue, warn: true)
+            }
+            AppearanceLog.warn("borders.width must be a number")
+            return 1
+        }
+
+        private static func clamped(_ raw: Double, warn: Bool) -> Double {
+            if warn, raw < 0 || raw > 4 {
+                AppearanceLog.warn("borders.width \(raw) is outside 0...4 and was clamped")
+            }
+            return min(max(raw, 0), 4)
+        }
+    }
+
+    /// Control geometry. The sheet corner is not part of this group.
+    public struct Shape: Equatable, Sendable {
+        public var corners: Corners
+        public var pillButtons: Bool
+
+        public init(corners: Corners = .default, pillButtons: Bool = true) {
+            self.corners = corners
+            self.pillButtons = pillButtons
+        }
+
+        package static let dictionaryKeys: Set<String> = ["corners", "pillButtons"]
+
+        static func from(_ value: Any?) -> Shape {
+            guard let dict = appearanceDictionary(value) else { return .init() }
+            warnUnknown(dict, known: dictionaryKeys, group: "shape")
+            return Shape(
+                corners: Corners.from(dict["corners"]),
+                pillButtons: dict["pillButtons"] as? Bool ?? true
+            )
+        }
+    }
+
     /// Merchant theme. An empty value is the built-in xMoney light and dark themes.
     public struct Appearance: Equatable, Sendable {
         public var colorScheme: ColorSchemePreference
@@ -186,9 +267,9 @@ extension PaymentConfig {
         public var backgroundColor: ThemeColor?
         public var neutralTint: ThemeColor?
         public var overrides: AppearanceOverrides
-        public var corners: Corners
-        public var pillButtons: Bool
-        public var fontFamily: String?
+        public var typography: Typography
+        public var borders: Borders
+        public var shape: Shape
 
         public init(
             colorScheme: ColorSchemePreference = .automatic,
@@ -197,9 +278,9 @@ extension PaymentConfig {
             backgroundColor: ThemeColor? = nil,
             neutralTint: ThemeColor? = nil,
             overrides: AppearanceOverrides = .init(),
-            corners: Corners = .default,
-            pillButtons: Bool = true,
-            fontFamily: String? = nil
+            typography: Typography = .init(),
+            borders: Borders = .init(),
+            shape: Shape = .init()
         ) {
             self.colorScheme = colorScheme
             self.brandColor = brandColor
@@ -207,21 +288,19 @@ extension PaymentConfig {
             self.backgroundColor = backgroundColor
             self.neutralTint = neutralTint
             self.overrides = overrides
-            self.corners = corners
-            self.pillButtons = pillButtons
-            self.fontFamily = fontFamily
+            self.typography = typography
+            self.borders = borders
+            self.shape = shape
         }
+
+        package static let dictionaryKeys: Set<String> = [
+            "colorScheme", "brandColor", "accentColor", "backgroundColor", "neutralTint",
+            "overrides", "typography", "borders", "shape",
+        ]
 
         public static func from(_ dict: [String: Any]?) -> Appearance {
             guard let dict else { return Appearance() }
-            let known: Set<String> = [
-                "colorScheme", "brandColor", "accentColor", "backgroundColor", "neutralTint",
-                "overrides", "corners", "pillButtons", "fontFamily",
-            ]
-            for key in dict.keys where !known.contains(key) {
-                AppearanceLog.warn("unknown appearance key '\(key)'")
-            }
-            let pill = dict["pillButtons"] as? Bool ?? true
+            warnUnknown(dict, known: dictionaryKeys, group: "appearance")
             return Appearance(
                 colorScheme: ColorSchemePreference.from(dict["colorScheme"] as? String),
                 brandColor: ThemeColor.from(dict["brandColor"]),
@@ -229,27 +308,33 @@ extension PaymentConfig {
                 backgroundColor: ThemeColor.from(dict["backgroundColor"]),
                 neutralTint: ThemeColor.from(dict["neutralTint"]),
                 overrides: AppearanceOverrides.from(dict["overrides"]),
-                corners: Corners.from(dict["corners"]),
-                pillButtons: pill,
-                fontFamily: (dict["fontFamily"] as? String)?.nilIfEmpty
+                typography: Typography.from(dict["typography"]),
+                borders: Borders.from(dict["borders"]),
+                shape: Shape.from(dict["shape"])
             )
         }
     }
 }
 
-public enum AppearanceLog {
+package enum AppearanceLog {
+    private static let lock = NSLock()
     private static var seen = Set<String>()
 
-    public static func warn(_ message: String) {
+    package static func warn(_ message: String) {
         #if DEBUG
-        if seen.insert(message).inserted {
+        lock.lock()
+        let inserted = seen.insert(message).inserted
+        lock.unlock()
+        if inserted {
             print("[xMoney appearance] \(message)")
         }
         #endif
     }
 
-    public static func resetForTests() {
+    package static func resetForTests() {
+        lock.lock()
         seen.removeAll()
+        lock.unlock()
     }
 }
 
@@ -276,6 +361,12 @@ public extension PaymentConfig.SRGBColor {
         default:
             return nil
         }
+    }
+}
+
+private func warnUnknown(_ dict: [String: Any], known: Set<String>, group: String) {
+    for key in dict.keys where !known.contains(key) {
+        AppearanceLog.warn("unknown \(group) key '\(key)'")
     }
 }
 

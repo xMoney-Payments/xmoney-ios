@@ -3,12 +3,12 @@
     "light": {
       "primary": "#7c4dff",
       "background": "#f7f6ff",
-      "error": "#ff6b6b"
+      "error": "#dc2626"
     },
     "dark": {
       "primary": "#7c4dff",
-            "background": "#18181b",
-      "error": "#ff6b6b"
+      "background": "#18181b",
+      "error": "#ef4444"
     }
   },
   "validation": [
@@ -79,6 +79,11 @@
       "isDark": false,
       "appearance": { "colorsLight": { "primary": "#ff0000" } },
       "expected": { "primary": "#7c4dff", "background": "#f7f6ff" }
+    },
+    {
+      "isDark": false,
+      "appearance": { "brandColor": "#80ff0000" },
+      "expected": { "primary": "#ff0000" }
     }
   ],
   "orderPayload": [
@@ -135,5 +140,16 @@
     { "locale": "hu-HU", "key": "sheet.title", "contains": "Fizetés" },
     { "locale": "pl-PL", "key": "sheet.title", "contains": "Płatność" },
     { "locale": "pl", "key": "sheet.title", "contains": "Płatność" }
+  ],
+  "appearanceKeys": [
+    "colorScheme", "brandColor", "accentColor", "backgroundColor", "neutralTint",
+    "overrides", "typography", "borders", "shape"
+  ],
+  "typographyKeys": ["fontFamily"],
+  "borderKeys": ["width"],
+  "shapeKeys": ["corners", "pillButtons"],
+  "overrideKeys": [
+    "onBrandColor", "textColor", "linkColor", "borderColor",
+    "componentColor", "selectedColor", "secondaryButtonColor"
   ]
 }

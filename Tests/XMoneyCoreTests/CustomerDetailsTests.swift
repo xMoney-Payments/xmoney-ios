@@ -1,6 +1,7 @@
 import XCTest
 @testable import XMoneyCore
 
+@MainActor
 final class CustomerDetailsTests: XCTestCase {
     func testVisibilityTreatsAnyAddressFieldAsTheWholeBlock() {
         let nameOnly = CustomerDetailsVisibility.resolve(fields: ["firstName"])
@@ -88,6 +89,10 @@ final class CustomerDetailsTests: XCTestCase {
         XCTAssertEqual(PhoneNumber.formatNationalForPayload("0722123456"), "722123456")
         XCTAssertEqual(PhoneNumber.payload(dialCode: "40", nationalInput: "0722 123 456"), "+40722123456")
         XCTAssertEqual(PhoneNumber.payload(dialCode: nil, nationalInput: "722123456"), "")
+        XCTAssertFalse(PhoneNumber.isNationalValid("٠٧٢٢١٢٣٤٥٦"))
+        XCTAssertFalse(PhoneNumber.isNationalValid("０７２２１２３４５６"))
+        XCTAssertEqual(PhoneNumber.normalizeNationalDigits("٠٧٢٢"), "")
+        XCTAssertEqual(PhoneNumber.normalizeNationalDigits("０７２２"), "")
     }
 
     func testApiPayloadAppendsRegionAndSplitsName() {
@@ -235,6 +240,38 @@ final class CustomerDetailsTests: XCTestCase {
         progress.leave(with: edited, visibility: visibility)
         XCTAssertNil(progress.committed)
         XCTAssertEqual(progress.seed, edited)
+    }
+
+    func testLeaveAfterRevalidatePromotesADraftThatNowSatisfiesTheNewFields() {
+        let emailOnly = CustomerDetailsVisibility.resolve(fields: ["email"])
+        let progress = PersonalDetailsProgress()
+        XCTAssertTrue(progress.commit(PersonalDetailsValues(email: "a@b.co"), visibility: emailOnly))
+        let withPhone = CustomerDetailsVisibility.resolve(fields: ["email", "phone"])
+        progress.revalidate(visibility: withPhone)
+        XCTAssertNil(progress.committed)
+        let filled = PersonalDetailsValues(
+            email: "a@b.co",
+            phoneCountry: "US",
+            phoneNational: "4155551234"
+        )
+        progress.leave(with: filled, visibility: withPhone)
+        XCTAssertEqual(progress.committed, filled)
+        XCTAssertTrue(progress.isComplete)
+    }
+
+    func testLeaveAfterRevalidateDoesNotCommitWhenContinueNeverHappened() {
+        let withPhone = CustomerDetailsVisibility.resolve(fields: ["email", "phone"])
+        let progress = PersonalDetailsProgress()
+        progress.revalidate(visibility: withPhone)
+        let filled = PersonalDetailsValues(
+            email: "a@b.co",
+            phoneCountry: "US",
+            phoneNational: "4155551234"
+        )
+        progress.leave(with: filled, visibility: withPhone)
+        XCTAssertNil(progress.committed)
+        XCTAssertEqual(progress.seed, filled)
+        XCTAssertFalse(progress.isComplete)
     }
 
     func testRevalidateKeepsDetailsThatStillSatisfyTheNewFields() {

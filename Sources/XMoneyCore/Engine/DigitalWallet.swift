@@ -14,6 +14,6 @@ package enum DigitalWalletFactory {
     package static var canMakePayments: () -> Bool = { false }
 
     package static var makeApplePay: (
-        (PaymentEngine, ThreeDSPresenter, OrderPayloadInfo) -> any DigitalWalletAuthorizing
+        (PaymentEngine, ThreeDSPresenter, OrderPayloadInfo, CustomerDetailsVisibility) -> any DigitalWalletAuthorizing
     )?
 }

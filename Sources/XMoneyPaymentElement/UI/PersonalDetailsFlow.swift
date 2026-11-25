@@ -6,6 +6,7 @@ import XMoneyCore
 /// Builds the personal-details page and writes Continue / Back into `progress`.
 /// The caller decides how the page is shown.
 package enum PersonalDetailsFlow {
+    @MainActor
     package static func make(
         config: PaymentConfig,
         visibility: CustomerDetailsVisibility,

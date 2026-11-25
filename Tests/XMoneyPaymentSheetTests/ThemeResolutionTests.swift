@@ -115,6 +115,92 @@ final class ThemeResolutionTests: XCTestCase {
         XCTAssertEqual(theme.fieldBorder.hexString, "#abcdef")
     }
 
+    func testLowContrastTextColorIsKept() {
+        let theme = resolve(
+            .init(overrides: .init(textColor: .init(hex: "#FACC15"))),
+            isDark: false
+        )
+        XCTAssertEqual(theme.primaryText.hexString, "#facc15")
+        XCTAssertEqual(theme.sheetText.hexString, "#facc15")
+    }
+
+    func testLowContrastOverridesStayExact() {
+        let yellow = PaymentConfig.ThemeColor(hex: "#FACC15")
+        let theme = resolve(
+            .init(overrides: .init(
+                onBrandColor: yellow,
+                textColor: yellow,
+                linkColor: yellow,
+                borderColor: yellow,
+                componentColor: yellow,
+                selectedColor: yellow,
+                secondaryButtonColor: yellow
+            )),
+            isDark: false
+        )
+        XCTAssertEqual(theme.primaryButtonText.hexString, "#facc15")
+        XCTAssertEqual(theme.primaryText.hexString, "#facc15")
+        XCTAssertEqual(theme.sheetText.hexString, "#facc15")
+        XCTAssertEqual(theme.textBrand.hexString, "#facc15")
+        XCTAssertEqual(theme.fieldBorder.hexString, "#facc15")
+        XCTAssertEqual(theme.componentBackground.hexString, "#facc15")
+        XCTAssertEqual(theme.selectedBackground.hexString, "#facc15")
+        XCTAssertEqual(theme.secondaryButtonBackground.hexString, "#facc15")
+    }
+
+    func testBorderWidthDrivesTheIdleStrokeAndKeepsErrorAndFocusVisible() {
+        XCTAssertEqual(resolve(isDark: false).borderWidth, 1, accuracy: 0.001)
+        let none = resolve(.init(borders: .init(width: 0)), isDark: false)
+        XCTAssertEqual(none.fieldStrokeWidth(hasError: false), 0, accuracy: 0.001)
+        XCTAssertGreaterThanOrEqual(none.fieldStrokeWidth(hasError: true), 1.5)
+        XCTAssertGreaterThanOrEqual(none.fieldStrokeWidth(hasError: false, focused: true), 1.5)
+        XCTAssertEqual(none.containerBorderWidth, 0, accuracy: 0.001)
+        let wide = resolve(
+            .init(overrides: .init(borderColor: .init(hex: "#111111")), borders: .init(width: 2)),
+            isDark: false
+        )
+        XCTAssertEqual(wide.borderWidth, 2, accuracy: 0.001)
+        XCTAssertEqual(wide.containerBorderWidth, 2, accuracy: 0.001)
+        let hidden = resolve(
+            .init(overrides: .init(borderColor: .init(hex: "#111111")), borders: .init(width: 0)),
+            isDark: false
+        )
+        XCTAssertEqual(hidden.containerBorderWidth, 0, accuracy: 0.001)
+        XCTAssertEqual(resolve(.init(borders: .init(width: 9)), isDark: false).borderWidth, 4, accuracy: 0.001)
+    }
+
+    func testUnusualPalettesKeepGuaranteedContrast() {
+        // withContrast stops a hair under its target, and the built-in dark section
+        // token (#85858D on #1F1F23) is about 4.49:1. Sheet text, secondary, meta, and the
+        // pay label clear 4.5. The lower floors lock that miss without changing it.
+        let palettes: [(String, PaymentConfig.Appearance)] = [
+            ("near-white brand", .init(brandColor: .init(hex: "#FAFAFA"))),
+            ("near-black brand", .init(brandColor: .init(hex: "#16141A"))),
+            ("yellow", .init(brandColor: .init(hex: "#FACC15"))),
+            ("neon", .init(brandColor: .init(hex: "#00FF00"))),
+            ("mid-gray", .init(brandColor: .init(hex: "#808080"))),
+            ("white on black", .init(brandColor: .init(hex: "#FFFFFF"), backgroundColor: .init(hex: "#000000"))),
+            ("cream", .init(backgroundColor: .init(hex: "#FBF5EA"))),
+            ("dark tint on light", .init(backgroundColor: .init(hex: "#FBF5EA"), neutralTint: .init(hex: "#2A2118"))),
+        ]
+        for (name, appearance) in palettes {
+            for isDark in [false, true] {
+                for increased in [false, true] {
+                    let theme = resolve(appearance, isDark: isDark, increasedContrast: increased)
+                    let where_ = "\(name) dark=\(isDark) increased=\(increased)"
+                    assertContrast(where_, "sheet text", theme.sheetText, theme.background, 4.5)
+                    assertContrast(where_, "secondary", theme.secondaryText, theme.componentBackground, 4.5)
+                    assertContrast(where_, "meta", theme.metaText, theme.componentBackground, 4.5)
+                    assertContrast(where_, "section", theme.sectionLabelColor, theme.componentBackground, 4.45)
+                    assertContrast(where_, "placeholder", theme.placeholderText, theme.componentBackground, 2.95)
+                    assertContrast(where_, "or", theme.orLabel, theme.background, 4.45)
+                    assertContrast(where_, "disabled pay", theme.primaryButtonDisabledText, theme.primaryButtonDisabledBackground, 4.45)
+                    assertContrast(where_, "pay label", theme.primaryButtonText, theme.primaryButtonBackground, 4.5)
+                }
+            }
+        }
+    }
+
     func testWhiteBrandShadowIsSofterAndIncreasedContrastRemovesIt() {
         let white = resolve(.init(brandColor: .init(hex: "#FFFFFF")), isDark: true)
         var alpha: CGFloat = 0
@@ -126,14 +212,14 @@ final class ThemeResolutionTests: XCTestCase {
     }
 
     func testCornersAtTenAndPillButtons() {
-        let theme = resolve(.init(corners: .custom(10)), isDark: false)
+        let theme = resolve(.init(shape: .init(corners: .custom(10))), isDark: false)
         XCTAssertEqual(theme.formFieldRadius, 10, accuracy: 0.001)
         XCTAssertEqual(theme.rowRadius, 8, accuracy: 0.001)
         XCTAssertEqual(theme.checkboxRadius, 5, accuracy: 0.001)
         XCTAssertEqual(theme.paymentContainerRadius, 15, accuracy: 0.001)
         XCTAssertEqual(theme.sheetCornerRadius, 32, accuracy: 0.001)
         XCTAssertEqual(theme.primaryButtonBorderRadius, CheckoutTheme.defaultPrimaryButtonRadius, accuracy: 0.001)
-        let square = resolve(.init(corners: .sharp, pillButtons: false), isDark: false)
+        let square = resolve(.init(shape: .init(corners: .sharp, pillButtons: false)), isDark: false)
         XCTAssertEqual(square.primaryButtonBorderRadius, 0, accuracy: 0.001)
         XCTAssertEqual(square.buttonRadius(forHeight: 52), 0, accuracy: 0.001)
     }
@@ -181,22 +267,21 @@ final class ThemeResolutionTests: XCTestCase {
     func testParsingIgnoresUnknownKeysAndClampsCorners() {
         let appearance = PaymentConfig.Appearance.from([
             "brandColor": "#1D4ED8",
-            "corners": 40,
-            "mystery": true,
+            "shape": ["corners": 40, "pillButtons": false, "mystery": true],
+            "typography": ["fontFamily": "Georgia"],
             "fontFamily": "Georgia",
-            "pillButtons": false,
             "colorScheme": "dark",
         ])
         XCTAssertEqual(appearance.brandColor?.light.hex, "#1D4ED8")
-        XCTAssertEqual(appearance.corners, .custom(24))
-        XCTAssertEqual(appearance.fontFamily, "Georgia")
-        XCTAssertFalse(appearance.pillButtons)
+        XCTAssertEqual(appearance.shape.corners, .custom(24))
+        XCTAssertEqual(appearance.typography.fontFamily, "Georgia")
+        XCTAssertFalse(appearance.shape.pillButtons)
         XCTAssertEqual(appearance.colorScheme, .dark)
     }
 
     func testSheetRadiusStaysAtTheDefault() {
-        XCTAssertEqual(resolve(.init(corners: .sharp), isDark: false).sheetCornerRadius, 32, accuracy: 0.001)
-        XCTAssertEqual(resolve(.init(corners: .rounded), isDark: true).sheetCornerRadius, 32, accuracy: 0.001)
+        XCTAssertEqual(resolve(.init(shape: .init(corners: .sharp)), isDark: false).sheetCornerRadius, 32, accuracy: 0.001)
+        XCTAssertEqual(resolve(.init(shape: .init(corners: .rounded)), isDark: true).sheetCornerRadius, 32, accuracy: 0.001)
     }
 
     func testBackgroundAloneDoesNotStrokeMethodCards() {
@@ -265,18 +350,53 @@ final class ThemeResolutionTests: XCTestCase {
             let appearance = PaymentConfig.Appearance.from(item["appearance"] as? [String: Any])
             let theme = resolve(appearance, isDark: item["isDark"] as! Bool)
             let expected = item["expected"] as! [String: String]
-            if let primary = expected["primary"] {
-                XCTAssertEqual(theme.primary.hexString, primary)
+            for (key, value) in expected {
+                switch key {
+                case "primary":
+                    XCTAssertEqual(theme.primary.hexString, value)
+                case "background":
+                    XCTAssertEqual(theme.background.hexString, value)
+                default:
+                    XCTFail("unhandled theme vector key \(key)")
+                }
             }
-            if let background = expected["background"] {
-                XCTAssertEqual(theme.background.hexString, background)
+            if let brand = (item["appearance"] as? [String: Any])?["brandColor"] as? String, brand.count == 9 {
+                let parsed = PaymentConfig.SRGBColor(hex: brand)
+                XCTAssertEqual(parsed?.alpha ?? 0, 128.0 / 255.0, accuracy: 0.001)
+                XCTAssertEqual(parsed?.red ?? 0, 1, accuracy: 0.001)
             }
         }
+        let defaults = root["defaultColors"] as! [String: [String: String]]
+        XCTAssertEqual(defaults["light"]?["error"], "#dc2626")
+        XCTAssertEqual(defaults["dark"]?["error"], "#ef4444")
+        XCTAssertEqual(resolve(isDark: false).errorText.hexString, defaults["light"]?["error"])
+        XCTAssertEqual(resolve(isDark: true).errorText.hexString, defaults["dark"]?["error"])
     }
 
     func testEmptyAppearanceContainerRadiusIs24() {
         XCTAssertEqual(resolve(isDark: false).paymentContainerRadius, 24, accuracy: 0.001)
         XCTAssertEqual(resolve(isDark: true).paymentContainerRadius, 24, accuracy: 0.001)
+    }
+
+    func testIncreasedContrastLiftsDefaultMetaText() {
+        for isDark in [false, true] {
+            let theme = resolve(isDark: isDark, increasedContrast: true)
+            XCTAssertGreaterThanOrEqual(contrast(theme.secondaryText, against: theme.selectedBackground), 4.5)
+            XCTAssertGreaterThanOrEqual(contrast(theme.placeholderText, against: theme.componentBackground), 4.5)
+            XCTAssertGreaterThanOrEqual(contrast(theme.poweredByText, against: theme.background), 4.5)
+            XCTAssertGreaterThanOrEqual(contrast(theme.orLabel, against: theme.background), 4.5)
+        }
+    }
+
+    private func assertContrast(
+        _ palette: String,
+        _ role: String,
+        _ color: UIColor,
+        _ surface: UIColor,
+        _ minimum: CGFloat
+    ) {
+        let ratio = contrast(color, against: surface)
+        XCTAssertGreaterThanOrEqual(ratio, minimum, "\(palette) \(role) \(ratio)")
     }
 
     private func assertCardSideContrast(_ theme: CheckoutTheme) {

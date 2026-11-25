@@ -77,13 +77,18 @@ package final class PaymentSession {
         if let testingLoad {
             loaded = try await testingLoad(intent)
         } else {
-            loaded = try await engineToLoad.load(personalDetails: personalDetails)
+            loaded = try await engineToLoad.load()
         }
         #else
-        loaded = try await engineToLoad.load(personalDetails: personalDetails)
+        loaded = try await engineToLoad.load()
         #endif
         try Task.checkCancellation()
-        return BindCandidate(key: key, engine: engineToLoad, state: loaded, alreadyBound: false)
+        return BindCandidate(
+            key: key,
+            engine: engineToLoad,
+            state: adoptPersonalDetails(loaded, engine: engineToLoad),
+            alreadyBound: false
+        )
     }
 
     @discardableResult
@@ -173,7 +178,20 @@ package final class PaymentSession {
 
     package func makeWalletAuthorizer(presenter: ThreeDSPresenter) -> (any DigitalWalletAuthorizing)? {
         guard let state else { return nil }
-        return DigitalWalletFactory.makeApplePay?(engine, presenter, state.orderInfo)
+        return DigitalWalletFactory.makeApplePay?(
+            engine,
+            presenter,
+            state.orderInfo,
+            state.customerDetailsVisibility
+        )
+    }
+
+    /// Applies resolved defaults on the main actor. `load` does not touch the shared progress.
+    private func adoptPersonalDetails(_ loaded: SheetState, engine: PaymentEngine) -> SheetState {
+        engine.customerDetailsVisibility = loaded.customerDetailsVisibility
+        personalDetails.defaults = loaded.customerDetailsDefaults
+        personalDetails.revalidate(visibility: loaded.customerDetailsVisibility)
+        return loaded.withPersonalDetails(personalDetails)
     }
 
     package var onCardHolderVerification: ((CardHolderVerificationResult) -> Bool)? {

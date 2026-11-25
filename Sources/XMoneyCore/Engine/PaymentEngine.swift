@@ -16,6 +16,8 @@ package struct SheetState {
     package let applePayReady: Bool
     package let nameCheckValidationEnabled: Bool
     package let customerDetailsVisibility: CustomerDetailsVisibility
+    /// Resolved prefill. Applied to ``personalDetails`` on the main actor after load.
+    package let customerDetailsDefaults: PersonalDetailsValues
     /// Shared with the form so entered details survive rebuilds.
     package let personalDetails: PersonalDetailsProgress
 
@@ -27,6 +29,7 @@ package struct SheetState {
         applePayReady: Bool = false,
         nameCheckValidationEnabled: Bool = false,
         customerDetailsVisibility: CustomerDetailsVisibility = .inactive,
+        customerDetailsDefaults: PersonalDetailsValues = PersonalDetailsValues(),
         personalDetails: PersonalDetailsProgress = PersonalDetailsProgress()
     ) {
         self.sessionToken = sessionToken
@@ -36,6 +39,7 @@ package struct SheetState {
         self.applePayReady = applePayReady
         self.nameCheckValidationEnabled = nameCheckValidationEnabled
         self.customerDetailsVisibility = customerDetailsVisibility
+        self.customerDetailsDefaults = customerDetailsDefaults
         self.personalDetails = personalDetails
     }
 
@@ -48,7 +52,22 @@ package struct SheetState {
             applePayReady: applePayReady,
             nameCheckValidationEnabled: nameCheckValidationEnabled,
             customerDetailsVisibility: customerDetailsVisibility,
+            customerDetailsDefaults: customerDetailsDefaults,
             personalDetails: personalDetails
+        )
+    }
+
+    package func withPersonalDetails(_ progress: PersonalDetailsProgress) -> SheetState {
+        SheetState(
+            sessionToken: sessionToken,
+            orderInfo: orderInfo,
+            savedCards: savedCards,
+            applePayAvailable: applePayAvailable,
+            applePayReady: applePayReady,
+            nameCheckValidationEnabled: nameCheckValidationEnabled,
+            customerDetailsVisibility: customerDetailsVisibility,
+            customerDetailsDefaults: customerDetailsDefaults,
+            personalDetails: progress
         )
     }
 }
@@ -73,7 +92,7 @@ package final class PaymentEngine {
     private var sessionToken: String = ""
     private var nameCheckValidationEnabled: Bool = false
     private var cachedWalletParams: [String: WalletParams] = [:]
-    package private(set) var customerDetailsVisibility: CustomerDetailsVisibility = .inactive
+    package var customerDetailsVisibility: CustomerDetailsVisibility = .inactive
 
     package var onCardHolderVerification: ((CardHolderVerificationResult) -> Bool)?
 
@@ -99,7 +118,7 @@ package final class PaymentEngine {
         self.onCardHolderVerification = configuration.card.cardHolderVerification?.onCardHolderVerification
     }
 
-    package func load(personalDetails: PersonalDetailsProgress = PersonalDetailsProgress()) async throws -> SheetState {
+    package func load() async throws -> SheetState {
         sessionToken = try await account.getSessionToken(
             orderPayload: intent.orderPayload,
             orderChecksum: intent.orderChecksum
@@ -175,12 +194,12 @@ package final class PaymentEngine {
             throw PaymentError.load(PaymentError.genericLoad)
         }
         nameCheckValidationEnabled = siteConfig.nameCheckValidationEnabled
-        customerDetailsVisibility = CustomerDetailsVisibility.resolve(fields: customerFields)
-        personalDetails.defaults = CustomerDetailsResolver.resolve(
+        let visibility = CustomerDetailsVisibility.resolve(fields: customerFields)
+        customerDetailsVisibility = visibility
+        let defaults = CustomerDetailsResolver.resolve(
             configuration.customerDetails.defaultValues,
-            visibility: customerDetailsVisibility
+            visibility: visibility
         )
-        personalDetails.revalidate(visibility: customerDetailsVisibility)
 
         var applePayAvailable = false
         if let params = applePayParams, let merchantId = params.merchantId, !merchantId.isEmpty {
@@ -196,8 +215,8 @@ package final class PaymentEngine {
             applePayAvailable: applePayAvailable,
             applePayReady: applePayReady,
             nameCheckValidationEnabled: nameCheckValidationEnabled,
-            customerDetailsVisibility: customerDetailsVisibility,
-            personalDetails: personalDetails
+            customerDetailsVisibility: visibility,
+            customerDetailsDefaults: defaults
         )
     }
 
@@ -309,20 +328,10 @@ package final class PaymentEngine {
     private func requireCustomerDetails(_ details: CustomerDetails?) throws {
         guard configuration.customerDetails.card, customerDetailsVisibility.isActive else { return }
         guard let details else { throw PaymentError.invalidCustomerDetails }
-        func blank(_ value: String?) -> Bool {
-            value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
-        }
         let visibility = customerDetailsVisibility
-        if visibility.showFullName && blank(details.fullName) { throw PaymentError.invalidCustomerDetails }
-        if visibility.showEmail && blank(details.email) { throw PaymentError.invalidCustomerDetails }
-        if visibility.showPhone && blank(details.phone) { throw PaymentError.invalidCustomerDetails }
-        if visibility.showAddressSection {
-            if blank(details.country) || blank(details.address) || blank(details.city) {
-                throw PaymentError.invalidCustomerDetails
-            }
-            let format = AddressFormats.format(countryCode: details.country ?? "")
-            if format.showRegion && blank(details.region) { throw PaymentError.invalidCustomerDetails }
-            if format.showPostal && blank(details.postalCode) { throw PaymentError.invalidCustomerDetails }
+        let values = CustomerDetailsResolver.formValues(from: details, visibility: visibility)
+        guard CustomerDetailsValidator.validate(values, visibility: visibility).isEmpty else {
+            throw PaymentError.invalidCustomerDetails
         }
     }
 
@@ -343,7 +352,7 @@ package final class PaymentEngine {
     }
 
     private func submit(fields: [String: String], presenter: ThreeDSPresenter) async throws -> EngineResult {
-        let kind = Self.paymentKind(fields)
+        let kind = PaymentKind.kind(fields: fields)
         Self.paymentLogger.info("submit \(kind, privacy: .public)")
         let response: ConfirmPaymentResponse
         do {
@@ -390,13 +399,6 @@ package final class PaymentEngine {
         }
         let tx = try await transactions.poll(transactionId: transactionId, sessionToken: sessionToken)
         return resultFromTransaction(tx)
-    }
-
-    private static func paymentKind(_ fields: [String: String]) -> String {
-        if let type = fields["paymentMethod"] { return type }
-        if let wallet = fields["digitalWalletType"] { return wallet }
-        if fields["cardId"] != nil { return "saved-card" }
-        return "card"
     }
 
     private enum LoadPart {

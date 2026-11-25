@@ -191,6 +191,8 @@ package struct WalletContactParts: Equatable, Sendable {
 }
 
 /// In-progress personal-details form. Survives sheet rebuilds.
+/// Mutated only on the main actor, including after `load` returns.
+@MainActor
 package final class PersonalDetailsProgress {
     package var committed: PersonalDetailsValues?
     /// Latest edits, including ones that have not passed Continue.
@@ -198,8 +200,11 @@ package final class PersonalDetailsProgress {
     package var showsIncompleteError = false
     /// Card-form prefill used until the shopper edits or continues.
     package var defaults = PersonalDetailsValues()
+    /// Stays set after the first successful Continue. `revalidate` does not clear it.
+    private var hasConfirmed = false
 
-    package init() {}
+    /// Usable from `load`, which is not on the main actor. Later mutations stay on the main actor.
+    package nonisolated init() {}
 
     package var isComplete: Bool { committed != nil }
 
@@ -213,6 +218,7 @@ package final class PersonalDetailsProgress {
         committed = values
         draft = values
         showsIncompleteError = false
+        hasConfirmed = true
     }
 
     /// Refuses a Continue that does not satisfy the current field list.
@@ -225,6 +231,7 @@ package final class PersonalDetailsProgress {
         }
         committed = values
         showsIncompleteError = false
+        hasConfirmed = true
         return true
     }
 
@@ -236,10 +243,11 @@ package final class PersonalDetailsProgress {
         }
     }
 
-    /// Keeps the edits. A previous Continue stays in effect only while the edits are still valid.
+    /// Keeps the edits. After Continue, a valid draft becomes the committed details again,
+    /// including when `revalidate` cleared the previous Continue. Back does not commit a first visit.
     package func leave(with values: PersonalDetailsValues, visibility: CustomerDetailsVisibility) {
         draft = values
-        guard committed != nil else { return }
+        guard hasConfirmed else { return }
         if CustomerDetailsValidator.validate(values, visibility: visibility).isEmpty {
             committed = values
         } else {

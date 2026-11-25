@@ -43,4 +43,20 @@ final class ApplePayContactMappingTests: XCTestCase {
         XCTAssertEqual(details?.address, "1 Market St, Suite 2")
         XCTAssertEqual(details?.email, "ada@example.com")
     }
+
+    func testRequiredContactFieldsFollowVisibility() {
+        let visibility = CustomerDetailsVisibility.resolve(fields: ["firstName", "email", "phone", "address"])
+        let fields = ApplePayHandler.contactFields(collects: true, visibility: visibility)
+        XCTAssertEqual(fields.billing, [.name, .postalAddress])
+        XCTAssertEqual(fields.shipping, [.emailAddress, .phoneNumber])
+
+        let emailOnly = CustomerDetailsVisibility.resolve(fields: ["email"])
+        let emailFields = ApplePayHandler.contactFields(collects: true, visibility: emailOnly)
+        XCTAssertEqual(emailFields.billing, [])
+        XCTAssertEqual(emailFields.shipping, [.emailAddress])
+
+        let off = ApplePayHandler.contactFields(collects: false, visibility: visibility)
+        XCTAssertTrue(off.billing.isEmpty)
+        XCTAssertTrue(off.shipping.isEmpty)
+    }
 }

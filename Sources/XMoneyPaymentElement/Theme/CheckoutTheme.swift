@@ -113,7 +113,7 @@ package struct CheckoutTheme {
     package var containerBorderWidth: CGFloat {
         var a: CGFloat = 0
         containerBorder.getRed(nil, green: nil, blue: nil, alpha: &a)
-        return a < 0.01 ? 0 : 1
+        return a < 0.01 ? 0 : borderWidth
     }
 
     package var selectionTint: UIColor { selectedBackground }
@@ -129,8 +129,9 @@ package struct CheckoutTheme {
         min(max(primaryButtonBorderRadius, 0), height / 2)
     }
 
-    package func fieldStrokeWidth(hasError: Bool) -> CGFloat {
-        hasError ? max(borderWidth, 1.5) : borderWidth
+    /// Idle stroke follows `borderWidth`. Error and focus stay visible at 1.5 when the idle stroke is thinner.
+    package func fieldStrokeWidth(hasError: Bool, focused: Bool = false) -> CGFloat {
+        hasError || focused ? max(borderWidth, 1.5) : borderWidth
     }
 
     package func font(

@@ -755,7 +755,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
                     box.layer.borderWidth = theme.fieldStrokeWidth(hasError: true)
                     box.layer.borderColor = theme.errorBorder.cgColor
                 } else if isFocused {
-                    box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
+                    box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false, focused: true)
                     box.layer.borderColor = theme.focusRing.cgColor
                 } else {
                     box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
@@ -775,7 +775,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
             group.layer.borderWidth = theme.fieldStrokeWidth(hasError: true)
             group.layer.borderColor = theme.errorBorder.cgColor
         } else if isFocused {
-            group.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
+            group.layer.borderWidth = theme.fieldStrokeWidth(hasError: false, focused: true)
             group.layer.borderColor = theme.focusRing.cgColor
         } else {
             group.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)

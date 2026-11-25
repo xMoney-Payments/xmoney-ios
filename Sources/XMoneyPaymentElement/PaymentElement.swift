@@ -409,11 +409,13 @@ public final class PaymentElement: UIView {
         loaderHost.backgroundColor = theme.background
     }
 
+    #if DEBUG
     /// Mounts the form from the controller's current config and state. Tests use this with a preview state.
     package func mountPreview() {
         renderForm()
         revealIfNeeded()
     }
+    #endif
 
     private func renderForm() {
         let reopenDetails = personalDetails != nil

@@ -1,4 +1,18 @@
 import Foundation
+import OSLog
+
+package enum PaymentKind {
+    package static func kind(fields: [String: String]) -> String {
+        if let method = fields["paymentMethod"], !method.isEmpty { return method }
+        if let wallet = fields["digitalWalletType"], !wallet.isEmpty { return wallet }
+        if fields["cardId"] != nil { return "saved-card" }
+        return "card"
+    }
+
+    package static func acceptHeader(fields: [String: String]) -> String {
+        kind(fields: fields) == "crypto" ? "application/json" : "*/*"
+    }
+}
 
 struct PaymentService {
     let http: HTTPClient
@@ -86,7 +100,11 @@ struct PaymentService {
 
     func confirmPayment(fields: [String: String]) async throws -> ConfirmPaymentResponse {
         let url = APIURL.make(base: env.secureBaseURL, path: SdkConstants.confirmPaymentPath)
-        let result = try await http.postMultipart(url: url, fields: fields)
+        let result = try await http.postMultipart(
+            url: url,
+            fields: fields,
+            accept: PaymentKind.acceptHeader(fields: fields)
+        )
         return ConfirmPaymentResponse(apiMap: result)
     }
 
@@ -159,6 +177,10 @@ struct PaymentService {
         }
         guard let url = components.url else {
             throw PaymentError.threeDS("Missing 3DS URL")
+        }
+        if let host = url.host {
+            Logger(subsystem: "com.xmoney.paymentsheet", category: "payment")
+                .info("redirect host=\(host, privacy: .public)")
         }
         return url
     }

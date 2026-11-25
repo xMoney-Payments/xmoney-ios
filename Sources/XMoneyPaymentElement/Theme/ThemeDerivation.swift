@@ -82,6 +82,7 @@ enum ThemeDerivation {
         contentSizeScale: CGFloat = 1,
         increasedContrast: Bool = false
     ) -> Tokens {
+        // Order: surfaces, derived roles, exact overrides, then shape (typography, borders, shape).
         let brand = appearance.brandColor?.resolved(isDark: isDark) ?? Defaults.brand
         let accent = appearance.accentColor?.resolved(isDark: isDark) ?? brand
         let customBrand = appearance.brandColor != nil
@@ -102,14 +103,14 @@ enum ThemeDerivation {
         }
         let customSurface = appearance.backgroundColor != nil || tint != nil
 
-        let card = appearance.overrides.componentColor?.resolved(isDark: isDark)
-            ?? (customSurface
-                ? (isDark
-                    ? (lifted
-                        ? tint!.mixed(over: backdrop!, weight: ThemeConstants.cardOverBackdropDark)
-                        : (tint ?? Defaults.darkGray).mixed(over: sheet, weight: ThemeConstants.cardOverSheetDark))
-                    : PaymentConfig.SRGBColor.white.mixed(over: sheet, weight: ThemeConstants.cardOverSheetLight))
-                : (isDark ? Defaults.darkCard : Defaults.lightCard))
+        let derivedCard = customSurface
+            ? (isDark
+                ? (lifted
+                    ? tint!.mixed(over: backdrop!, weight: ThemeConstants.cardOverBackdropDark)
+                    : (tint ?? Defaults.darkGray).mixed(over: sheet, weight: ThemeConstants.cardOverSheetDark))
+                : PaymentConfig.SRGBColor.white.mixed(over: sheet, weight: ThemeConstants.cardOverSheetLight))
+            : (isDark ? Defaults.darkCard : Defaults.lightCard)
+        let card = exact(appearance.overrides.componentColor?.resolved(isDark: isDark), fallback: derivedCard)
 
         let cardIsDark = card.relativeLuminance <= 0.5
         let sheetIsDark = sheet.relativeLuminance < 0.5
@@ -119,29 +120,37 @@ enum ThemeDerivation {
         func gray(forDark dark: Bool) -> PaymentConfig.SRGBColor {
             tint ?? (dark ? Defaults.darkGray : Defaults.lightGray)
         }
-        let selected = appearance.overrides.selectedColor?.resolved(isDark: isDark)
-            ?? (customSurface
-                ? (toneDark
-                    ? (lifted
-                        ? tint!.mixed(over: backdrop!, weight: ThemeConstants.selectedOverBackdropDark)
-                        : gray(forDark: true).mixed(over: sheet, weight: ThemeConstants.selectedOverSheetDark))
-                    : gray(forDark: false).mixed(over: card, weight: ThemeConstants.selectedOverCardLight))
-                : (toneDark ? Defaults.darkSelected : (customBrand ? sheet : Defaults.lightSelected)))
+        let derivedSelected = customSurface
+            ? (toneDark
+                ? (lifted
+                    ? tint!.mixed(over: backdrop!, weight: ThemeConstants.selectedOverBackdropDark)
+                    : gray(forDark: true).mixed(over: sheet, weight: ThemeConstants.selectedOverSheetDark))
+                : gray(forDark: false).mixed(over: card, weight: ThemeConstants.selectedOverCardLight))
+            : (toneDark ? Defaults.darkSelected : (customBrand ? sheet : Defaults.lightSelected))
+        let selected = exact(appearance.overrides.selectedColor?.resolved(isDark: isDark), fallback: derivedSelected)
 
-        let preferredSheet = appearance.overrides.textColor?.resolved(isDark: isDark)
-            ?? (customSurface
-                ? bestInk(on: sheet)
-                : (isDark ? Defaults.darkText : Defaults.lightText))
-        let sheetText = preferredSheet.contrast(against: sheet) >= 4.5 ? preferredSheet : bestInk(on: sheet)
+        let sentText = appearance.overrides.textColor?.resolved(isDark: isDark)
+        let derivedSheet = customSurface
+            ? bestInk(on: sheet)
+            : (isDark ? Defaults.darkText : Defaults.lightText)
+        let readableSheet = derivedSheet.contrast(against: sheet) >= 4.5 ? derivedSheet : bestInk(on: sheet)
+        let sheetText = exact(sentText, fallback: readableSheet)
         let primaryText = cardNeedsOwnInk ? bestInk(on: card) : sheetText
-        warnContrast("textColor", color: appearance.overrides.textColor?.resolved(isDark: isDark), on: [sheet, card], minimum: 4.5)
+        warnContrast("textColor", color: sentText, on: [sheet, card], minimum: 4.5)
 
         let graySeed = gray(forDark: toneDark)
         let sheetGray = gray(forDark: sheetIsDark)
         let grayTarget: (Double) -> Double = { increasedContrast ? 7 : $0 }
+        func increasedDefault(
+            _ color: PaymentConfig.SRGBColor,
+            against surface: PaymentConfig.SRGBColor
+        ) -> PaymentConfig.SRGBColor {
+            guard increasedContrast else { return color }
+            return color.withContrast(atLeast: 4.6, against: surface)
+        }
         let secondary = customSurface
             ? graySeed.withContrast(atLeast: grayTarget(toneDark ? 6.41 : 7), against: selected)
-            : (toneDark ? Defaults.darkSecondary : Defaults.lightSecondary)
+            : increasedDefault(toneDark ? Defaults.darkSecondary : Defaults.lightSecondary, against: selected)
         let tertiary = customSurface
             ? graySeed.withContrast(atLeast: grayTarget(5.5), against: card)
             : (toneDark ? Defaults.darkTertiary : Defaults.lightTertiary)
@@ -150,15 +159,15 @@ enum ThemeDerivation {
             : (toneDark ? Defaults.darkMuted : Defaults.lightMuted)
         let placeholder = customSurface
             ? graySeed.withContrast(atLeast: grayTarget(3), against: card)
-            : (toneDark ? Defaults.darkPlaceholder : Defaults.lightPlaceholder)
+            : increasedDefault(toneDark ? Defaults.darkPlaceholder : Defaults.lightPlaceholder, against: card)
         let powered = customSurface
             ? sheetGray.withContrast(atLeast: grayTarget(3), against: sheet)
-            : (sheetIsDark ? Defaults.darkPowered : Defaults.lightPowered)
+            : increasedDefault(sheetIsDark ? Defaults.darkPowered : Defaults.lightPowered, against: sheet)
         let orLabelColor = customSurface
             ? sheetGray.withContrast(atLeast: grayTarget(4.5), against: sheet)
-            : (sheetIsDark ? Defaults.darkTertiary : Defaults.lightTertiary)
+            : increasedDefault(sheetIsDark ? Defaults.darkTertiary : Defaults.lightTertiary, against: sheet)
 
-        let onBrand = appearance.overrides.onBrandColor?.resolved(isDark: isDark) ?? bestLabel(on: brand)
+        let onBrand = exact(appearance.overrides.onBrandColor?.resolved(isDark: isDark), fallback: bestLabel(on: brand))
         warnContrast("onBrandColor", color: appearance.overrides.onBrandColor?.resolved(isDark: isDark), on: [brand], minimum: 4.5)
 
         let linkSource = appearance.accentColor ?? appearance.brandColor
@@ -166,10 +175,10 @@ enum ThemeDerivation {
         let paintedAccent = (isDark && (customBrand || appearance.accentColor != nil) && !hasDistinctDark)
             ? PaymentConfig.SRGBColor.white.mixed(over: accent, weight: ThemeConstants.darkLinkTowardWhite)
             : accent
-        let linkBase = appearance.overrides.linkColor?.resolved(isDark: isDark)
-            ?? (customBrand || appearance.accentColor != nil
-                ? paintedAccent
-                : ((cardNeedsOwnInk ? cardIsDark : isDark) ? Defaults.darkLink : Defaults.lightLink))
+        let derivedLink = customBrand || appearance.accentColor != nil
+            ? paintedAccent
+            : ((cardNeedsOwnInk ? cardIsDark : isDark) ? Defaults.darkLink : Defaults.lightLink)
+        let linkBase = exact(appearance.overrides.linkColor?.resolved(isDark: isDark), fallback: derivedLink)
         let linkSeed = appearance.overrides.linkColor == nil
             && !(customBrand || appearance.accentColor != nil)
             && cardNeedsOwnInk
@@ -177,10 +186,10 @@ enum ThemeDerivation {
             : linkBase
         warnContrast("linkColor", color: appearance.overrides.linkColor?.resolved(isDark: isDark), on: [sheet, card], minimum: 4.5)
 
-        let border = appearance.overrides.borderColor?.resolved(isDark: isDark)
-            ?? (customSurface
-                ? (tint ?? graySeed).withAlpha(toneDark ? ThemeConstants.borderAlphaDark : ThemeConstants.borderAlphaLight)
-                : (toneDark ? Defaults.darkBorder : Defaults.lightBorder))
+        let derivedBorder = customSurface
+            ? (tint ?? graySeed).withAlpha(toneDark ? ThemeConstants.borderAlphaDark : ThemeConstants.borderAlphaLight)
+            : (toneDark ? Defaults.darkBorder : Defaults.lightBorder)
+        let border = exact(appearance.overrides.borderColor?.resolved(isDark: isDark), fallback: derivedBorder)
         if let sent = appearance.overrides.borderColor?.resolved(isDark: isDark), sent.alpha > 0.01 {
             let onSheet = sent.contrast(against: sheet, compositedOver: sheet)
             let onCard = sent.contrast(against: card, compositedOver: card)
@@ -206,10 +215,13 @@ enum ThemeDerivation {
         let disabledFill = brand.withAlpha(ThemeConstants.disabledFillAlpha).composited(over: sheet)
         let disabledText = onBrand.withContrast(atLeast: 4.5, against: disabledFill)
 
-        let secondaryFill = appearance.overrides.secondaryButtonColor?.resolved(isDark: isDark)
-            ?? (toneDark
-                ? brand.withAlpha(ThemeConstants.secondaryOverCardDark).composited(over: card)
-                : brand.mixed(over: sheet, weight: ThemeConstants.secondaryOverSheetLight))
+        let derivedSecondary = toneDark
+            ? brand.withAlpha(ThemeConstants.secondaryOverCardDark).composited(over: card)
+            : brand.mixed(over: sheet, weight: ThemeConstants.secondaryOverSheetLight)
+        let secondaryFill = exact(
+            appearance.overrides.secondaryButtonColor?.resolved(isDark: isDark),
+            fallback: derivedSecondary
+        )
         let secondaryLabel = linkSeed.withContrast(atLeast: 4.5, against: secondaryFill)
 
         let subtle = customBrand
@@ -245,8 +257,8 @@ enum ThemeDerivation {
             icon: ui(placeholder),
             error: ui(error),
             borderRadius: radii.field,
-            borderWidth: 1,
-            fontFamily: appearance.fontFamily,
+            borderWidth: CGFloat(min(max(appearance.borders.width, 0), 4)),
+            fontFamily: appearance.typography.fontFamily,
             primaryButtonBackground: ui(brand),
             primaryButtonText: ui(onBrand),
             primaryButtonPressed: ui(pressed),
@@ -302,6 +314,14 @@ enum ThemeDerivation {
             sheetText: ui(sheetText),
             isDarkSurface: sheetIsDark
         )
+    }
+
+    /// A set override is painted as sent. The derived color is used only when the override is nil.
+    private static func exact(
+        _ sent: PaymentConfig.SRGBColor?,
+        fallback: PaymentConfig.SRGBColor
+    ) -> PaymentConfig.SRGBColor {
+        sent ?? fallback
     }
 
     /// Smallest change that clears `minimum` on every surface.
@@ -370,7 +390,7 @@ enum ThemeDerivation {
     }
 
     private static func radii(for appearance: PaymentConfig.Appearance) -> Radii {
-        let scale = appearance.corners.scale
+        let scale = appearance.shape.corners.scale
         let control = interpolate(0, 12, 24, scale: scale)
         let field = interpolate(0, 16, 24, scale: scale)
         let container = interpolate(0, 24, 32, scale: scale)
@@ -383,7 +403,7 @@ enum ThemeDerivation {
         } else {
             row = min(control, container)
         }
-        let button = appearance.pillButtons ? CheckoutTheme.defaultPrimaryButtonRadius : control
+        let button = appearance.shape.pillButtons ? CheckoutTheme.defaultPrimaryButtonRadius : control
         return Radii(
             button: button,
             field: field,

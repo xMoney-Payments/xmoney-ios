@@ -115,13 +115,13 @@ enum AppearancePresets {
             id: "sharp_blue",
             label: "Sharp blue",
             description: "Square corners, blue brand in both modes",
-            appearance: .init(brandColor: themePair("#1D4ED8", "#436CDF"), corners: .sharp, pillButtons: false)
+            appearance: .init(brandColor: themePair("#1D4ED8", "#436CDF"), shape: .init(corners: .sharp, pillButtons: false))
         ),
         AppearancePreset(
             id: "rounded_teal",
             label: "Rounded teal",
             description: "Rounded corners, teal brand in both modes",
-            appearance: .init(brandColor: themePair("#0F766E", "#0F766E"), corners: .rounded)
+            appearance: .init(brandColor: themePair("#0F766E", "#0F766E"), shape: .init(corners: .rounded))
         ),
         AppearancePreset(
             id: "black_brand",

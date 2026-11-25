@@ -74,6 +74,35 @@ package enum CustomerDetailsResolver {
         return resolved
     }
 
+    /// Form values for ``CustomerDetailsValidator``.
+    /// Invalid email, postal, and region values are kept so the validator can reject them.
+    /// An unparseable phone is left blank, which fails when phone is required.
+    package static func formValues(
+        from details: CustomerDetails,
+        visibility: CustomerDetailsVisibility
+    ) -> PersonalDetailsValues {
+        var values = PersonalDetailsValues()
+        if visibility.showFullName {
+            values.fullName = text(details.fullName)
+        }
+        if visibility.showEmail {
+            values.email = text(details.email)
+        }
+        let country = text(details.country).uppercased()
+        if visibility.showPhone, let phone = parsePhone(details.phone, preferredCountryCode: country) {
+            values.phoneCountry = phone.country
+            values.phoneNational = phone.national
+        }
+        if visibility.showAddressSection {
+            values.country = country
+            values.region = text(details.region)
+            values.address = text(details.address)
+            values.city = text(details.city)
+            values.postalCode = text(details.postalCode)
+        }
+        return values
+    }
+
     /// Splits an E.164 number (`+40722123456`) into a phone country and national digits.
     /// Returns nil when the value does not start with `+` or the dial code matches no country.
     package static func parsePhone(_ value: String?, preferredCountryCode: String = "") -> ParsedPhone? {
