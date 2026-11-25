@@ -15,6 +15,9 @@ package final class PaymentSession {
     /// Idle/loading sheets may dismiss; in-flight pay must wait for the payment result.
     package var canDismiss: Bool { !isProcessing }
 
+    /// Entered shopper details. Survives order rebinds; `load` rechecks them against the new field list.
+    package let personalDetails = PersonalDetailsProgress()
+
     private var boundKey: String?
     private var bindGeneration = 0
     private let http: HTTPClient
@@ -80,7 +83,12 @@ package final class PaymentSession {
         loaded = try await engineToLoad.load()
         #endif
         try Task.checkCancellation()
-        return BindCandidate(key: key, engine: engineToLoad, state: loaded, alreadyBound: false)
+        return BindCandidate(
+            key: key,
+            engine: engineToLoad,
+            state: adoptPersonalDetails(loaded, engine: engineToLoad),
+            alreadyBound: false
+        )
     }
 
     @discardableResult
@@ -121,15 +129,32 @@ package final class PaymentSession {
     }
     #endif
 
-    package func submitNewCard(_ input: CardInput, presenter: ThreeDSPresenter) async -> EngineResult {
+    package func submitNewCard(
+        _ input: CardInput,
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetails? = nil
+    ) async -> EngineResult {
         await submit(didAuthorize: true) {
-            try await self.engine.submitNewCard(input, presenter: presenter)
+            try await self.engine.submitNewCard(input, presenter: presenter, customerDetails: customerDetails)
         }
     }
 
-    package func submitSavedCard(cardId: String, presenter: ThreeDSPresenter) async -> EngineResult {
+    package func submitSavedCard(
+        cardId: String,
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetails? = nil
+    ) async -> EngineResult {
         await submit(didAuthorize: true) {
-            try await self.engine.submitSavedCard(cardId: cardId, presenter: presenter)
+            try await self.engine.submitSavedCard(cardId: cardId, presenter: presenter, customerDetails: customerDetails)
+        }
+    }
+
+    package func submitCrypto(
+        presenter: ThreeDSPresenter,
+        customerDetails: CustomerDetails? = nil
+    ) async -> EngineResult {
+        await submit(didAuthorize: true) {
+            try await self.engine.submitCrypto(presenter: presenter, customerDetails: customerDetails)
         }
     }
 
@@ -153,7 +178,20 @@ package final class PaymentSession {
 
     package func makeWalletAuthorizer(presenter: ThreeDSPresenter) -> (any DigitalWalletAuthorizing)? {
         guard let state else { return nil }
-        return DigitalWalletFactory.makeApplePay?(engine, presenter, state.orderInfo)
+        return DigitalWalletFactory.makeApplePay?(
+            engine,
+            presenter,
+            state.orderInfo,
+            state.customerDetailsVisibility
+        )
+    }
+
+    /// Applies resolved defaults on the main actor. `load` does not touch the shared progress.
+    private func adoptPersonalDetails(_ loaded: SheetState, engine: PaymentEngine) -> SheetState {
+        engine.customerDetailsVisibility = loaded.customerDetailsVisibility
+        personalDetails.defaults = loaded.customerDetailsDefaults
+        personalDetails.revalidate(visibility: loaded.customerDetailsVisibility)
+        return loaded.withPersonalDetails(personalDetails)
     }
 
     package var onCardHolderVerification: ((CardHolderVerificationResult) -> Bool)? {

@@ -35,7 +35,7 @@ struct CardHolderVerificationSampleView: View {
                 )
             ),
             paymentMethods: .init(applePay: .init(enabled: true, appearance: wallet)),
-            options: .init(style: style, appearance: exampleAppearance())
+            options: .init(appearance: exampleAppearance(isDark: theme.isDark))
         )
 
         SampleScaffold(

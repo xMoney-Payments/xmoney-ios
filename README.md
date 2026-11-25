@@ -16,6 +16,8 @@ XMoneyPaymentSheet ──► XMoneyPaymentElement ──► XMoneyCore
 
 `XMoneyPaymentElement` does not pull in Apple Pay. Link `XMoneyApplePay` next to it if the embedded form should offer a wallet button, and call `ApplePay.register()` before `prepare`. Payment Sheet registers Apple Pay itself.
 
+Crypto is part of Payment Sheet and Payment Element. Turn it on with `paymentMethods.crypto.enabled`.
+
 ## Requirements
 
 - iOS 15.0+
@@ -51,7 +53,7 @@ Put only a **publishable** `publicKey` (`pk_test_…` / `pk_live_…`) in the ap
 1. Your backend creates an order and returns `payload` + `checksum`.
 2. The app builds a `PaymentIntent` from those two values.
 3. You present Sheet, mount Element, or show Apple Pay.
-4. The SDK fetches the session token and collects payment. A card 3DS challenge stays open in an `SFSafariViewController` until polling sees a completed payment. The merchant return URL is not used. Apple Pay authentication stays in the Apple Pay sheet.
+4. The SDK fetches the session token and collects payment. A card 3DS challenge, and the hosted crypto page after Continue, stay open in an `SFSafariViewController` until polling sees a completed payment. The merchant return URL is not used. Apple Pay authentication stays in the Apple Pay sheet.
 5. You handle `PaymentResult`. Session tokens are never passed by the merchant.
 
 ```swift
@@ -233,11 +235,10 @@ Copy-paste sample: [`UpdateOrderSampleView.swift`](Examples/Example/Advanced/Upd
 
 ### Live appearance
 
-Keep `EmbeddedPayment` across appearance changes. Call `updateAppearance` / `updateStyle` / `updateLocale` / `updateWalletAppearance` instead of recreating `PaymentConfig`:
+Keep `EmbeddedPayment` across appearance changes. Call `updateAppearance` / `updateLocale` / `updateWalletAppearance` instead of recreating `PaymentConfig`:
 
 ```swift
 embedded.updateAppearance(appearance)
-embedded.updateStyle(style)
 embedded.updateWalletAppearance(wallet)
 embedded.updateLocale(locale)
 ```
@@ -267,7 +268,7 @@ let element = PaymentElement(payment: embedded) { event in
 embedded.confirm() // or element.confirm()
 ```
 
-`confirm()` submits the currently selected method (new card or saved card). Apple Pay still uses the wallet button. `isInteractionEnabled` is false during `updateOrder` and while a charge is in flight. `EmbeddedEvent.processing` is the in-flight charge only.
+`confirm()` submits the currently selected method (new card, saved card, or crypto). Apple Pay still uses the wallet button. `isInteractionEnabled` is false during `updateOrder` and while a charge is in flight. `EmbeddedEvent.processing` is the in-flight charge only.
 
 Copy-paste sample: [`EmbeddedPaymentSampleView.swift`](Examples/Example/Samples/EmbeddedPaymentSampleView.swift) · Merchant CTA: [`MerchantPayButtonSampleView.swift`](Examples/Example/Advanced/MerchantPayButtonSampleView.swift) · Update order: [`UpdateOrderSampleView.swift`](Examples/Example/Advanced/UpdateOrderSampleView.swift)
 
@@ -328,6 +329,18 @@ Pre-auth dismiss delivers `.canceled` and does **not** consume. Present or tap a
 
 Copy-paste sample: [`ApplePaySampleView.swift`](Examples/Example/Samples/ApplePaySampleView.swift)
 
+## Crypto
+
+Off until `paymentMethods.crypto.enabled`. There is no separate module.
+
+```swift
+paymentMethods: .init(
+    crypto: .init(enabled: true)
+)
+```
+
+Continue opens the hosted page in an `SFSafariViewController` and polls to the same `PaymentResult`. It sends customer details when `customerDetails.card` is on. Closing the page after Continue has started consumes the order.
+
 ## Configuration
 
 ```swift
@@ -337,7 +350,8 @@ PaymentConfig(
         applePay: .init(
             enabled: true,
             appearance: .init(color: .black, radius: 12, type: .pay)
-        )
+        ),
+        crypto: .init(enabled: true)
     ),
     card: .init(
         savedCards: .init(enabled: true, optInVisible: true),
@@ -350,10 +364,10 @@ PaymentConfig(
     ),
     options: .init(
         locale: "en-US",    // UI language + pay-button amount punctuation
-        style: .automatic,
         appearance: .init(
-            borderRadius: 12,  // card fields + methods container
-            primaryButton: .init(borderRadius: 12)
+            colorScheme: .automatic,
+            brandColor: .init(hex: "#1D4ED8"),
+            shape: .init(corners: .custom(12), pillButtons: false)
         )
     )
 )
@@ -370,9 +384,27 @@ PaymentConfig(
 
 Pay uses current field validity. Cardholder name is always collected.
 
-**Appearance** — pass `colorsLight` / `colorsDark` so the form matches your chrome. Card fields (condensed box and spaced inputs) use `appearance.borderRadius` (default 16 pt), `appearance.borderWidth`, and `colors.componentBorder`. The methods container shares the radius (omit-default 20 pt). Pay button radius comes from `appearance.primaryButton.borderRadius` (default a pill, `9999`). Pass `12` for a squircle. On a mounted Element, call `updateAppearance` / `updateStyle` / `updateWalletAppearance`. See [`exampleAppearance()`](Examples/Example/SampleHelpers.swift) for a copy-paste palette.
+**Appearance** — set `brandColor`, `accentColor`, `backgroundColor`, and `neutralTint` (one hex color or a light/dark pair). The pay button uses `brandColor`. Other unset colors are derived. `overrides` (`onBrandColor`, `textColor`, `linkColor`, `borderColor`, `componentColor`, `selectedColor`, `secondaryButtonColor`) are painted as sent. `borders.width` is the idle field stroke, from 0 to 4, default 1. `typography.fontFamily` is a face the app has already registered. `shape.corners` is `sharp`, `default`, `rounded`, or a number from 0 to 24; the methods container defaults to 24. `shape.pillButtons` keeps the pay button fully round. `colorScheme` is `automatic`, `light`, or `dark`. On a mounted Element, call `updateAppearance` / `updateWalletAppearance`. See [`exampleAppearance()`](Examples/Example/SampleHelpers.swift).
 
 **Locale** — `options.locale` sets UI copy and pay-button amount punctuation. Supported languages: `en`, `el`, `ro`, `bg`, `hu`, `pl`. Region tags (`en-US`, `pl-PL`) work; unknown languages fall back to English.
+
+## Customer details
+
+`customerDetails` asks the shopper for the fields your account requires. Pass `fields` to replace that list; a flag left off is not collected. If the account list cannot be loaded and `customerDetails.card` is on, Pay stays disabled. `defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Apple Pay does not use them.
+
+```swift
+PaymentConfig(
+    publicKey: "pk_test_…",
+    customerDetails: .init(
+        card: true,
+        applePay: true,
+        fields: .init(fullName: true, email: true, address: true),
+        defaultValues: .init(fullName: "Jane Doe", email: "jane@example.com", country: "US", region: "CA")
+    )
+)
+```
+
+Card, saved-card, and crypto Pay stay blocked until those fields are valid when `customerDetails.card` is on. An embedded `PaymentElement` shows the page in place and reports the new height through `onContentSizeChange`. Apple Pay requests the matching contact fields and sends them with the payment.
 
 ## Card holder verification
 
@@ -399,7 +431,7 @@ Use only these merchant-facing types:
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Config / models | `PaymentConfig` and nested options, `PaymentIntent` / `OrderCredentials` / `OrderPayload` / `OrderChecksum`, `PaymentResult`, `PaymentError`, `Transaction`                        |
 | Payment Sheet   | `PaymentSheet`, `.paymentSheet`, `PaymentSheetEvent`                                                                                                                               |
-| Payment Element | `PaymentElement`, `PaymentElementView`, `EmbeddedPayment` (`updateOrder`, `confirm`, `updateAppearance`, `updateStyle`, `updateLocale`, `updateWalletAppearance`), `EmbeddedEvent` |
+| Payment Element | `PaymentElement`, `PaymentElementView`, `EmbeddedPayment` (`updateOrder`, `confirm`, `updateAppearance`, `updateLocale`, `updateWalletAppearance`), `EmbeddedEvent` |
 | Apple Pay       | `ApplePay` (`availability`, `present`, `updateOrder`, `dismiss`), `ApplePayAvailability`, `ApplePayButton`, `ApplePayButtonView`, `ApplePayEvent`                                  |
 
 Everything else (HTTP, services, 3DS host, form views, theme helpers) is library-internal.

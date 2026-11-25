@@ -1,3 +1,4 @@
+import Contacts
 import Foundation
 import PassKit
 #if canImport(XMoneyCore)
@@ -8,6 +9,8 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
     private let engine: PaymentEngine
     private let presenter: ThreeDSPresenter
     private let orderInfo: OrderPayloadInfo
+    /// Captured on the main actor with the sheet state. Not read from the engine later.
+    private let customerDetailsVisibility: CustomerDetailsVisibility
 
     private var controller: PKPaymentAuthorizationController?
     private var continuation: CheckedContinuation<EngineResult, Never>?
@@ -28,10 +31,16 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
     /// Pre-authorize sheet dismiss is canceled without this flag.
     package private(set) var didAuthorizePayment = false
 
-    package init(engine: PaymentEngine, presenter: ThreeDSPresenter, orderInfo: OrderPayloadInfo) {
+    package init(
+        engine: PaymentEngine,
+        presenter: ThreeDSPresenter,
+        orderInfo: OrderPayloadInfo,
+        customerDetailsVisibility: CustomerDetailsVisibility
+    ) {
         self.engine = engine
         self.presenter = presenter
         self.orderInfo = orderInfo
+        self.customerDetailsVisibility = customerDetailsVisibility
         super.init()
     }
 
@@ -117,7 +126,40 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
                 type: .final
             ),
         ]
+        applyCustomerDetailContactFields(request)
         return request
+    }
+
+    private var collectsCustomerDetails: Bool {
+        engine.configuration.customerDetails.applePay && customerDetailsVisibility.isActive
+    }
+
+    private func applyCustomerDetailContactFields(_ request: PKPaymentRequest) {
+        let fields = Self.contactFields(collects: collectsCustomerDetails, visibility: customerDetailsVisibility)
+        request.requiredBillingContactFields = fields.billing
+        request.requiredShippingContactFields = fields.shipping
+    }
+
+    package static func contactFields(
+        collects: Bool,
+        visibility: CustomerDetailsVisibility
+    ) -> (billing: Set<PKContactField>, shipping: Set<PKContactField>) {
+        guard collects else { return ([], []) }
+        var billing = Set<PKContactField>()
+        if visibility.showFullName { billing.insert(.name) }
+        if visibility.showAddressSection { billing.insert(.postalAddress) }
+        var shipping = Set<PKContactField>()
+        if visibility.showEmail { shipping.insert(.emailAddress) }
+        if visibility.showPhone { shipping.insert(.phoneNumber) }
+        return (billing, shipping)
+    }
+
+    private func customerDetails(from payment: PKPayment) -> CustomerDetails? {
+        guard collectsCustomerDetails else { return nil }
+        return CustomerDetails.mergingWallet(
+            billing: payment.billingContact.map(WalletContactParts.init),
+            shipping: payment.shippingContact.map(WalletContactParts.init)
+        )?.pruned(to: customerDetailsVisibility)
     }
 
     private func failureResult(message: String) -> EngineResult {
@@ -167,7 +209,8 @@ package final class ApplePayHandler: NSObject, PKPaymentAuthorizationControllerD
                 let result = try await self.engine.submitWallet(
                     walletType: "applePay",
                     token: token,
-                    presenter: SheetHandoffPresenter(inner: self.presenter, handler: self)
+                    presenter: SheetHandoffPresenter(inner: self.presenter, handler: self),
+                    customerDetails: self.customerDetails(from: payment)
                 )
                 self.completePassKit(with: result)
                 self.resolve(result)
@@ -248,5 +291,27 @@ final class SheetHandoffPresenter: ThreeDSPresenter {
 
     func dismissThreeDS() {
         inner.dismissThreeDS()
+    }
+}
+
+extension WalletContactParts {
+    init(_ contact: PKContact) {
+        let postal = contact.postalAddress
+        let lines = postal?.street
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+        self.init(
+            firstName: contact.name?.givenName ?? "",
+            lastName: contact.name?.familyName ?? "",
+            email: contact.emailAddress ?? "",
+            phone: contact.phoneNumber?.stringValue ?? "",
+            line1: lines.first ?? "",
+            line2: lines.dropFirst().joined(separator: ", "),
+            city: postal?.city ?? "",
+            state: postal?.state ?? "",
+            postalCode: postal?.postalCode ?? "",
+            countryCode: postal?.isoCountryCode ?? ""
+        )
     }
 }

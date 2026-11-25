@@ -11,6 +11,7 @@ enum SdkConstants {
     // api-next inline-checkout endpoints
     static let sessionTokenPath = "api/v1/inline-checkout/session-token"
     static let configPath = "api/v1/inline-checkout/config"
+    static let inlineCheckoutFieldsPath = "api/v1/inline-checkout/fields"
     static let cardsPath = "api/v1/inline-checkout/cards"
     static let transactionsPath = "api/v1/inline-checkout/transactions"
     static let accountValidationPath = "api/v1/account-validation"

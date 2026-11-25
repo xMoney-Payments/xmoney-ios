@@ -91,16 +91,12 @@ public final class EmbeddedPayment {
         try await controller.updateOrder(onEvent: onEvent, createOrder: createOrder)
     }
 
-    public func updateAppearance(_ appearance: PaymentConfig.AppearanceConfig) {
+    public func updateAppearance(_ appearance: PaymentConfig.Appearance) {
         controller.updateAppearance(appearance)
     }
 
     public func updateLocale(_ locale: String) {
         controller.updateLocale(locale)
-    }
-
-    public func updateStyle(_ style: PaymentConfig.UserInterfaceStyle) {
-        controller.updateStyle(style)
     }
 
     public func updateWalletAppearance(_ appearance: PaymentConfig.WalletAppearance) {

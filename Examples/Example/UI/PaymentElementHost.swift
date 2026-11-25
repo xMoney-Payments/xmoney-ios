@@ -20,6 +20,9 @@ struct PaymentElementHost: View {
                 if abs(height - new) > 1 { height = new }
             }
         )
+        // A new EmbeddedPayment carries a new config. Recreate the element; updateUIViewController
+        // only refreshes the order and would keep rendering the previous payment.
+        .id(ObjectIdentifier(payment))
         .frame(height: height)
         .frame(maxWidth: .infinity)
     }
@@ -38,6 +41,7 @@ private struct PaymentElementHostRepresentable: UIViewControllerRepresentable {
             controller?.publishHeight()
         }
         context.coordinator.controller = controller
+        context.coordinator.payment = payment
         context.coordinator.lastKey = orderKey
         Task { @MainActor in
             try? await controller.element.prepare(intent: intent)
@@ -47,6 +51,9 @@ private struct PaymentElementHostRepresentable: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: PaymentElementHostController, context: Context) {
+        if let bound = context.coordinator.payment, bound !== payment {
+            assertionFailure("PaymentElementHost kept its element after EmbeddedPayment was replaced.")
+        }
         uiViewController.onEvent = onEvent
         uiViewController.onHeightChange = onHeightChange
         uiViewController.element.onContentSizeChange = { [weak uiViewController] in
@@ -83,6 +90,7 @@ private struct PaymentElementHostRepresentable: UIViewControllerRepresentable {
 
     final class Coordinator {
         var controller: PaymentElementHostController?
+        var payment: EmbeddedPayment?
         var lastKey: String?
     }
 }

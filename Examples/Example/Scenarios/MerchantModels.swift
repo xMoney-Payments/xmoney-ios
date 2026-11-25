@@ -32,7 +32,7 @@ struct MerchantBrand {
     let catalogStyle: MerchantCatalogStyle
     let paySurface: MerchantPaySurface
     let products: [MerchantProduct]
-    let appearance: PaymentConfig.AppearanceConfig
+    let appearance: PaymentConfig.Appearance
     let accent: Color
     let onAccent: Color
     let accentText: Color

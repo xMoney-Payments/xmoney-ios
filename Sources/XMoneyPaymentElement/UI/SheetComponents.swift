@@ -16,7 +16,7 @@ package final class GrabberView: UIView {
         addSubview(pill)
         NSLayoutConstraint.activate([
             pill.centerXAnchor.constraint(equalTo: centerXAnchor),
-            pill.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            pill.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             pill.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
             pill.widthAnchor.constraint(equalToConstant: 38),
             pill.heightAnchor.constraint(equalToConstant: 4),
@@ -32,16 +32,24 @@ package final class GrabberView: UIView {
 package final class CircleCloseButton: UIButton {
     package init(theme: CheckoutTheme, locale: String = "en-US") {
         super.init(frame: .zero)
-        setTitle("✕", for: .normal)
-        setTitleColor(theme.primaryText, for: .normal)
-        titleLabel?.font = theme.font(ofSize: 14, weight: .medium)
-        backgroundColor = theme.neutralChip
-        layer.cornerRadius = 18
+        let icon = UIImageView(image: EmbeddedAssets.image(named: "close")?.withRenderingMode(.alwaysTemplate))
+        icon.tintColor = theme.sheetChromeText
+        icon.isUserInteractionEnabled = false
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(icon)
+        NSLayoutConstraint.activate([
+            icon.centerXAnchor.constraint(equalTo: centerXAnchor),
+            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 24),
+            icon.heightAnchor.constraint(equalToConstant: 24),
+        ])
+        tintColor = theme.sheetChromeText
+        backgroundColor = .clear
         accessibilityLabel = Strings.text("sheet.cancel", locale: locale)
         translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 36),
-            heightAnchor.constraint(equalToConstant: 36),
+            widthAnchor.constraint(equalToConstant: 44),
+            heightAnchor.constraint(equalToConstant: 44),
         ])
     }
 
@@ -57,14 +65,12 @@ final class OrDividerView: UIView {
         let left = makeLine(theme: theme)
         let right = makeLine(theme: theme)
         let text = UILabel()
-        text.text = label
-        text.font = theme.font(ofSize: 13, weight: .medium)
-        text.textColor = theme.orLabel
+        theme.style(text, text: label, size: 14, weight: .regular, color: theme.orLabel)
         text.setContentHuggingPriority(.required, for: .horizontal)
 
         let stack = UIStackView(arrangedSubviews: [left, text, right])
         stack.axis = .horizontal
-        stack.spacing = 14
+        stack.spacing = 16
         stack.alignment = .center
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
@@ -92,46 +98,66 @@ final class OrDividerView: UIView {
 // MARK: - Radio
 
 final class RadioIndicator: UIView {
-    private let checkView = UIImageView()
+    private let ring = CAShapeLayer()
+    private let outline = CAShapeLayer()
+    private let dot = UIView()
+    private var theme: CheckoutTheme
+    private var showsOutline = false
 
     init(theme: CheckoutTheme) {
+        self.theme = theme
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        layer.cornerRadius = 10.5
-        layer.borderWidth = 1.5
+        backgroundColor = .clear
+        ring.fillColor = UIColor.clear.cgColor
+        ring.lineWidth = 2
+        outline.fillColor = UIColor.clear.cgColor
+        outline.lineWidth = 1
+        layer.addSublayer(outline)
+        layer.addSublayer(ring)
+        dot.layer.cornerRadius = 7
+        dot.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(dot)
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 21),
-            heightAnchor.constraint(equalToConstant: 21),
-        ])
-        checkView.contentMode = .scaleAspectFit
-        checkView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(checkView)
-        NSLayoutConstraint.activate([
-            checkView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            checkView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            checkView.widthAnchor.constraint(equalToConstant: 10),
-            checkView.heightAnchor.constraint(equalToConstant: 8),
+            widthAnchor.constraint(equalToConstant: 24),
+            heightAnchor.constraint(equalToConstant: 24),
+            dot.centerXAnchor.constraint(equalTo: centerXAnchor),
+            dot.centerYAnchor.constraint(equalTo: centerYAnchor),
+            dot.widthAnchor.constraint(equalToConstant: 14),
+            dot.heightAnchor.constraint(equalToConstant: 14),
         ])
         setSelected(false, theme: theme, animated: false)
     }
 
+    /// Selected state is a 14pt accent dot inside the ring. The indicator itself stays clear.
+    package var selectionDotIsVisible: Bool { dot.alpha > 0.5 }
+    package var selectionDotColor: UIColor? { dot.backgroundColor }
+    package var selectionDotSide: CGFloat { 14 }
+
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        ring.frame = bounds
+        outline.frame = bounds
+        let outlineWidth: CGFloat = showsOutline ? 1 : 0
+        outline.lineWidth = outlineWidth
+        let ringInset = ring.lineWidth / 2 + outlineWidth
+        ring.path = UIBezierPath(ovalIn: bounds.insetBy(dx: ringInset, dy: ringInset)).cgPath
+        let outlineInset = max(outlineWidth / 2, 0.5)
+        outline.path = UIBezierPath(ovalIn: bounds.insetBy(dx: outlineInset, dy: outlineInset)).cgPath
+    }
+
     func setSelected(_ selected: Bool, theme: CheckoutTheme, animated: Bool) {
+        self.theme = theme
         let updates = {
-            if selected {
-                self.backgroundColor = theme.primary
-                self.layer.borderColor = UIColor.clear.cgColor
-                self.checkView.image = EmbeddedAssets.image(named: "check")?
-                    .withRenderingMode(.alwaysTemplate)
-                self.checkView.tintColor = .white
-                self.checkView.alpha = 1
-            } else {
-                self.backgroundColor = .clear
-                self.layer.borderColor = theme.unselectedRing.cgColor
-                self.checkView.alpha = 0
-            }
+            self.showsOutline = selected && theme.filledBrandNeedsOutline
+            self.ring.strokeColor = (selected ? theme.primary : theme.radioIdle).cgColor
+            self.outline.strokeColor = (self.showsOutline ? theme.stateIndicatorBorder : UIColor.clear).cgColor
+            self.dot.backgroundColor = theme.primary
+            self.dot.alpha = selected ? 1 : 0
+            self.setNeedsLayout()
         }
         if animated {
             UIView.animate(withDuration: 0.2, animations: updates)
@@ -152,7 +178,7 @@ final class CheckboxControl: UIControl {
     init(theme: CheckoutTheme) {
         self.theme = theme
         super.init(frame: .zero)
-        box.layer.cornerRadius = 7
+        box.layer.cornerRadius = theme.checkboxRadius
         box.layer.borderWidth = 1.5
         box.isUserInteractionEnabled = false
         box.translatesAutoresizingMaskIntoConstraints = false
@@ -185,10 +211,11 @@ final class CheckboxControl: UIControl {
         let updates = {
             if checked {
                 self.box.backgroundColor = self.theme.primary
-                self.box.layer.borderColor = UIColor.clear.cgColor
+                let outline = self.theme.filledBrandNeedsOutline
+                self.box.layer.borderColor = (outline ? self.theme.stateIndicatorBorder : UIColor.clear).cgColor
                 self.checkView.image = EmbeddedAssets.image(named: "check")?
                     .withRenderingMode(.alwaysTemplate)
-                self.checkView.tintColor = .white
+                self.checkView.tintColor = self.theme.primaryButtonText
                 self.checkView.alpha = 1
             } else {
                 self.box.backgroundColor = .clear
@@ -215,20 +242,23 @@ enum BrandTileStyle {
     case savedCard(brand: String?)
     case addCard
     case collapsedSummary
+    case payWithCard
+    case crypto
 }
 
 final class BrandTileView: UIView {
     private let iconView = UIImageView()
     private var brandIcon: CardBrandIcon?
+    private var cryptoGlyph: UILabel?
 
-    init(theme: CheckoutTheme) {
+    init(theme: CheckoutTheme, size: CGSize = CGSize(width: 48, height: 34)) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = theme.brandTileRadius
         clipsToBounds = true
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: 44),
-            heightAnchor.constraint(equalToConstant: 32),
+            widthAnchor.constraint(equalToConstant: size.width),
+            heightAnchor.constraint(equalToConstant: size.height),
         ])
     }
 
@@ -238,6 +268,8 @@ final class BrandTileView: UIView {
     func apply(style: BrandTileStyle, theme: CheckoutTheme) {
         brandIcon?.removeFromSuperview()
         brandIcon = nil
+        cryptoGlyph?.removeFromSuperview()
+        cryptoGlyph = nil
         iconView.removeFromSuperview()
         layer.shadowOpacity = 0
         layer.borderWidth = 0
@@ -249,6 +281,10 @@ final class BrandTileView: UIView {
             layer.borderWidth = 1
             layer.borderColor = theme.brandTileBorder.cgColor
             clipsToBounds = false
+            layer.shadowColor = UIColor(hex: "#16141A")?.cgColor
+            layer.shadowOpacity = 0.04
+            layer.shadowOffset = CGSize(width: 0, height: 1)
+            layer.shadowRadius = 1
             let icon = CardBrandIcon(size: .savedCardRow)
             icon.setBrand(brand, size: .savedCardRow, visaTint: theme.visaTint)
             brandIcon = icon
@@ -261,7 +297,7 @@ final class BrandTileView: UIView {
             backgroundColor = theme.accentIconBackground
             iconView.image = EmbeddedAssets.image(named: "plus")?
                 .withRenderingMode(.alwaysTemplate)
-            iconView.tintColor = theme.primary
+            iconView.tintColor = theme.iconBrand
             iconView.translatesAutoresizingMaskIntoConstraints = false
             addSubview(iconView)
             NSLayoutConstraint.activate([
@@ -271,33 +307,73 @@ final class BrandTileView: UIView {
                 iconView.heightAnchor.constraint(equalToConstant: 14),
             ])
         case .collapsedSummary:
-            backgroundColor = theme.neutralChip
-            iconView.image = EmbeddedAssets.image(named: "card-stack")?
-                .withRenderingMode(.alwaysTemplate)
-            iconView.tintColor = theme.primaryText.withAlphaComponent(0.5)
-            iconView.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(iconView)
+            backgroundColor = theme.accentIconBackground
+            addCardIcon(theme: theme)
+        case .payWithCard:
+            backgroundColor = theme.accentIconBackground
+            if !theme.isDarkSurface {
+                clipsToBounds = false
+                layer.shadowColor = UIColor(hex: "#16141A")?.cgColor
+                layer.shadowOpacity = 0.04
+                layer.shadowOffset = CGSize(width: 0, height: 1)
+                layer.shadowRadius = 1
+            }
+            addCardIcon(theme: theme)
+        case .crypto:
+            backgroundColor = theme.accentIconBackground
+            let glyph = UILabel()
+            glyph.text = "₿"
+            glyph.font = theme.font(ofSize: 18, weight: .bold)
+            glyph.textColor = theme.iconBrand
+            glyph.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(glyph)
+            cryptoGlyph = glyph
             NSLayoutConstraint.activate([
-                iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
-                iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-                iconView.widthAnchor.constraint(equalToConstant: 18),
-                iconView.heightAnchor.constraint(equalToConstant: 18),
+                glyph.centerXAnchor.constraint(equalTo: centerXAnchor),
+                glyph.centerYAnchor.constraint(equalTo: centerYAnchor),
             ])
         }
+    }
+
+    private func addCardIcon(theme: CheckoutTheme) {
+        iconView.image = EmbeddedAssets.image(named: "card-generic")?
+            .withRenderingMode(.alwaysTemplate)
+        iconView.tintColor = theme.iconBrand
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(iconView)
+        NSLayoutConstraint.activate([
+            iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
+            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 24),
+            iconView.heightAnchor.constraint(equalToConstant: 24),
+        ])
     }
 }
 
 // MARK: - Error row
 
 final class ErrorRowView: UIView {
-    init(message: String, theme: CheckoutTheme) {
+    private let label = UILabel()
+    private let theme: CheckoutTheme
+    private let messageSize: CGFloat
+
+    init(
+        message: String,
+        theme: CheckoutTheme,
+        topInset: CGFloat = 8,
+        leadingInset: CGFloat = 2,
+        badgeWeight: UIFont.Weight = .medium,
+        messageSize: CGFloat = 12
+    ) {
+        self.theme = theme
+        self.messageSize = messageSize
         super.init(frame: .zero)
         let badge = UILabel()
         badge.text = "!"
-        badge.font = theme.font(ofSize: 10, weight: .bold)
+        badge.font = theme.font(ofSize: 10, weight: badgeWeight)
         badge.textColor = .white
         badge.textAlignment = .center
-        badge.backgroundColor = theme.errorText
+        badge.backgroundColor = theme.errorBadge
         badge.layer.cornerRadius = 7.5
         badge.clipsToBounds = true
         badge.translatesAutoresizingMaskIntoConstraints = false
@@ -306,24 +382,31 @@ final class ErrorRowView: UIView {
             badge.heightAnchor.constraint(equalToConstant: 15),
         ])
 
-        let label = UILabel()
-        label.text = message
-        label.font = theme.font(ofSize: 12.5, weight: .semibold)
-        label.textColor = theme.errorText
-        label.numberOfLines = 0
+        setMessage(message)
 
         let stack = UIStackView(arrangedSubviews: [badge, label])
         stack.axis = .horizontal
-        stack.spacing = 6
+        stack.spacing = 8
         stack.alignment = .center
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: topInset),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: leadingInset),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -leadingInset),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+    }
+
+    func setMessage(_ message: String) {
+        theme.style(
+            label,
+            text: message,
+            size: messageSize,
+            weight: .semibold,
+            color: theme.errorText,
+            multiline: true
+        )
     }
 
     @available(*, unavailable)
@@ -343,14 +426,14 @@ final class PoweredByFooterView: UIView {
         logo.contentMode = .scaleAspectFit
         logo.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            logo.heightAnchor.constraint(equalToConstant: 13),
-            logo.widthAnchor.constraint(equalToConstant: 52),
+            logo.heightAnchor.constraint(equalToConstant: 14),
+            logo.widthAnchor.constraint(equalToConstant: 56),
         ])
 
         let stack = UIStackView(arrangedSubviews: [label, logo])
         stack.axis = .horizontal
-        stack.spacing = 6
-        stack.alignment = .center
+        stack.spacing = 8
+        stack.alignment = .bottom
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -362,9 +445,13 @@ final class PoweredByFooterView: UIView {
     }
 
     func apply(theme: CheckoutTheme, locale: String) {
-        label.text = Strings.text("sheet.poweredBy", locale: locale)
-        label.font = theme.font(ofSize: 12, weight: .medium)
-        label.textColor = theme.poweredByText
+        theme.style(
+            label,
+            text: Strings.text("sheet.poweredBy", locale: locale),
+            size: 12,
+            weight: .medium,
+            color: theme.poweredByText
+        )
         logo.tintColor = theme.poweredByLogo
     }
 

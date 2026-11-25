@@ -38,7 +38,7 @@ struct ApplePaySampleView: View {
             publicKey: ExampleSecrets.publicKey,
             card: .init(savedCards: .init(enabled: false)),
             paymentMethods: .init(applePay: .init(enabled: true, appearance: wallet)),
-            options: .init(style: style, appearance: exampleAppearance())
+            options: .init(appearance: exampleAppearance(isDark: theme.isDark))
         )
 
         SampleScaffold(

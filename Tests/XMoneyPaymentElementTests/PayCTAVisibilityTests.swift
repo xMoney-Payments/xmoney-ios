@@ -55,12 +55,7 @@ final class PayCTAVisibilityTests: XCTestCase {
         let config = PaymentConfig(
             publicKey: "pk_test",
             options: .init(
-                appearance: .init(
-                    primaryButton: .init(
-                        colorsLight: .init(background: "#7C4DFF", text: "#FFFFFF"),
-                        borderRadius: 9999
-                    )
-                )
+                appearance: .init(brandColor: .init(hex: "#7C4DFF"))
             )
         )
         let form = PaymentFormView(
@@ -159,10 +154,18 @@ final class PayCTAVisibilityTests: XCTestCase {
         XCTAssertEqual(pay.accessibilityLabel, "Processing...")
         XCTAssertFalse(pay.isEnabled)
 
+        form.setAwaitingCancelCheck(true)
+        XCTAssertEqual(pay.accessibilityLabel, "Please wait...")
+        XCTAssertFalse(pay.isEnabled)
+
         form.setProcessing(false)
         let title = pay.accessibilityLabel ?? pay.titleLabel.text ?? ""
         XCTAssertTrue(title.contains("Pay"), "after charge, title returns to Pay, got \(title)")
         XCTAssertFalse(title.contains("Processing"))
+        XCTAssertFalse(title.contains("Please wait"))
+
+        form.setProcessing(true)
+        XCTAssertEqual(pay.accessibilityLabel, "Processing...")
     }
 
     @MainActor

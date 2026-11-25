@@ -28,7 +28,7 @@ struct MerchantPayButtonSampleView: View {
                 submitButton: .init(visible: false)
             ),
             paymentMethods: .init(applePay: .init(enabled: true, appearance: wallet)),
-            options: .init(style: style, appearance: exampleAppearance())
+            options: .init(appearance: exampleAppearance(isDark: theme.isDark))
         )
 
         SampleScaffold(
@@ -98,7 +98,6 @@ struct MerchantPayButtonSampleView: View {
     }
 
     private func applyLiveTheme(_ configuration: PaymentConfig) {
-        payment?.updateStyle(configuration.options.style)
         payment?.updateWalletAppearance(configuration.paymentMethods.applePay.appearance)
         payment?.updateAppearance(configuration.options.appearance)
     }

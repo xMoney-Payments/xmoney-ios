@@ -32,6 +32,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     private var onLiveConfigChange: (() -> Void)?
     private var onOrderLockChange: ((Bool) -> Void)?
     private var onOrderBound: ((SheetState) -> Void)?
+    private var onAwaitingCancelCheck: (() -> Void)?
     private var initialFailureReported = false
     private(set) var isUpdatingOrder = false {
         didSet { publishOrderLock(oldValue: oldValue || isStaleOrder) }
@@ -41,10 +42,20 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     private(set) var isStaleOrder = false {
         didSet { publishOrderLock(oldValue: isUpdatingOrder || oldValue) }
     }
+    #if DEBUG
+    /// State used when tests mount a form without binding an order.
+    private var previewState: SheetState?
+    #endif
 
     var isOrderLocked: Bool { isUpdatingOrder || isStaleOrder }
 
-    var sheetState: SheetState? { session?.state }
+    var sheetState: SheetState? {
+        #if DEBUG
+        session?.state ?? previewState
+        #else
+        session?.state
+        #endif
+    }
     var boundIntent: PaymentIntent? {
         guard let session, session.isBound else { return nil }
         return session.intent
@@ -53,9 +64,24 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     var isProcessing: Bool { session?.isProcessing ?? false }
     var isOrderConsumed: Bool { session?.isOrderConsumed ?? false }
     var isInteractionEnabled: Bool {
-        guard !isOrderLocked, let session, session.isBound else { return false }
-        return session.isInteractionEnabled
+        if let session {
+            guard !isOrderLocked, session.isBound else { return false }
+            return session.isInteractionEnabled
+        }
+        #if DEBUG
+        return !isOrderLocked && previewState != nil
+        #else
+        return false
+        #endif
     }
+
+    #if DEBUG
+    /// Installs config and state so a form can render without a network bind.
+    func preview(_ state: SheetState) {
+        paymentConfig = liveConfiguration
+        previewState = state
+    }
+    #endif
 
     init(
         configuration: PaymentConfig,
@@ -82,6 +108,10 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         onOrderBound = handler
     }
 
+    func setOnAwaitingCancelCheck(_ handler: (() -> Void)?) {
+        onAwaitingCancelCheck = handler
+    }
+
     func emit(_ event: EmbeddedEvent) {
         onEvent(event)
     }
@@ -102,18 +132,13 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         submitHandler = handler
     }
 
-    func updateAppearance(_ appearance: PaymentConfig.AppearanceConfig) {
+    func updateAppearance(_ appearance: PaymentConfig.Appearance) {
         liveConfiguration.options.appearance = appearance
         publishLiveConfig()
     }
 
     func updateLocale(_ locale: String) {
         liveConfiguration.options.locale = locale
-        publishLiveConfig()
-    }
-
-    func updateStyle(_ style: PaymentConfig.UserInterfaceStyle) {
-        liveConfiguration.options.style = style
         publishLiveConfig()
     }
 
@@ -270,7 +295,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         }
     }
 
-    func payWithCard(_ input: CardInput) {
+    func payWithCard(_ input: CardInput, customerDetails: CustomerDetails?) {
         guard isInteractionEnabled, let session else { return }
 
         let numberInvalid = CardFieldValidators.validateCardNumber(input.number) != nil
@@ -282,17 +307,27 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         emit(.processing(true))
         operationTask?.cancel()
         operationTask = Task { @MainActor in
-            let result = await session.submitNewCard(input, presenter: self)
+            let result = await session.submitNewCard(input, presenter: self, customerDetails: customerDetails)
             self.deliver(result)
         }
     }
 
-    func paySavedCard(_ card: SavedCard) {
+    func paySavedCard(_ card: SavedCard, customerDetails: CustomerDetails?) {
         guard isInteractionEnabled, let session else { return }
         emit(.processing(true))
         operationTask?.cancel()
         operationTask = Task { @MainActor in
-            let result = await session.submitSavedCard(cardId: card.id, presenter: self)
+            let result = await session.submitSavedCard(cardId: card.id, presenter: self, customerDetails: customerDetails)
+            self.deliver(result)
+        }
+    }
+
+    func payWithCrypto(customerDetails: CustomerDetails?) {
+        guard isInteractionEnabled, let session else { return }
+        emit(.processing(true))
+        operationTask?.cancel()
+        operationTask = Task { @MainActor in
+            let result = await session.submitCrypto(presenter: self, customerDetails: customerDetails)
             self.deliver(result)
         }
     }
@@ -314,7 +349,11 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         let locale = paymentConfig?.options.locale ?? liveConfiguration.options.locale
         let session = ThreeDSSafariController(locale: locale)
         threeDSSession = session
-        return await session.present(url: url, from: topViewController())
+        let end = await session.present(url: url, from: topViewController())
+        if case .userCanceled = end {
+            onAwaitingCancelCheck?()
+        }
+        return end
     }
 
     func dismissThreeDS() {

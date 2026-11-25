@@ -6,17 +6,20 @@ public struct PaymentConfig: Sendable {
     public let publicKey: String
     public var card: CardConfig
     public var paymentMethods: PaymentMethodsConfig
+    public var customerDetails: CustomerDetailsConfig
     public var options: OptionsConfig
 
     public init(
         publicKey: String,
         card: CardConfig = .init(),
         paymentMethods: PaymentMethodsConfig = .init(),
+        customerDetails: CustomerDetailsConfig = .init(),
         options: OptionsConfig = .init()
     ) {
         self.publicKey = publicKey
         self.card = card
         self.paymentMethods = paymentMethods
+        self.customerDetails = customerDetails
         self.options = options
     }
 }
@@ -93,11 +96,94 @@ public extension PaymentConfig {
         case book, buy, checkout, donate, order, pay, subscribe, topUp, deposit
     }
 
+    /// When a method is enabled, checkout asks `/inline-checkout/fields` which
+    /// shopper fields to collect, unless ``fields`` is set. That override replaces
+    /// the server list and is not merged with it. ``defaultValues`` prefills the
+    /// card form only. Card payments stay blocked until those fields are valid.
+    /// Apple Pay asks the wallet for the same sections and sends whatever comes back.
+    public struct CustomerDetailsConfig: Equatable, Sendable {
+        public var card: Bool
+        public var applePay: Bool
+        /// Replaces `/inline-checkout/fields` when set. A flag left off is not collected.
+        public var fields: Fields?
+        /// Prefills the card form. Apple Pay does not use these values.
+        public var defaultValues: DefaultValues?
+
+        public init(
+            card: Bool = false,
+            applePay: Bool = false,
+            fields: Fields? = nil,
+            defaultValues: DefaultValues? = nil
+        ) {
+            self.card = card
+            self.applePay = applePay
+            self.fields = fields
+            self.defaultValues = defaultValues
+        }
+
+        public var isAnyEnabled: Bool { card || applePay }
+
+        /// Which blocks to collect. Missing flags are off.
+        public struct Fields: Equatable, Sendable {
+            public var fullName: Bool
+            public var email: Bool
+            public var phone: Bool
+            public var address: Bool
+
+            public init(
+                fullName: Bool = false,
+                email: Bool = false,
+                phone: Bool = false,
+                address: Bool = false
+            ) {
+                self.fullName = fullName
+                self.email = email
+                self.phone = phone
+                self.address = address
+            }
+        }
+
+        /// Values written into the card form before the shopper edits it.
+        /// Blank text and values that are not in the country, region, or phone lists are ignored.
+        public struct DefaultValues: Equatable, Sendable {
+            public var fullName: String?
+            public var email: String?
+            public var phone: String?
+            public var country: String?
+            public var region: String?
+            public var city: String?
+            public var postalCode: String?
+            public var address: String?
+
+            public init(
+                fullName: String? = nil,
+                email: String? = nil,
+                phone: String? = nil,
+                country: String? = nil,
+                region: String? = nil,
+                city: String? = nil,
+                postalCode: String? = nil,
+                address: String? = nil
+            ) {
+                self.fullName = fullName
+                self.email = email
+                self.phone = phone
+                self.country = country
+                self.region = region
+                self.city = city
+                self.postalCode = postalCode
+                self.address = address
+            }
+        }
+    }
+
     struct PaymentMethodsConfig: Equatable, Sendable {
         public var applePay: ApplePayConfig
+        public var crypto: CryptoConfig
 
-        public init(applePay: ApplePayConfig = .init()) {
+        public init(applePay: ApplePayConfig = .init(), crypto: CryptoConfig = .init()) {
             self.applePay = applePay
+            self.crypto = crypto
         }
     }
 
@@ -108,6 +194,15 @@ public extension PaymentConfig {
         public init(enabled: Bool = false, appearance: WalletAppearance = .init()) {
             self.enabled = enabled
             self.appearance = appearance
+        }
+    }
+
+    /// Shows the "Pay with crypto" option. Continue redirects the shopper to a secure page to complete the payment.
+    struct CryptoConfig: Equatable, Sendable {
+        public var enabled: Bool
+
+        public init(enabled: Bool = false) {
+            self.enabled = enabled
         }
     }
 
@@ -166,213 +261,15 @@ public extension PaymentConfig {
 
     struct OptionsConfig: Equatable, Sendable {
         public var locale: String
-        public var style: UserInterfaceStyle
-        public var appearance: AppearanceConfig
+        public var appearance: Appearance
 
         public init(
             locale: String = "en-US",
-            style: UserInterfaceStyle = .automatic,
-            appearance: AppearanceConfig = .init()
+            appearance: Appearance = .init()
         ) {
             self.locale = locale
-            self.style = style
             self.appearance = appearance
         }
     }
-
-    enum UserInterfaceStyle: String, Equatable, Sendable {
-        case automatic
-        case alwaysLight
-        case alwaysDark
-    }
-
-    struct AppearanceConfig: Equatable, Sendable {
-        public var fontFamily: String?
-        public var fontScale: Double?
-        public var colors: AppearanceColors?
-        public var colorsLight: AppearanceColors?
-        public var colorsDark: AppearanceColors?
-        public var borderRadius: Double?
-        public var borderWidth: Double?
-        public var primaryButton: PrimaryButtonConfig?
-
-        public init(
-            fontFamily: String? = nil,
-            fontScale: Double? = nil,
-            colors: AppearanceColors? = nil,
-            colorsLight: AppearanceColors? = nil,
-            colorsDark: AppearanceColors? = nil,
-            borderRadius: Double? = nil,
-            borderWidth: Double? = nil,
-            primaryButton: PrimaryButtonConfig? = nil
-        ) {
-            self.fontFamily = fontFamily
-            self.fontScale = fontScale
-            self.colors = colors
-            self.colorsLight = colorsLight
-            self.colorsDark = colorsDark
-            self.borderRadius = borderRadius
-            self.borderWidth = borderWidth
-            self.primaryButton = primaryButton
-        }
-
-        public static func from(_ dict: [String: Any]?) -> AppearanceConfig {
-            guard let dict else { return AppearanceConfig() }
-            let font = appearanceDictionary(dict["font"])
-            let shapes = appearanceDictionary(dict["shapes"])
-            return AppearanceConfig(
-                fontFamily: font?["family"] as? String,
-                fontScale: appearanceDouble(font?["scale"]),
-                colors: AppearanceColors.from(appearanceDictionary(dict["colors"])),
-                colorsLight: AppearanceColors.from(appearanceDictionary(dict["colorsLight"])),
-                colorsDark: AppearanceColors.from(appearanceDictionary(dict["colorsDark"])),
-                borderRadius: appearanceDouble(shapes?["borderRadius"]),
-                borderWidth: appearanceDouble(shapes?["borderWidth"]),
-                primaryButton: PrimaryButtonConfig.from(appearanceDictionary(dict["primaryButton"]))
-            )
-        }
-    }
-
-    struct AppearanceColors: Equatable, Sendable {
-        public var primary: String?
-        public var background: String?
-        public var componentBackground: String?
-        public var componentBorder: String?
-        public var componentDivider: String?
-        public var primaryText: String?
-        public var secondaryText: String?
-        public var componentText: String?
-        public var placeholderText: String?
-        public var icon: String?
-        public var error: String?
-        public var containerBorder: String?
-
-        public init(
-            primary: String? = nil,
-            background: String? = nil,
-            componentBackground: String? = nil,
-            componentBorder: String? = nil,
-            componentDivider: String? = nil,
-            primaryText: String? = nil,
-            secondaryText: String? = nil,
-            componentText: String? = nil,
-            placeholderText: String? = nil,
-            icon: String? = nil,
-            error: String? = nil,
-            containerBorder: String? = nil
-        ) {
-            self.primary = primary
-            self.background = background
-            self.componentBackground = componentBackground
-            self.componentBorder = componentBorder
-            self.componentDivider = componentDivider
-            self.primaryText = primaryText
-            self.secondaryText = secondaryText
-            self.componentText = componentText
-            self.placeholderText = placeholderText
-            self.icon = icon
-            self.error = error
-            self.containerBorder = containerBorder
-        }
-
-        public static func from(_ dict: [String: Any]?) -> AppearanceColors? {
-            guard let dict else { return nil }
-            return AppearanceColors(
-                primary: dict["primary"] as? String,
-                background: dict["background"] as? String,
-                componentBackground: dict["componentBackground"] as? String,
-                componentBorder: dict["componentBorder"] as? String,
-                componentDivider: dict["componentDivider"] as? String,
-                primaryText: dict["primaryText"] as? String,
-                secondaryText: dict["secondaryText"] as? String,
-                componentText: dict["componentText"] as? String,
-                placeholderText: dict["placeholderText"] as? String,
-                icon: dict["icon"] as? String,
-                error: dict["error"] as? String,
-                containerBorder: dict["containerBorder"] as? String
-            )
-        }
-    }
-
-    struct PrimaryButtonConfig: Equatable, Sendable {
-        public var fontFamily: String?
-        public var colors: PrimaryButtonColors?
-        public var colorsLight: PrimaryButtonColors?
-        public var colorsDark: PrimaryButtonColors?
-        public var borderRadius: Double?
-        public var borderWidth: Double?
-
-        public init(
-            fontFamily: String? = nil,
-            colors: PrimaryButtonColors? = nil,
-            colorsLight: PrimaryButtonColors? = nil,
-            colorsDark: PrimaryButtonColors? = nil,
-            borderRadius: Double? = nil,
-            borderWidth: Double? = nil
-        ) {
-            self.fontFamily = fontFamily
-            self.colors = colors
-            self.colorsLight = colorsLight
-            self.colorsDark = colorsDark
-            self.borderRadius = borderRadius
-            self.borderWidth = borderWidth
-        }
-
-        public static func from(_ dict: [String: Any]?) -> PrimaryButtonConfig? {
-            guard let dict else { return nil }
-            let shapes = appearanceDictionary(dict["shapes"])
-            let font = appearanceDictionary(dict["font"])
-            return PrimaryButtonConfig(
-                fontFamily: font?["family"] as? String,
-                colors: PrimaryButtonColors.from(appearanceDictionary(dict["colors"])),
-                colorsLight: PrimaryButtonColors.from(appearanceDictionary(dict["colorsLight"])),
-                colorsDark: PrimaryButtonColors.from(appearanceDictionary(dict["colorsDark"])),
-                borderRadius: appearanceDouble(shapes?["borderRadius"]),
-                borderWidth: appearanceDouble(shapes?["borderWidth"])
-            )
-        }
-    }
-
-    struct PrimaryButtonColors: Equatable, Sendable {
-        public var background: String?
-        public var text: String?
-        public var border: String?
-
-        public init(background: String? = nil, text: String? = nil, border: String? = nil) {
-            self.background = background
-            self.text = text
-            self.border = border
-        }
-
-        public static func from(_ dict: [String: Any]?) -> PrimaryButtonColors? {
-            guard let dict else { return nil }
-            return PrimaryButtonColors(
-                background: dict["background"] as? String,
-                text: dict["text"] as? String,
-                border: dict["border"] as? String
-            )
-        }
-    }
 }
 
-private func appearanceDictionary(_ value: Any?) -> [String: Any]? {
-    guard let dict = value as? NSDictionary else { return nil }
-    var result: [String: Any] = [:]
-    dict.enumerateKeysAndObjects { key, object, _ in
-        guard let key = key as? String else { return }
-        result[key] = object
-    }
-    return result
-}
-
-private func appearanceDouble(_ value: Any?) -> Double? {
-    guard let value, !(value is NSNull) else { return nil }
-    if let number = value as? NSNumber {
-        if CFGetTypeID(number) == CFBooleanGetTypeID() { return nil }
-        return number.doubleValue
-    }
-    if let double = value as? Double { return double }
-    if let int = value as? Int { return Double(int) }
-    if let float = value as? Float { return Double(float) }
-    return nil
-}

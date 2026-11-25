@@ -13,6 +13,7 @@ package final class PayCTAButton: UIView {
     private var heightConstraint: NSLayoutConstraint?
     private var requestedRadius: CGFloat = 12
     private var paintedFill: UIColor = .black
+    private var pressedFill: UIColor = .black
 
     package var onTap: (() -> Void)?
     package var isEnabled = true {
@@ -54,8 +55,8 @@ package final class PayCTAButton: UIView {
         NSLayoutConstraint.activate([
             height,
             titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
-            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 16),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
+            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 24),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -24),
             centerX,
             coinMarkContainer.trailingAnchor.constraint(equalTo: titleLabel.leadingAnchor, constant: -12),
             coinMarkContainer.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -72,13 +73,32 @@ package final class PayCTAButton: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+    package override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        guard isEnabled else { return }
+        fillLayer.fillColor = pressedFill.cgColor
+    }
+
+    package override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesEnded(touches, with: event)
+        fillLayer.fillColor = paintedFill.cgColor
+    }
+
+    package override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesCancelled(touches, with: event)
+        fillLayer.fillColor = paintedFill.cgColor
+    }
+
     package override func layoutSubviews() {
         super.layoutSubviews()
         updateFillPath()
     }
 
     package func apply(theme: CheckoutTheme, title: String, processing: Bool, enabled: Bool) {
-        paintedFill = theme.primaryButtonBackground
+        let resting = processing || enabled
+        let titleColor = resting ? theme.primaryButtonText : theme.primaryButtonDisabledText
+        paintedFill = resting ? theme.primaryButtonBackground : theme.primaryButtonDisabledBackground
+        pressedFill = theme.primaryButtonPressed
         requestedRadius = theme.primaryButtonBorderRadius
         heightConstraint?.constant = theme.payButtonHeight
         fillLayer.fillColor = paintedFill.cgColor
@@ -88,35 +108,43 @@ package final class PayCTAButton: UIView {
 
         titleLabel.isHidden = false
         titleLabel.text = title
-        titleLabel.textColor = theme.primaryButtonText
-        titleLabel.font = theme.payFont(ofSize: 16, weight: .semibold)
-        let tracking = -0.01 * 16 * theme.fontScale
+        titleLabel.textColor = titleColor
+        titleLabel.font = theme.payFont(ofSize: 18, weight: .semibold)
         titleLabel.attributedText = NSAttributedString(
             string: title,
-            attributes: [
-                .font: theme.payFont(ofSize: 16, weight: .semibold),
-                .foregroundColor: theme.primaryButtonText,
-                .kern: tracking,
-            ]
+            attributes: theme.titleAttributes(
+                size: 18,
+                weight: .semibold,
+                color: titleColor,
+                alignment: .center,
+                family: theme.primaryButtonFontFamily
+            )
         )
         titleCenterX?.constant = processing ? 12 : 0
         accessibilityLabel = title
 
         isEnabled = enabled && !processing
         if processing {
-            alpha = 0.9
+            alpha = 1
+            fillLayer.fillColor = theme.primaryButtonBackground.cgColor
+            titleLabel.textColor = theme.primaryButtonText
             layer.shadowOpacity = 0
             showCoinMark(color: theme.primaryButtonText)
         } else if enabled {
             alpha = 1
-            layer.shadowColor = UIColor(red: 124 / 255, green: 77 / 255, blue: 255 / 255, alpha: 1).cgColor
-            layer.shadowOpacity = 0.30
+            fillLayer.fillColor = theme.primaryButtonBackground.cgColor
+            var shadowAlpha: CGFloat = 0
+            theme.brandShadow.getRed(nil, green: nil, blue: nil, alpha: &shadowAlpha)
+            layer.shadowColor = theme.primary.cgColor
+            layer.shadowOpacity = Float(shadowAlpha)
             layer.shadowOffset = CGSize(width: 0, height: 8)
             layer.shadowRadius = 12
             layer.masksToBounds = false
             hideCoinMark()
         } else {
-            alpha = 0.5
+            alpha = 1
+            fillLayer.fillColor = paintedFill.cgColor
+            titleLabel.textColor = titleColor
             layer.shadowOpacity = 0
             hideCoinMark()
         }

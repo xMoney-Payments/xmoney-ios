@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Appearance is now `PaymentConfig.Appearance`: `brandColor`, `accentColor`, `backgroundColor`, `neutralTint`, `overrides`, `typography.fontFamily`, `borders.width`, `shape` (`corners`, `pillButtons`), and `colorScheme`. Removed: `colors`, `colorsLight`, `colorsDark`, `shapes`, `primaryButton`, `font.scale`, `options.style`, and `updateStyle`. An empty appearance is the built-in light and dark themes. The methods container radius defaults to 24. Overrides are painted as sent; a debug build logs a contrast problem and does not change the color.
+- The save-card checkbox starts unchecked.
+
+### Added
+
+- `PaymentConfig.customerDetails` collects shopper details for card and Apple Pay. The field list comes from the account, or from `fields` when set. `defaultValues` prefills the card form. Card, saved-card, and crypto Pay stay blocked until the details are valid when `customerDetails.card` is on. A new order rechecks an open details page. Apple Pay requests the matching contact fields. A missing required field fails with `PaymentError.invalidCustomerDetails`. Embedded `PaymentElement` shows the page in place and reports the new height through `onContentSizeChange`.
+- `PaymentConfig.paymentMethods.crypto`. Off unless enabled. Continue opens the hosted page; closing that page consumes the order.
+
+### Fixed
+
+- In dark mode, the remove-card prompt's "Keep it" button shows its label again.
+
 ## [1.1.1] - 2026-11-18
 
 ### Fixed

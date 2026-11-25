@@ -1,5 +1,8 @@
 import UIKit
 import SwiftUI
+#if DEBUG
+import OSLog
+#endif
 #if canImport(XMoneyCore)
 import XMoneyCore
 #endif
@@ -11,6 +14,9 @@ public final class PaymentElement: UIView {
     private var loader: XCoinFlipLoaderView?
     private var failureLabel: UILabel?
     private var formView: PaymentFormView?
+    private var formConstraints: [NSLayoutConstraint] = []
+    private var personalDetails: PersonalDetailsViewController?
+    private var personalDetailsConstraints: [NSLayoutConstraint] = []
     private var readyEmitted = false
     private var revealTask: Task<Void, Never>?
     /// The form is rendered under the cover but the Element is not in a window,
@@ -38,6 +44,9 @@ public final class PaymentElement: UIView {
         }
         payment._controller.setOnOrderBound { [weak self] state in
             self?.orderBound(state)
+        }
+        payment._controller.setOnAwaitingCancelCheck { [weak self] in
+            self?.formView?.setAwaitingCancelCheck(true)
         }
         setupLoader()
     }
@@ -134,7 +143,7 @@ public final class PaymentElement: UIView {
     }
 
     @MainActor
-    public func updateAppearance(_ appearance: PaymentConfig.AppearanceConfig) {
+    public func updateAppearance(_ appearance: PaymentConfig.Appearance) {
         payment.updateAppearance(appearance)
     }
 
@@ -144,18 +153,15 @@ public final class PaymentElement: UIView {
     }
 
     @MainActor
-    public func updateStyle(_ style: PaymentConfig.UserInterfaceStyle) {
-        payment.updateStyle(style)
-    }
-
-    @MainActor
     public func updateWalletAppearance(_ appearance: PaymentConfig.WalletAppearance) {
         payment.updateWalletAppearance(appearance)
     }
 
     /// Submit the currently selected method (new card or saved card).
     /// Use with `SubmitButtonConfig.visible = false` so the merchant owns the Pay CTA.
-    /// No-op while `isInteractionEnabled` is false.
+    /// No-op while `isInteractionEnabled` is false. An open personal-details page is
+    /// validated first: errors stay on that page, and a valid page is saved and paid.
+    /// The in-page Continue button only saves and returns.
     @MainActor
     public func confirm() {
         payment.confirm()
@@ -188,6 +194,15 @@ public final class PaymentElement: UIView {
     }
 
     private func orderBound(_ state: SheetState) {
+        if personalDetails != nil {
+            preserveOpenDetails()
+            detachPersonalDetails(refreshRow: false)
+            formView?.update(state: state)
+            if state.customerDetailsVisibility.isActive {
+                presentInlineDetails()
+            }
+            return
+        }
         if let formView {
             formView.update(state: state)
         } else if !loaderHost.isHidden {
@@ -279,6 +294,9 @@ public final class PaymentElement: UIView {
         } else if pendingReveal {
             startRevealTask()
         }
+        guard let personalDetails, personalDetails.parent == nil, let parent = nearestViewController() else { return }
+        parent.addChild(personalDetails)
+        personalDetails.didMove(toParent: parent)
     }
 
     private func setupLoader() {
@@ -303,8 +321,11 @@ public final class PaymentElement: UIView {
         revealTask?.cancel()
         revealTask = nil
         pendingReveal = false
+        preserveOpenDetails()
+        detachPersonalDetails(refreshRow: false)
         formView?.removeFromSuperview()
         formView = nil
+        formConstraints = []
         loaderHost.isHidden = false
         failureLabel?.removeFromSuperview()
         failureLabel = nil
@@ -354,13 +375,8 @@ public final class PaymentElement: UIView {
         label.adjustsFontForContentSizeCategory = true
         label.accessibilityTraits = .staticText
         label.text = Strings.text("element.loadFailed", locale: locale)
-        if let config {
-            let theme = CheckoutTheme.resolve(
-                config: config,
-                isDark: UIHelpers.isDarkMode(config: config, traitCollection: traitCollection)
-            )
-            label.textColor = theme.text
-            loaderHost.backgroundColor = theme.background
+        if controller.paymentConfig != nil {
+            applyFailureChrome(to: label)
         } else {
             label.textColor = .label
         }
@@ -377,7 +393,37 @@ public final class PaymentElement: UIView {
         }
     }
 
+    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard let label = failureLabel,
+              UIHelpers.traitsAffectingThemeChanged(traitCollection, from: previousTraitCollection) else { return }
+        applyFailureChrome(to: label)
+    }
+
+    private func applyFailureChrome(to label: UILabel) {
+        guard let config = controller.paymentConfig else { return }
+        let theme = CheckoutTheme.resolve(
+            config: config,
+            isDark: UIHelpers.isDarkMode(config: config, traitCollection: traitCollection),
+            contentSizeScale: UIHelpers.contentSizeScale(traitCollection),
+            increasedContrast: UIHelpers.increasedContrast(traitCollection)
+        )
+        label.textColor = theme.sheetText
+        loaderHost.backgroundColor = theme.background
+    }
+
+    #if DEBUG
+    /// Mounts the form from the controller's current config and state. Tests use this with a preview state.
+    package func mountPreview() {
+        renderForm()
+        revealIfNeeded()
+    }
+    #endif
+
     private func renderForm() {
+        let reopenDetails = personalDetails != nil
+        preserveOpenDetails()
+        detachPersonalDetails(refreshRow: false)
         guard let config = controller.paymentConfig, let state = controller.sheetState else { return }
 
         revealTask?.cancel()
@@ -386,13 +432,25 @@ public final class PaymentElement: UIView {
         failureLabel?.removeFromSuperview()
         failureLabel = nil
         installLoaderIfNeeded()
+        #if DEBUG
+        let visibility = state.customerDetailsVisibility
+        Logger(subsystem: "com.xmoney.paymentsheet", category: "customer-details").debug(
+            "renderForm card=\(config.customerDetails.card, privacy: .public) applePay=\(config.customerDetails.applePay, privacy: .public) name=\(visibility.showFullName, privacy: .public) email=\(visibility.showEmail, privacy: .public) phone=\(visibility.showPhone, privacy: .public) address=\(visibility.showAddressSection, privacy: .public)"
+        )
+        #endif
         let form = PaymentFormView(config: config, state: state)
         form.translatesAutoresizingMaskIntoConstraints = false
-        form.onPayCard = { [weak self] input in
-            self?.payment._controller.payWithCard(input)
+        form.onPayCard = { [weak self] input, details in
+            self?.payment._controller.payWithCard(input, customerDetails: details)
         }
-        form.onSelectSaved = { [weak self] card in
-            self?.payment._controller.paySavedCard(card)
+        form.onSelectSaved = { [weak self] card, details in
+            self?.payment._controller.paySavedCard(card, customerDetails: details)
+        }
+        form.onPayCrypto = { [weak self] details in
+            self?.payment._controller.payWithCrypto(customerDetails: details)
+        }
+        form.onOpenPersonalDetails = { [weak self] in
+            self?.showPersonalDetails()
         }
         form.onDeleteSaved = { [weak self] card in
             try await self?.payment._controller.deleteSavedCardAndReload(card)
@@ -407,7 +465,11 @@ public final class PaymentElement: UIView {
             self?.invalidateIntrinsicContentSize()
             self?.onContentSizeChange?()
         }
-        controller.bindSubmitHandler { [weak form] in
+        controller.bindSubmitHandler { [weak self, weak form] in
+            guard let self else { return }
+            if let personalDetails = self.personalDetails, !personalDetails.commitIfValid() {
+                return
+            }
             form?.confirm()
         }
         form.setProcessing(controller.isProcessing)
@@ -416,12 +478,14 @@ public final class PaymentElement: UIView {
         form.accessibilityElementsHidden = true
         overrideUserInterfaceStyle = UIHelpers.overrideStyle(for: config)
         addSubview(form)
-        NSLayoutConstraint.activate([
+        let constraints = [
             form.topAnchor.constraint(equalTo: topAnchor),
             form.leadingAnchor.constraint(equalTo: leadingAnchor),
             form.trailingAnchor.constraint(equalTo: trailingAnchor),
             form.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
+        ]
+        NSLayoutConstraint.activate(constraints)
+        formConstraints = constraints
         formView = form
         bringSubviewToFront(loaderHost)
         let theme = CheckoutTheme.resolve(
@@ -430,6 +494,9 @@ public final class PaymentElement: UIView {
         )
         loaderHost.backgroundColor = theme.background
         loaderHost.isHidden = false
+        if reopenDetails {
+            presentInlineDetails()
+        }
         invalidateIntrinsicContentSize()
         setNeedsLayout()
         onContentSizeChange?()
@@ -442,7 +509,7 @@ public final class PaymentElement: UIView {
         loader = nil
         loaderHost.backgroundColor = .clear
         loaderHost.isHidden = true
-        UIAccessibility.post(notification: .layoutChanged, argument: formView)
+        UIAccessibility.post(notification: .layoutChanged, argument: personalDetails?.view ?? formView)
     }
 
     /// Reveals the drawn form and emits `.ready` once per mounted Element.
@@ -489,15 +556,112 @@ public final class PaymentElement: UIView {
         guard let config = payment._controller.paymentConfig else { return }
         overrideUserInterfaceStyle = UIHelpers.overrideStyle(for: config)
         formView?.applyConfig(config)
+        if personalDetails != nil {
+            preserveOpenDetails()
+            detachPersonalDetails(refreshRow: false)
+            presentInlineDetails()
+        }
         invalidateIntrinsicContentSize()
         onContentSizeChange?()
     }
 
     public override var intrinsicContentSize: CGSize {
+        if let personalDetails {
+            return CGSize(width: UIView.noIntrinsicMetric, height: max(personalDetails.contentHeight, 160))
+        }
         if let formView {
             return CGSize(width: UIView.noIntrinsicMetric, height: max(formView.contentHeight, 160))
         }
         return CGSize(width: UIView.noIntrinsicMetric, height: 160)
+    }
+
+    private func showPersonalDetails() {
+        guard personalDetails == nil, payment.isInteractionEnabled else { return }
+        presentInlineDetails()
+    }
+
+    private func presentInlineDetails() {
+        guard personalDetails == nil else { return }
+        guard let config = payment._controller.paymentConfig,
+              let state = payment._controller.sheetState else { return }
+        let details = PersonalDetailsFlow.make(
+            config: config,
+            visibility: state.customerDetailsVisibility,
+            progress: state.personalDetails,
+            presentation: .inline,
+            onFinished: { [weak self] in
+                self?.detachPersonalDetails(refreshRow: true)
+            }
+        )
+        details.onContentSizeChange = { [weak self] in
+            self?.invalidateIntrinsicContentSize()
+            self?.onContentSizeChange?()
+        }
+        attach(details)
+    }
+
+    private func attach(_ details: PersonalDetailsViewController) {
+        if let parent = nearestViewController() {
+            parent.addChild(details)
+        }
+        details.view.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.deactivate(formConstraints)
+        formView?.removeFromSuperview()
+        addSubview(details.view)
+        let constraints = [
+            details.view.topAnchor.constraint(equalTo: topAnchor),
+            details.view.leadingAnchor.constraint(equalTo: leadingAnchor),
+            details.view.trailingAnchor.constraint(equalTo: trailingAnchor),
+            details.view.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ]
+        NSLayoutConstraint.activate(constraints)
+        personalDetailsConstraints = constraints
+        if details.parent != nil {
+            details.didMove(toParent: details.parent)
+        }
+        personalDetails = details
+        let width = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width
+        details.prepareForPresentation(width: width)
+        invalidateIntrinsicContentSize()
+        onContentSizeChange?()
+    }
+
+    private func detachPersonalDetails(refreshRow: Bool) {
+        guard let details = personalDetails else { return }
+        endEditing(true)
+        details.willMove(toParent: nil)
+        NSLayoutConstraint.deactivate(personalDetailsConstraints)
+        personalDetailsConstraints.removeAll()
+        details.view.removeFromSuperview()
+        details.removeFromParent()
+        personalDetails = nil
+        if let formView {
+            addSubview(formView)
+            NSLayoutConstraint.activate(formConstraints)
+        }
+        if refreshRow {
+            formView?.refreshPersonalDetailsRow()
+        }
+        invalidateIntrinsicContentSize()
+        onContentSizeChange?()
+    }
+
+    /// Applies the Back rules before a rebuild. A valid edit stays committed; an invalid one does not.
+    private func preserveOpenDetails() {
+        guard let personalDetails, let state = payment._controller.sheetState else { return }
+        state.personalDetails.leave(
+            with: personalDetails.currentValues(),
+            visibility: state.customerDetailsVisibility
+        )
+    }
+
+    private func nearestViewController() -> UIViewController? {
+        var responder: UIResponder? = self
+        while let current = responder {
+            if let controller = current as? UIViewController { return controller }
+            responder = current.next
+        }
+        return nil
     }
 }
 
@@ -526,12 +690,16 @@ public struct PaymentElementView: UIViewRepresentable {
             }
         }
         coordinator.element = element
+        coordinator.payment = payment
         coordinator.bind(intent: intent, key: orderKey, origin: .surfaceMount, to: element)
         return element
     }
 
     public func updateUIView(_ uiView: PaymentElement, context: Context) {
         context.coordinator.onEvent = onEvent
+        if let bound = context.coordinator.payment, bound !== payment {
+            assertionFailure("PaymentElementView kept its element after EmbeddedPayment was replaced.")
+        }
         let key = orderKey
         guard context.coordinator.lastOrderKey != key else { return }
         context.coordinator.bind(intent: intent, key: key, origin: .surfaceUpdate, to: uiView)
@@ -568,6 +736,7 @@ public struct PaymentElementView: UIViewRepresentable {
 
     public final class Coordinator {
         var element: PaymentElement?
+        var payment: EmbeddedPayment?
         /// The last intent handed to the Element. Kept after a failed bind so a
         /// re-render does not retry; only a new intent (or a pending retry) rebinds.
         var lastOrderKey: String?

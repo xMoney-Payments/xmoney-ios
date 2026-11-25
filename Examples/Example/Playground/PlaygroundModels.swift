@@ -72,13 +72,13 @@ let playgroundWalletTypeOptions = [
 let playgroundFontFamilyOptions = [
     DemoOption(label: "Default (Roobert)", value: ""),
     DemoOption(label: "Georgia", value: "Georgia"),
-    DemoOption(label: "Courier New", value: "CourierNewPSMT"),
-    DemoOption(label: "Avenir Next", value: "AvenirNext-Regular"),
-    DemoOption(label: "Helvetica Neue", value: "HelveticaNeue"),
+    DemoOption(label: "Courier New", value: "Courier New"),
+    DemoOption(label: "Avenir Next", value: "Avenir Next"),
+    DemoOption(label: "Helvetica Neue", value: "Helvetica Neue"),
 ]
 
-func playgroundStyle(_ value: String) -> PaymentConfig.UserInterfaceStyle {
-    PaymentConfig.UserInterfaceStyle(rawValue: value) ?? .automatic
+func playgroundStyle(_ value: String) -> PaymentConfig.ColorSchemePreference {
+    PaymentConfig.ColorSchemePreference.from(value)
 }
 
 func playgroundValidation(_ value: String) -> PaymentConfig.ValidationMode {
@@ -101,91 +101,52 @@ struct AppearancePreset: Identifiable {
     let id: String
     let label: String
     let description: String
-    let appearance: PaymentConfig.AppearanceConfig
+    let appearance: PaymentConfig.Appearance
+}
+
+private func themePair(_ light: String, _ dark: String) -> PaymentConfig.ThemeColor {
+    PaymentConfig.ThemeColor(light: light, dark: dark)!
 }
 
 enum AppearancePresets {
     static let all: [AppearancePreset] = [
-        AppearancePreset(id: "example", label: "Example chrome", description: "Matches this app", appearance: exampleAppearance()),
-        AppearancePreset(id: "default", label: "Default", description: "SDK defaults", appearance: .init()),
+        AppearancePreset(id: "default", label: "xMoney", description: "Built-in light and dark", appearance: .init()),
         AppearancePreset(
-            id: "night",
-            label: "Night",
-            description: "Dark surfaces, indigo accent",
-            appearance: PaymentConfig.AppearanceConfig(
-                colors: PaymentConfig.AppearanceColors(
-                    primary: "#818CF8",
-                    background: "#0B0B0F",
-                    componentBackground: "#16161D",
-                    componentBorder: "#2E2E3A",
-                    componentDivider: "#2E2E3A",
-                    primaryText: "#F4F4F8",
-                    secondaryText: "#A8A8B8",
-                    componentText: "#E8E8F0",
-                    placeholderText: "#6E6E80",
-                    icon: "#A8A8B8",
-                    error: "#F87171"
-                ),
-                borderRadius: 12,
-                borderWidth: 1,
-                primaryButton: .init(
-                    colors: .init(background: "#6366F1", text: "#FFFFFF"),
-                    borderRadius: 12
-                )
+            id: "sharp_blue",
+            label: "Sharp blue",
+            description: "Square corners, blue brand in both modes",
+            appearance: .init(brandColor: themePair("#1D4ED8", "#436CDF"), shape: .init(corners: .sharp, pillButtons: false))
+        ),
+        AppearancePreset(
+            id: "rounded_teal",
+            label: "Rounded teal",
+            description: "Rounded corners, teal brand in both modes",
+            appearance: .init(brandColor: themePair("#0F766E", "#0F766E"), shape: .init(corners: .rounded))
+        ),
+        AppearancePreset(
+            id: "yellow",
+            label: "Yellow",
+            description: "Yellow brand in both modes",
+            appearance: .init(brandColor: themePair("#FACC15", "#FACC15"))
+        ),
+        AppearancePreset(
+            id: "black",
+            label: "Black",
+            description: "Black on a light sheet, white on the lifted black sheet",
+            appearance: .init(
+                brandColor: themePair("#111111", "#FFFFFF"),
+                backgroundColor: themePair("#F4F4F5", "#000000"),
+                neutralTint: themePair("#6B7280", "#7B909A")
             )
         ),
         AppearancePreset(
-            id: "soft_light",
-            label: "Soft light",
-            description: "Warm paper, soft teal",
-            appearance: PaymentConfig.AppearanceConfig(
-                colors: PaymentConfig.AppearanceColors(
-                    primary: "#0E7C66",
-                    background: "#F7F3EC",
-                    componentBackground: "#FFFBF5",
-                    componentBorder: "#D9D0C3",
-                    componentDivider: "#E8DFD2",
-                    primaryText: "#14202B",
-                    secondaryText: "#5C6B78",
-                    componentText: "#14202B",
-                    placeholderText: "#8A96A1",
-                    icon: "#5C6B78",
-                    error: "#B42318",
-                    containerBorder: "none"
-                ),
-                borderRadius: 14,
-                borderWidth: 1,
-                primaryButton: .init(
-                    colors: .init(background: "#0E7C66", text: "#FFFFFF"),
-                    borderRadius: 14
-                )
-            )
-        ),
-        AppearancePreset(
-            id: "minimal_sharp",
-            label: "Minimal sharp",
-            description: "High contrast, square corners",
-            appearance: PaymentConfig.AppearanceConfig(
-                colors: PaymentConfig.AppearanceColors(
-                    primary: "#111111",
-                    background: "#FFFFFF",
-                    componentBackground: "#FFFFFF",
-                    componentBorder: "#111111",
-                    componentDivider: "#E5E5E5",
-                    primaryText: "#111111",
-                    secondaryText: "#555555",
-                    componentText: "#111111",
-                    placeholderText: "#888888",
-                    icon: "#111111",
-                    error: "#D92D20"
-                ),
-                borderRadius: 0,
-                borderWidth: 1.5,
-                primaryButton: .init(
-                    colors: .init(background: "#111111", text: "#FFFFFF"),
-                    borderRadius: 0,
-                    borderWidth: 0
-                )
+            id: "warm_cream",
+            label: "Warm cream",
+            description: "Terracotta on cream, warm brown in dark",
+            appearance: .init(
+                brandColor: themePair("#B4532A", "#F0B090"),
+                backgroundColor: themePair("#FBF5EA", "#140E0A"),
+                neutralTint: themePair("#8A7560", "#CDB59A")
             )
         ),
     ]

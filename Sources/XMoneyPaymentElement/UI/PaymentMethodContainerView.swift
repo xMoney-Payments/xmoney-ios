@@ -7,6 +7,8 @@ final class PaymentMethodContainerView: UIView {
     enum Selection: Equatable {
         case saved(String)
         case newCard
+        /// Another payment method outside this container is selected.
+        case none
     }
 
     var onSelectSaved: ((SavedCard) -> Void)?
@@ -23,6 +25,7 @@ final class PaymentMethodContainerView: UIView {
 
     private let rootStack = UIStackView()
     private let headerView = UIView()
+    private let headerTitle = UILabel()
     private let editButton = UIButton(type: .system)
     private let outerContainer = UIView()
     private let contentStack = UIStackView()
@@ -40,9 +43,12 @@ final class PaymentMethodContainerView: UIView {
     private enum BuiltState: Equatable {
         case expanded
         case collapsed
+        case otherMethod
     }
 
     private var builtState: BuiltState?
+    private var expandedHeaderConstraints: [NSLayoutConstraint] = []
+    private var collapsedHeaderConstraints: [NSLayoutConstraint] = []
 
     init(theme: CheckoutTheme, cards: [SavedCard], locale: String) {
         self.theme = theme
@@ -60,6 +66,7 @@ final class PaymentMethodContainerView: UIView {
         rootStack.spacing = 0
         rootStack.translatesAutoresizingMaskIntoConstraints = false
 
+        headerView.translatesAutoresizingMaskIntoConstraints = false
         setupHeader()
 
         outerContainer.backgroundColor = theme.componentBackground
@@ -72,8 +79,11 @@ final class PaymentMethodContainerView: UIView {
         contentStack.spacing = 0
         contentStack.translatesAutoresizingMaskIntoConstraints = false
 
-        outerContainer.addSubview(contentStack)
-        rootStack.addArrangedSubview(headerView)
+        let inner = UIStackView(arrangedSubviews: [headerView, contentStack])
+        inner.axis = .vertical
+        inner.spacing = 0
+        inner.translatesAutoresizingMaskIntoConstraints = false
+        outerContainer.addSubview(inner)
         rootStack.addArrangedSubview(outerContainer)
         addSubview(rootStack)
 
@@ -82,22 +92,19 @@ final class PaymentMethodContainerView: UIView {
             rootStack.leadingAnchor.constraint(equalTo: leadingAnchor),
             rootStack.trailingAnchor.constraint(equalTo: trailingAnchor),
             rootStack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            contentStack.topAnchor.constraint(equalTo: outerContainer.topAnchor, constant: 6),
-            contentStack.leadingAnchor.constraint(equalTo: outerContainer.leadingAnchor, constant: 6),
-            contentStack.trailingAnchor.constraint(equalTo: outerContainer.trailingAnchor, constant: -6),
-            contentStack.bottomAnchor.constraint(equalTo: outerContainer.bottomAnchor, constant: -6),
+            inner.topAnchor.constraint(equalTo: outerContainer.topAnchor, constant: 8),
+            inner.leadingAnchor.constraint(equalTo: outerContainer.leadingAnchor, constant: 8),
+            inner.trailingAnchor.constraint(equalTo: outerContainer.trailingAnchor, constant: -8),
+            inner.bottomAnchor.constraint(equalTo: outerContainer.bottomAnchor, constant: -8),
         ])
     }
 
     private func setupHeader() {
-        headerView.translatesAutoresizingMaskIntoConstraints = false
-
-        let title = UILabel()
-        title.attributedText = NSAttributedString(
+        headerTitle.attributedText = NSAttributedString(
             string: Strings.text("sheet.savedCards", locale: locale),
-            attributes: theme.titleAttributes(size: 13, weight: .semibold, color: theme.primaryText.withAlphaComponent(0.45))
+            attributes: theme.titleAttributes(size: 14, weight: .semibold, color: theme.sectionLabelColor)
         )
-        title.translatesAutoresizingMaskIntoConstraints = false
+        headerTitle.translatesAutoresizingMaskIntoConstraints = false
 
         editButton.translatesAutoresizingMaskIntoConstraints = false
         editButton.addAction(UIAction { [weak self] _ in
@@ -105,18 +112,48 @@ final class PaymentMethodContainerView: UIView {
         }, for: .touchUpInside)
         updateEditButtonTitle()
 
-        headerView.addSubview(title)
+        editButton.contentHorizontalAlignment = .trailing
+        headerView.addSubview(headerTitle)
         headerView.addSubview(editButton)
+        expandedHeaderConstraints = [
+            headerView.heightAnchor.constraint(equalToConstant: Self.expandedHeaderHeight),
+            headerTitle.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
+        ]
+        collapsedHeaderConstraints = [
+            headerTitle.topAnchor.constraint(equalTo: headerView.topAnchor, constant: 8),
+            headerTitle.bottomAnchor.constraint(equalTo: headerView.bottomAnchor, constant: -2),
+        ]
         NSLayoutConstraint.activate([
-            title.leadingAnchor.constraint(equalTo: headerView.leadingAnchor, constant: 4),
-            title.topAnchor.constraint(equalTo: headerView.topAnchor),
-            title.bottomAnchor.constraint(equalTo: headerView.bottomAnchor, constant: -8),
-            editButton.trailingAnchor.constraint(equalTo: headerView.trailingAnchor, constant: -4),
-            editButton.centerYAnchor.constraint(equalTo: title.centerYAnchor),
-            editButton.leadingAnchor.constraint(greaterThanOrEqualTo: title.trailingAnchor, constant: 8),
+            headerTitle.leadingAnchor.constraint(equalTo: headerView.leadingAnchor, constant: 12),
+            editButton.trailingAnchor.constraint(equalTo: headerView.trailingAnchor, constant: -12),
+            editButton.centerYAnchor.constraint(equalTo: headerTitle.centerYAnchor),
+            editButton.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.expandedHeaderHeight),
+            editButton.heightAnchor.constraint(equalToConstant: Self.expandedHeaderHeight),
+            editButton.leadingAnchor.constraint(greaterThanOrEqualTo: headerTitle.trailingAnchor, constant: 8),
         ])
+        NSLayoutConstraint.activate(collapsedHeaderConstraints)
         headerView.isHidden = true
         editButton.accessibilityLabel = Strings.text("sheet.edit", locale: locale)
+    }
+
+    private func updateHeaderTitle(expanded: Bool) {
+        let base = Strings.text("sheet.savedCards", locale: locale)
+        let title = expanded ? base : "\(base) · \(cards.count)"
+        headerTitle.attributedText = NSAttributedString(
+            string: title,
+            attributes: theme.titleAttributes(
+                size: 14,
+                weight: .semibold,
+                color: isEditing ? theme.metaText : theme.sectionLabelColor
+            )
+        )
+        if expanded {
+            NSLayoutConstraint.deactivate(collapsedHeaderConstraints)
+            NSLayoutConstraint.activate(expandedHeaderConstraints)
+        } else {
+            NSLayoutConstraint.deactivate(expandedHeaderConstraints)
+            NSLayoutConstraint.activate(collapsedHeaderConstraints)
+        }
     }
 
     private func updateEditButtonTitle() {
@@ -124,7 +161,7 @@ final class PaymentMethodContainerView: UIView {
         editButton.setAttributedTitle(
             NSAttributedString(
                 string: Strings.text(key, locale: locale),
-                attributes: theme.titleAttributes(size: 13, weight: .bold, color: theme.primary)
+                attributes: theme.titleAttributes(size: 14, weight: .semibold, color: theme.textBrand)
             ),
             for: .normal
         )
@@ -147,8 +184,15 @@ final class PaymentMethodContainerView: UIView {
         self.isDeleting = isDeleting
         updateEditButtonTitle()
 
-        let targetState: BuiltState = selection == .newCard ? .collapsed : .expanded
-        headerView.isHidden = targetState != .expanded
+        let targetState: BuiltState
+        switch selection {
+        case .newCard: targetState = .collapsed
+        case .none: targetState = .otherMethod
+        case .saved: targetState = .expanded
+        }
+        headerView.isHidden = targetState == .otherMethod || isEditing
+        editButton.isHidden = targetState != .expanded || isEditing
+        updateHeaderTitle(expanded: targetState == .expanded)
 
         if builtState == targetState {
             if targetState == .expanded {
@@ -177,7 +221,9 @@ final class PaymentMethodContainerView: UIView {
     }
 
     private func updateSelectionInPlace(_ selection: Selection) {
-        guard case let .saved(selectedId) = selection, !isEditing else { return }
+        guard !isEditing else { return }
+        let selectedId: String?
+        if case let .saved(id) = selection { selectedId = id } else { selectedId = nil }
         for card in cards {
             let isSelected = card.id == selectedId
             radioIndicators[card.id]?.setSelected(isSelected, theme: theme, animated: true)
@@ -202,7 +248,24 @@ final class PaymentMethodContainerView: UIView {
             buildCollapsedState(formView: formView)
         case .saved:
             buildExpandedState(selection: selection)
+        case .none:
+            buildOtherMethodState()
         }
+    }
+
+    /// Another method (crypto) is selected: the cards collapse to one idle "Pay with card" row.
+    private func buildOtherMethodState() {
+        let row = PaymentOptionRow(
+            theme: theme,
+            tile: .payWithCard,
+            title: Strings.text("sheet.payWithCard", locale: locale),
+            subtitle: Strings.text("sheet.visaOrMastercard", locale: locale)
+        )
+        row.setSelected(false)
+        row.addAction(UIAction { [weak self] _ in
+            self?.onExpandSaved?()
+        }, for: .touchUpInside)
+        contentStack.addArrangedSubview(row)
     }
 
     private func buildExpandedState(selection: Selection) {
@@ -215,10 +278,7 @@ final class PaymentMethodContainerView: UIView {
         cardsStack.axis = .vertical
         cardsStack.spacing = 0
 
-        for (index, card) in cards.enumerated() {
-            if index > 0 {
-                cardsStack.addArrangedSubview(makeRowHairline())
-            }
+        for card in cards {
             let isSelected: Bool
             if case let .saved(id) = selection {
                 isSelected = card.id == id
@@ -229,7 +289,10 @@ final class PaymentMethodContainerView: UIView {
         }
 
         let scroll = PreferSelfScrollView()
-        let needsScroll = cards.count > Self.maxVisibleSavedCards || pendingDeleteId != nil
+        // 3.35 rows when another card exists, so the next row peeks. Fewer cards
+        // size to the real count and do not show an empty sliver.
+        let overflows = cards.count > 3
+        let needsScroll = overflows || pendingDeleteId != nil
         scroll.isScrollEnabled = needsScroll
         scroll.alwaysBounceVertical = false
         scroll.bounces = needsScroll
@@ -242,10 +305,9 @@ final class PaymentMethodContainerView: UIView {
         cardsStack.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(cardsStack)
 
-        let visibleRows = min(cards.count, Self.maxVisibleSavedCards)
+        let visibleRows: CGFloat = overflows ? Self.maxVisibleSavedCards : CGFloat(max(cards.count, 1))
         let extra = pendingDeleteId == nil ? 0 : Self.confirmPanelHeight
-        let hairlines = CGFloat(max(visibleRows - 1, 0))
-        let viewportHeight = Self.savedCardRowHeight * CGFloat(max(visibleRows, 1)) + hairlines + extra
+        let viewportHeight = Self.savedCardRowHeight * visibleRows + extra
         let heightConstraint = scroll.heightAnchor.constraint(equalToConstant: viewportHeight)
         heightConstraint.priority = .required
 
@@ -262,11 +324,9 @@ final class PaymentMethodContainerView: UIView {
         ])
 
         stack.addArrangedSubview(scroll)
-
-        let separator = makeRowHairline()
-        stack.addArrangedSubview(separator)
-
-        stack.addArrangedSubview(makeUseOtherCardRow())
+        if !isEditing {
+            stack.addArrangedSubview(makeUseOtherCardRow())
+        }
         contentStack.addArrangedSubview(stack)
 
         if let pending = pendingDeleteId, let index = cards.firstIndex(where: { $0.id == pending }) {
@@ -277,17 +337,11 @@ final class PaymentMethodContainerView: UIView {
         }
     }
 
-    private func makeRowHairline() -> UIView {
-        let line = UIView()
-        line.backgroundColor = theme.footerBorder
-        line.translatesAutoresizingMaskIntoConstraints = false
-        line.heightAnchor.constraint(equalToConstant: 1).isActive = true
-        return line
-    }
-
-    private static let savedCardRowHeight: CGFloat = 56
-    private static let confirmPanelHeight: CGFloat = 91
-    private static let maxVisibleSavedCards = 3
+    private static let savedCardRowHeight: CGFloat = 64
+    private static let confirmPanelHeight: CGFloat = 104
+    private static let maxVisibleSavedCards: CGFloat = 3.35
+    private static let expandedHeaderHeight: CGFloat = 44
+    private static let trashSize: CGFloat = 32
 
     private func buildCollapsedState(formView: CardFormView?) {
         let summary = makeCollapsedSummaryRow()
@@ -317,10 +371,10 @@ final class PaymentMethodContainerView: UIView {
             formView.translatesAutoresizingMaskIntoConstraints = false
             wrapper.addSubview(formView)
             NSLayoutConstraint.activate([
-                formView.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: 10),
+                formView.topAnchor.constraint(equalTo: wrapper.topAnchor, constant: 12),
                 formView.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: 12),
                 formView.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor, constant: -12),
-                formView.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor, constant: -12),
+                formView.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor),
             ])
             blockStack.addArrangedSubview(wrapper)
         }
@@ -332,16 +386,7 @@ final class PaymentMethodContainerView: UIView {
             blockStack.bottomAnchor.constraint(equalTo: block.bottomAnchor),
         ])
 
-        let blockWrapper = UIView()
-        blockWrapper.translatesAutoresizingMaskIntoConstraints = false
-        blockWrapper.addSubview(block)
-        NSLayoutConstraint.activate([
-            block.topAnchor.constraint(equalTo: blockWrapper.topAnchor),
-            block.leadingAnchor.constraint(equalTo: blockWrapper.leadingAnchor, constant: -6),
-            block.trailingAnchor.constraint(equalTo: blockWrapper.trailingAnchor, constant: 6),
-            block.bottomAnchor.constraint(equalTo: blockWrapper.bottomAnchor, constant: 6),
-        ])
-        contentStack.addArrangedSubview(blockWrapper)
+        contentStack.addArrangedSubview(block)
     }
 
     private func makeSavedRow(card: SavedCard, isSelected: Bool) -> UIView {
@@ -354,7 +399,7 @@ final class PaymentMethodContainerView: UIView {
         }
         rowControls[card.id] = control
 
-        let tile = BrandTileView(theme: theme)
+        let tile = BrandTileView(theme: theme, size: CGSize(width: 48, height: 34))
         tile.apply(style: .savedCard(brand: SavedCardFormatting.savedCardBrandForIcon(card)), theme: theme)
 
         let titleAttributes = theme.titleAttributes(color: theme.primaryText)
@@ -388,20 +433,24 @@ final class PaymentMethodContainerView: UIView {
         titleRow.alignment = .center
 
         let subtitleLabel = UILabel()
-        subtitleLabel.text = SavedCardFormatting.savedCardMeta(card, locale: locale)
-        subtitleLabel.font = theme.font(ofSize: 13, weight: .medium)
-        subtitleLabel.textColor = theme.primaryText.withAlphaComponent(0.45)
+        theme.style(
+            subtitleLabel,
+            text: SavedCardFormatting.savedCardMeta(card, locale: locale),
+            size: 14,
+            weight: .medium,
+            color: theme.metaText
+        )
 
         let textStack = UIStackView(arrangedSubviews: [titleRow, subtitleLabel])
         textStack.axis = .vertical
-        textStack.spacing = 1
+        textStack.spacing = 0
 
         let trailing: UIView
         if isEditing {
             let spacer = UIView()
             spacer.translatesAutoresizingMaskIntoConstraints = false
-            spacer.widthAnchor.constraint(equalToConstant: 34).isActive = true
-            spacer.heightAnchor.constraint(equalToConstant: 34).isActive = true
+            spacer.widthAnchor.constraint(equalToConstant: Self.trashSize).isActive = true
+            spacer.heightAnchor.constraint(equalToConstant: Self.trashSize).isActive = true
             trailing = spacer
         } else {
             let radio = RadioIndicator(theme: theme)
@@ -412,7 +461,7 @@ final class PaymentMethodContainerView: UIView {
 
         let row = UIStackView(arrangedSubviews: [tile, textStack, trailing])
         row.axis = .horizontal
-        row.spacing = 13
+        row.spacing = isAsking ? 13 : 12
         row.alignment = .center
         row.isUserInteractionEnabled = false
         row.translatesAutoresizingMaskIntoConstraints = false
@@ -420,7 +469,7 @@ final class PaymentMethodContainerView: UIView {
 
         let overlay = UIView()
         overlay.backgroundColor = isAsking
-            ? theme.errorBorder.withAlphaComponent(0.08)
+            ? theme.dangerTint
             : theme.selectedBackground
         overlay.isUserInteractionEnabled = false
         overlay.layer.cornerRadius = theme.rowRadius
@@ -472,16 +521,16 @@ final class PaymentMethodContainerView: UIView {
     private func makeTrashButton(card: SavedCard) -> UIButton {
         let button = UIButton(type: .system)
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.backgroundColor = theme.errorBorder.withAlphaComponent(0.09)
-        button.layer.cornerRadius = 17
-        button.tintColor = theme.errorText
+        button.backgroundColor = theme.dangerTintStrong
+        button.layer.cornerRadius = Self.trashSize / 2
+        button.tintColor = theme.isDark ? UIColor(hex: "#EF4444") : UIColor(hex: "#DC2626")
         let image = EmbeddedAssets.image(named: "trash")?.withRenderingMode(.alwaysTemplate)
         button.setImage(image, for: .normal)
         button.accessibilityLabel = Strings.text("sheet.delete", locale: locale)
         button.isEnabled = !isDeleting
         NSLayoutConstraint.activate([
-            button.widthAnchor.constraint(equalToConstant: 34),
-            button.heightAnchor.constraint(equalToConstant: 34),
+            button.widthAnchor.constraint(equalToConstant: Self.trashSize),
+            button.heightAnchor.constraint(equalToConstant: Self.trashSize),
         ])
         button.addAction(UIAction { [weak self] _ in
             self?.onAskDelete?(card)
@@ -495,24 +544,27 @@ final class PaymentMethodContainerView: UIView {
 
     private func makeConfirmPanel(card: SavedCard) -> UIView {
         let panel = UIView()
-        panel.backgroundColor = theme.errorBorder.withAlphaComponent(0.08)
+        panel.backgroundColor = theme.dangerTint
         panel.layer.cornerRadius = theme.rowRadius
         panel.layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         panel.isAccessibilityElement = false
         panel.translatesAutoresizingMaskIntoConstraints = false
 
         let prompt = UILabel()
-        prompt.text = Strings.text("sheet.removeCardConfirm", locale: locale)
-        prompt.font = theme.font(ofSize: 15, weight: .bold)
-        prompt.textColor = theme.primaryText
-        prompt.numberOfLines = 0
+        theme.style(
+            prompt,
+            text: Strings.text("sheet.removeCardConfirm", locale: locale),
+            size: 16,
+            weight: .semibold,
+            color: theme.primaryText,
+            multiline: true
+        )
         prompt.translatesAutoresizingMaskIntoConstraints = false
 
         let remove = makeConfirmPill(
             title: Strings.text("sheet.remove", locale: locale),
-            background: theme.errorText,
-            titleColor: .white,
-            weight: .bold
+            background: theme.errorBadge,
+            titleColor: .white
         )
         remove.isEnabled = !isDeleting
         remove.addAction(UIAction { [weak self] _ in
@@ -521,9 +573,8 @@ final class PaymentMethodContainerView: UIView {
 
         let keep = makeConfirmPill(
             title: Strings.text("sheet.keepIt", locale: locale),
-            background: theme.primaryText.withAlphaComponent(0.06),
-            titleColor: theme.primaryText,
-            weight: .semibold
+            background: theme.primaryText,
+            titleColor: theme.inverseText
         )
         keep.isEnabled = !isDeleting
         keep.addAction(UIAction { [weak self] _ in
@@ -540,30 +591,35 @@ final class PaymentMethodContainerView: UIView {
         panel.addSubview(buttons)
         NSLayoutConstraint.activate([
             prompt.topAnchor.constraint(equalTo: panel.topAnchor, constant: 4),
-            prompt.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 13),
-            prompt.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -13),
+            prompt.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 12),
+            prompt.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -12),
             buttons.topAnchor.constraint(equalTo: prompt.bottomAnchor, constant: 12),
-            buttons.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 13),
-            buttons.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -13),
-            buttons.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -14),
-            buttons.heightAnchor.constraint(equalToConstant: 46),
+            buttons.leadingAnchor.constraint(equalTo: panel.leadingAnchor, constant: 12),
+            buttons.trailingAnchor.constraint(equalTo: panel.trailingAnchor, constant: -12),
+            buttons.bottomAnchor.constraint(equalTo: panel.bottomAnchor, constant: -16),
+            buttons.heightAnchor.constraint(equalToConstant: Self.confirmButtonHeight),
         ])
         return panel
     }
 
+    private static let confirmButtonHeight: CGFloat = 48
     private func makeConfirmPill(
         title: String,
         background: UIColor,
-        titleColor: UIColor,
-        weight: UIFont.Weight
+        titleColor: UIColor
     ) -> UIButton {
         let button = UIButton(type: .system)
         button.backgroundColor = background
-        button.layer.cornerRadius = 23
+        button.layer.cornerRadius = theme.buttonRadius(forHeight: Self.confirmButtonHeight)
         button.setAttributedTitle(
             NSAttributedString(
                 string: title,
-                attributes: theme.titleAttributes(size: 14.5, weight: weight, color: titleColor)
+                attributes: theme.titleAttributes(
+                    size: 14,
+                    weight: .semibold,
+                    color: titleColor,
+                    alignment: .center
+                )
             ),
             for: .normal
         )
@@ -572,13 +628,13 @@ final class PaymentMethodContainerView: UIView {
 
     private func makeUseOtherCardRow() -> UIView {
         let control = UIControl()
-        let tile = BrandTileView(theme: theme)
+        let tile = BrandTileView(theme: theme, size: CGSize(width: 48, height: 34))
         tile.apply(style: .addCard, theme: theme)
 
         let title = UILabel()
         title.attributedText = NSAttributedString(
-            string: Strings.text("sheet.useOtherCard", locale: locale),
-            attributes: theme.titleAttributes(color: theme.primary)
+            string: Strings.text("sheet.useAnotherCard", locale: locale),
+            attributes: theme.titleAttributes(color: theme.textBrand)
         )
 
         let visa = CardBrandIcon(size: .useOtherCardPair)
@@ -589,20 +645,20 @@ final class PaymentMethodContainerView: UIView {
         brands.axis = .horizontal
         brands.alignment = .center
         brands.spacing = 8
-        brands.alpha = 0.85
+        brands.alignment = .center
 
         let row = UIStackView(arrangedSubviews: [tile, title, brands])
         row.axis = .horizontal
-        row.spacing = 13
+        row.spacing = 12
         row.alignment = .center
         row.isUserInteractionEnabled = false
         row.translatesAutoresizingMaskIntoConstraints = false
         control.addSubview(row)
         NSLayoutConstraint.activate([
-            row.topAnchor.constraint(equalTo: control.topAnchor, constant: 12),
             row.leadingAnchor.constraint(equalTo: control.leadingAnchor, constant: 12),
             row.trailingAnchor.constraint(equalTo: control.trailingAnchor, constant: -12),
-            row.bottomAnchor.constraint(equalTo: control.bottomAnchor, constant: -12),
+            row.centerYAnchor.constraint(equalTo: control.centerYAnchor),
+            control.heightAnchor.constraint(equalToConstant: Self.savedCardRowHeight),
         ])
 
         control.addAction(UIAction { [weak self] _ in
@@ -613,38 +669,41 @@ final class PaymentMethodContainerView: UIView {
 
     private func makeCollapsedSummaryRow() -> UIControl {
         let control = UIControl()
-        let tile = BrandTileView(theme: theme)
-        tile.apply(style: .collapsedSummary, theme: theme)
+        let card = cards.first
+        let tile = BrandTileView(theme: theme, size: CGSize(width: 48, height: 34))
+        tile.apply(style: .savedCard(brand: card.flatMap { SavedCardFormatting.savedCardBrandForIcon($0) }), theme: theme)
 
         let title = UILabel()
+        let titleText = card.map { SavedCardFormatting.savedCardIssuerLabel($0) + " " + SavedCardFormatting.savedCardMaskedNumber($0) }
+            ?? Strings.text("sheet.savedCards", locale: locale)
         title.attributedText = NSAttributedString(
-            string: Strings.text("sheet.savedCards", locale: locale),
+            string: titleText,
             attributes: theme.titleAttributes(color: theme.primaryText)
         )
 
         let subtitle = UILabel()
-        subtitle.text = SavedCardFormatting.savedCardsSummarySubtitle(cards)
-        subtitle.font = theme.font(ofSize: 13, weight: .medium)
-        subtitle.textColor = theme.primaryText.withAlphaComponent(0.45)
+        let subtitleText = card.map { SavedCardFormatting.savedCardMeta($0, locale: locale) } ?? ""
+        theme.style(subtitle, text: subtitleText, size: 14, weight: .medium, color: theme.metaText)
+        subtitle.isHidden = subtitleText.isEmpty
 
         let textStack = UIStackView(arrangedSubviews: [title, subtitle])
         textStack.axis = .vertical
-        textStack.spacing = 1
+        textStack.spacing = 0
 
         let chevron = UIImageView()
         chevron.image = EmbeddedAssets.image(named: "chevron-down")?
             .withRenderingMode(.alwaysTemplate)
-        chevron.tintColor = theme.primaryText.withAlphaComponent(0.38)
+        chevron.tintColor = theme.iconBrand
         chevron.contentMode = .scaleAspectFit
         chevron.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            chevron.widthAnchor.constraint(equalToConstant: 13),
-            chevron.heightAnchor.constraint(equalToConstant: 8),
+            chevron.widthAnchor.constraint(equalToConstant: 16),
+            chevron.heightAnchor.constraint(equalToConstant: 16),
         ])
 
         let row = UIStackView(arrangedSubviews: [tile, textStack, chevron])
         row.axis = .horizontal
-        row.spacing = 13
+        row.spacing = 12
         row.alignment = .center
         row.isUserInteractionEnabled = false
         row.translatesAutoresizingMaskIntoConstraints = false
@@ -663,30 +722,34 @@ final class PaymentMethodContainerView: UIView {
     }
 
     private func makeNewCardHeaderRow() -> UIView {
-        let tile = BrandTileView(theme: theme)
+        let tile = BrandTileView(theme: theme, size: CGSize(width: 48, height: 34))
         tile.apply(style: .addCard, theme: theme)
 
         let title = UILabel()
         title.attributedText = NSAttributedString(
-            string: Strings.text("sheet.useOtherCard", locale: locale),
+            string: Strings.text("sheet.useAnotherCard", locale: locale),
             attributes: theme.titleAttributes(color: theme.primaryText)
         )
 
         let subtitle = UILabel()
-        subtitle.text = Strings.text("sheet.visaOrMastercard", locale: locale)
-        subtitle.font = theme.font(ofSize: 13, weight: .medium)
-        subtitle.textColor = theme.primaryText.withAlphaComponent(0.45)
+        theme.style(
+            subtitle,
+            text: Strings.text("sheet.visaOrMastercard", locale: locale),
+            size: 14,
+            weight: .medium,
+            color: theme.metaText
+        )
 
         let textStack = UIStackView(arrangedSubviews: [title, subtitle])
         textStack.axis = .vertical
-        textStack.spacing = 1
+        textStack.spacing = 0
 
         let radio = RadioIndicator(theme: theme)
         radio.setSelected(true, theme: theme, animated: false)
 
         let row = UIStackView(arrangedSubviews: [tile, textStack, radio])
         row.axis = .horizontal
-        row.spacing = 13
+        row.spacing = 12
         row.alignment = .center
         row.translatesAutoresizingMaskIntoConstraints = false
         row.isLayoutMarginsRelativeArrangement = true

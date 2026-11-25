@@ -33,7 +33,7 @@ struct UpdateOrderSampleView: View {
             publicKey: ExampleSecrets.publicKey,
             card: .init(savedCards: .init(enabled: true)),
             paymentMethods: .init(applePay: .init(enabled: true, appearance: wallet)),
-            options: .init(style: style, appearance: exampleAppearance())
+            options: .init(appearance: exampleAppearance(isDark: theme.isDark))
         )
 
         SampleScaffold(
@@ -127,7 +127,6 @@ struct UpdateOrderSampleView: View {
     }
 
     private func applyLiveTheme(_ configuration: PaymentConfig) {
-        payment?.updateStyle(configuration.options.style)
         payment?.updateWalletAppearance(configuration.paymentMethods.applePay.appearance)
         payment?.updateAppearance(configuration.options.appearance)
     }

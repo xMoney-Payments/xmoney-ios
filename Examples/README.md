@@ -2,7 +2,7 @@
 
 In-repo demo for the SDK. One Xcode app, a launcher, copy-paste samples, three merchant scenarios, and an internal playground.
 
-Sun/moon toggle for **light / dark** (saved across Integrations, Advanced, and Playground). Scenario stores hide it and use their own accent. Samples pass a matching `AppearanceConfig` (`colorsLight` / `colorsDark`) so the SDK form sits on the merchant page instead of the library defaults.
+Sun/moon toggle for **light / dark** (saved across Integrations, Advanced, and Playground). Scenario stores hide it and use their own accent. Samples pass a matching `PaymentConfig.Appearance` so the SDK form sits on the merchant page instead of the library defaults.
 
 ## Run
 
@@ -30,9 +30,9 @@ Apple Pay only authorizes on a **physical device**. Add the Merchant ID under Si
 | Advanced | Merchant Pay button | Embedded form, your CTA via `confirm()` |
 | Advanced | Update order | `updateOrder` a new `PaymentIntent` on a mounted Element |
 | Advanced | Card holder verification | Pre-pay name check |
-| Internal | Playground | Every option, for SDK development |
+| Internal | Playground | Every option, for SDK development. Appearance presets edit `PaymentConfig.Appearance`. |
 
-Integrations and name-check include a **Test cards** sheet with the four xMoney simulator PANs (copy PAN / expiry / CVV / 3DS, success and fail). Playground **Appearance** is the live `AppearanceConfig` editor — presets plus colors, radii, Pay button, and font. Integration samples stay on `exampleAppearance()` so copy-paste still matches merchant chrome.
+Integrations and name-check include a **Test cards** sheet with the four xMoney simulator PANs (copy PAN / expiry / CVV / 3DS, success and fail). Playground **Appearance** is the live `PaymentConfig.Appearance` editor — presets plus colors, radii, Pay button, and font. Integration samples stay on `exampleAppearance()` so copy-paste still matches merchant chrome.
 
 ## Backend warning
 
@@ -50,8 +50,8 @@ Integrations and name-check include a **Test cards** sheet with the four xMoney 
 - Payment Sheet: keep the merchant Pay button loading until `.ready`. Samples use `PaymentSheetEvent.processing` to tell pre-pay cancel apart from post-submit cancel.
 - After a consumed result, samples hide the payment UI and show **New payment**.
 - To change the amount on a mounted Element or Apple Pay button, pass the server call to `updateOrder { }`. Pay locks immediately, including during the debounce and server request, so a fast tap cannot charge the previous order. A newer call cooperatively cancels the older task, so keep the endpoint idempotent. `updateOrder { }` returns the bound intent; pass it to the host. `PaymentElementView` treats it as already bound. A custom host (like `PaymentElementHost`) should skip `updateOrder(intent:)` when the intent equals `payment.boundIntent`, because a merchant call with the bound intent supersedes a newer in-flight update. If a bind fails after an order is bound, Pay stays locked and `.updateFailed` is emitted; the samples show the error. Do **not** set the intent to `nil` or hide the form. Hearth, Pulse, Update order, and Playground use this flow. `Processing` is an in-flight charge only.
-- Call `updateAppearance` / `updateStyle` / `updateLocale` / `updateWalletAppearance` when you restyle a live Element. Playground Appearance writes `AppearanceConfig` and the live Element picks it up. Do not recreate `EmbeddedPayment` for style or wallet chrome.
-- [`exampleAppearance()`](Example/SampleHelpers.swift) is the appearance copy-paste — restyle Sheet / Element / Apple Pay to match your chrome. `borderRadius` is the card field and payment-methods container radius.
+- Call `updateAppearance` / `updateLocale` / `updateWalletAppearance` when you restyle a live Element. Playground Appearance writes `PaymentConfig.Appearance` and the live Element picks it up. Do not recreate `EmbeddedPayment` for color or wallet chrome.
+- [`exampleAppearance()`](Example/SampleHelpers.swift) is the appearance copy-paste — restyle Sheet / Element / Apple Pay to match your chrome. `corners` sets the field and payment-methods container radius. The sheet corner stays 32.
 - Cart amounts are **minor units** (`Int64` cents). The demo backend converts to a decimal only at the HTTP boundary.
 - Do not put `PaymentElementView` in an unbounded `ScrollView` on iOS 15 (`sizeThatFits` is iOS 16+). Give it a `minHeight` or host `PaymentElement` in Auto Layout (see [`PaymentElementHost`](Example/UI/PaymentElementHost.swift)).
 - Do not present Payment Sheet from inside a SwiftUI `.sheet`. This app pushes full-screen destinations.

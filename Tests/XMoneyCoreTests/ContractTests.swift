@@ -114,6 +114,43 @@ final class ContractTests: XCTestCase {
         }
     }
 
+    func testThemeResolutionVectors() {
+        let url = Bundle.module.url(forResource: "test-vectors", withExtension: "json")!
+        let root = try! JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        let cases = root["themeResolution"] as! [[String: Any]]
+        XCTAssertFalse(cases.isEmpty)
+        for item in cases {
+            let sent = item["appearance"] as! [String: Any]
+            let appearance = PaymentConfig.Appearance.from(sent)
+            let expected = item["expected"] as! [String: String]
+            let isDark = item["isDark"] as! Bool
+            if let brand = sent["brandColor"] as? String {
+                let resolved = appearance.brandColor?.resolved(isDark: isDark)
+                XCTAssertEqual(Self.hex(resolved), expected["primary"])
+                if brand.count == 9 {
+                    XCTAssertEqual(resolved?.alpha ?? 0, 128.0 / 255.0, accuracy: 0.001)
+                }
+            } else {
+                XCTAssertNil(appearance.brandColor)
+            }
+            if sent["backgroundColor"] != nil {
+                XCTAssertEqual(Self.hex(appearance.backgroundColor?.resolved(isDark: isDark)), expected["background"])
+            } else {
+                XCTAssertNil(appearance.backgroundColor)
+            }
+        }
+    }
+
+    private static func hex(_ color: PaymentConfig.SRGBColor?) -> String {
+        guard let color else { return "" }
+        return String(
+            format: "#%02x%02x%02x",
+            Int((color.red * 255).rounded()),
+            Int((color.green * 255).rounded()),
+            Int((color.blue * 255).rounded())
+        )
+    }
+
     func testLocaleVectors() {
         for vector in vectors.locales {
             let text = Strings.text(vector.key, locale: vector.locale)

@@ -2,13 +2,13 @@
   "defaultColors": {
     "light": {
       "primary": "#7c4dff",
-      "background": "#ffffff",
-      "error": "#ff6b6b"
+      "background": "#f7f6ff",
+      "error": "#dc2626"
     },
     "dark": {
       "primary": "#7c4dff",
-            "background": "#18181b",
-      "error": "#ff6b6b"
+      "background": "#18181b",
+      "error": "#ef4444"
     }
   },
   "validation": [
@@ -67,26 +67,23 @@
   "themeResolution": [
     {
       "isDark": false,
-      "appearance": {
-        "colorsLight": { "primary": "#ff0000" },
-        "colors": { "primary": "#00ff00" }
-      },
-      "expected": { "primary": "#ff0000", "background": "#ffffff" }
+      "appearance": { "brandColor": "#ff0000" },
+      "expected": { "primary": "#ff0000", "background": "#fff0f0" }
     },
     {
       "isDark": true,
-      "appearance": {
-        "colorsDark": { "background": "#111111" },
-        "colors": { "background": "#222222" }
-      },
+      "appearance": { "backgroundColor": "#111111" },
       "expected": { "primary": "#7c4dff", "background": "#111111" }
     },
     {
       "isDark": false,
-      "appearance": {
-        "colors": { "error": "#123456" }
-      },
-      "expected": { "primary": "#7c4dff", "error": "#123456" }
+      "appearance": { "colorsLight": { "primary": "#ff0000" } },
+      "expected": { "primary": "#7c4dff", "background": "#f7f6ff" }
+    },
+    {
+      "isDark": false,
+      "appearance": { "brandColor": "#80ff0000" },
+      "expected": { "primary": "#ff0000" }
     }
   ],
   "orderPayload": [
@@ -143,5 +140,16 @@
     { "locale": "hu-HU", "key": "sheet.title", "contains": "Fizetés" },
     { "locale": "pl-PL", "key": "sheet.title", "contains": "Płatność" },
     { "locale": "pl", "key": "sheet.title", "contains": "Płatność" }
+  ],
+  "appearanceKeys": [
+    "colorScheme", "brandColor", "accentColor", "backgroundColor", "neutralTint",
+    "overrides", "typography", "borders", "shape"
+  ],
+  "typographyKeys": ["fontFamily"],
+  "borderKeys": ["width"],
+  "shapeKeys": ["corners", "pillButtons"],
+  "overrideKeys": [
+    "onBrandColor", "textColor", "linkColor", "borderColor",
+    "componentColor", "selectedColor", "secondaryButtonColor"
   ]
 }

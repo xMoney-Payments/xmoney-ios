@@ -33,14 +33,9 @@ final class PaymentSheetLoadingViewController: UIViewController, PaymentSheetHei
         buildLayout()
     }
 
-    override func viewSafeAreaInsetsDidChange() {
-        super.viewSafeAreaInsetsDidChange()
-        onContentSizeChange?()
-    }
-
     var preferredSheetHeight: CGFloat {
         let markHeight = loaderSize * (418.0 / 539.0)
-        return ceil(contentPadding + markHeight + contentPadding + view.safeAreaInsets.bottom)
+        return ceil(contentPadding + markHeight + contentPadding)
     }
 
     private func applyTheme() {
@@ -59,7 +54,7 @@ final class PaymentSheetLoadingViewController: UIViewController, PaymentSheetHei
         view.addSubview(flip)
         NSLayoutConstraint.activate([
             flip.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            flip.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor),
+            flip.centerYAnchor.constraint(equalTo: view.centerYAnchor),
         ])
     }
 }

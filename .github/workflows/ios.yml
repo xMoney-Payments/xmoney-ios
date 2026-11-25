@@ -18,6 +18,9 @@ jobs:
         with:
           xcode-version: '26.6'
 
+      - name: Test vector copies match
+        run: cmp Tests/XMoneyCoreTests/test-vectors.json Tests/XMoneyPaymentSheetTests/test-vectors.json
+
       - name: Build and test (iOS Simulator)
         run: |
           chmod +x scripts/xcode-ios-test.sh

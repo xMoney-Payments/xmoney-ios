@@ -13,7 +13,7 @@ final class PaymentSheetTransitioningDelegate: NSObject, UIViewControllerTransit
         }
     }
     var cornerRadius: CGFloat = 32
-    var dimmingColor: UIColor = UIColor(red: 22 / 255, green: 20 / 255, blue: 26 / 255, alpha: 0.45)
+    var dimmingColor: UIColor = UIColor(red: 22 / 255, green: 20 / 255, blue: 26 / 255, alpha: 0.40)
     var canDismiss: () -> Bool = { true }
     var onRequestClose: () -> Void = {}
     private(set) weak var presentationController: PaymentSheetPresentationController?
@@ -53,12 +53,24 @@ final class PaymentSheetTransitioningDelegate: NSObject, UIViewControllerTransit
 
 final class PaymentSheetPresentationController: UIPresentationController {
     var cornerRadius: CGFloat = 32
-    var dimmingColor: UIColor = UIColor(red: 22 / 255, green: 20 / 255, blue: 26 / 255, alpha: 0.45)
+    var dimmingColor: UIColor = UIColor(red: 22 / 255, green: 20 / 255, blue: 26 / 255, alpha: 0.40)
     weak var heightProvider: PaymentSheetHeightProviding?
     var canDismiss: () -> Bool = { true }
     var onRequestClose: () -> Void = {}
 
     private let dimmingView = UIView()
+    /// Figma sheet shadow `0 -24 35` at ink 22%. Lives beside the sheet so the
+    /// rounded clip on the presented view does not crop it, and tracks that view's frame.
+    private let shadowView: UIView = {
+        let view = UIView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        view.layer.shadowColor = UIColor(red: 22 / 255, green: 20 / 255, blue: 26 / 255, alpha: 1).cgColor
+        view.layer.shadowOpacity = 0.22
+        view.layer.shadowOffset = CGSize(width: 0, height: -24)
+        view.layer.shadowRadius = 35
+        return view
+    }()
     private var panGesture: UIPanGestureRecognizer?
     private var keyboardHeight: CGFloat = 0
     private var keyboardObservers: [NSObjectProtocol] = []
@@ -111,6 +123,7 @@ final class PaymentSheetPresentationController: UIPresentationController {
     override func containerViewWillLayoutSubviews() {
         super.containerViewWillLayoutSubviews()
         presentedView?.frame = frameOfPresentedViewInContainerView
+        layoutSheetShadow()
     }
 
     override func containerViewDidLayoutSubviews() {
@@ -118,9 +131,22 @@ final class PaymentSheetPresentationController: UIPresentationController {
         stylePresentedView()
     }
 
+    /// Moves the sheet to the current target frame. Call from inside an existing animation block.
+    func applyTargetFrame() {
+        guard let presentedView else { return }
+        presentedView.transform = .identity
+        presentedView.frame = frameOfPresentedViewInContainerView
+        layoutSheetShadow()
+    }
+
     /// `completion` runs once the sheet has settled at its new height, or
     /// immediately when no resize is needed.
-    func updateLayout(animated: Bool, completion: (() -> Void)? = nil) {
+    func updateLayout(
+        animated: Bool,
+        duration: TimeInterval = 0.28,
+        options: UIView.AnimationOptions = [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction],
+        completion: (() -> Void)? = nil
+    ) {
         guard let presentedView else {
             completion?()
             return
@@ -132,12 +158,15 @@ final class PaymentSheetPresentationController: UIPresentationController {
             completion?()
             return
         }
-        let updates = { presentedView.frame = target }
+        let updates = {
+            presentedView.frame = target
+            self.layoutSheetShadow()
+        }
         if animated {
             UIView.animate(
-                withDuration: 0.28,
+                withDuration: duration,
                 delay: 0,
-                options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction],
+                options: options,
                 animations: updates,
                 completion: { _ in completion?() }
             )
@@ -147,11 +176,31 @@ final class PaymentSheetPresentationController: UIPresentationController {
         }
     }
 
+    /// Keeps the lift shadow on the sheet's untransformed frame. The presented view
+    /// clips to its top radius, so the shadow cannot live on that same layer.
+    fileprivate func layoutSheetShadow() {
+        guard let presentedView, let container = presentedView.superview else { return }
+        if shadowView.superview !== container {
+            container.insertSubview(shadowView, belowSubview: presentedView)
+        }
+        shadowView.bounds = presentedView.bounds
+        shadowView.center = presentedView.center
+        shadowView.transform = presentedView.transform
+        let path = UIBezierPath(
+            roundedRect: shadowView.bounds,
+            byRoundingCorners: [.topLeft, .topRight],
+            cornerRadii: CGSize(width: cornerRadius, height: cornerRadius)
+        )
+        shadowView.layer.shadowPath = path.cgPath
+    }
+
     private func stylePresentedView() {
         guard let presentedView else { return }
         presentedView.layer.cornerRadius = cornerRadius
         presentedView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         presentedView.clipsToBounds = true
+
+        layoutSheetShadow()
 
         if panGesture == nil {
             let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
@@ -173,6 +222,7 @@ final class PaymentSheetPresentationController: UIPresentationController {
             if gesture.state == .changed || gesture.state == .ended || gesture.state == .cancelled {
                 UIView.animate(withDuration: 0.2) {
                     presentedView.transform = .identity
+                    self.layoutSheetShadow()
                 }
             }
             return
@@ -182,15 +232,18 @@ final class PaymentSheetPresentationController: UIPresentationController {
         case .changed:
             if translation.y > 0 {
                 presentedView.transform = CGAffineTransform(translationX: 0, y: translation.y)
+                layoutSheetShadow()
             }
         case .ended, .cancelled:
             let velocity = gesture.velocity(in: presentedView).y
             if translation.y > 120 || velocity > 900 {
                 presentedView.transform = .identity
+                layoutSheetShadow()
                 onRequestClose()
             } else {
                 UIView.animate(withDuration: 0.25) {
                     presentedView.transform = .identity
+                    self.layoutSheetShadow()
                 }
             }
         default:
@@ -218,9 +271,9 @@ final class PaymentSheetPresentationController: UIPresentationController {
             center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
                 self?.handleKeyboard(note)
             },
-            center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
+            center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] note in
                 self?.keyboardHeight = 0
-                self?.updateLayout(animated: true)
+                self?.animateSheetWithKeyboard(note)
             },
         ]
     }
@@ -229,15 +282,29 @@ final class PaymentSheetPresentationController: UIPresentationController {
         guard let containerView,
               let endFrame = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
         let converted = containerView.convert(endFrame, from: nil)
-        let overlap = max(0, containerView.bounds.maxY - converted.minY)
-        keyboardHeight = overlap
-        updateLayout(animated: true)
+        keyboardHeight = max(0, containerView.bounds.maxY - converted.minY)
+        animateSheetWithKeyboard(note)
+    }
+
+    /// Moves the sheet with the keyboard without building an animation curve from the notification.
+    /// An invalid curve value crashes as soon as a field becomes first responder.
+    private func animateSheetWithKeyboard(_ note: Notification) {
+        let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? TimeInterval ?? 0.25
+        UIView.animate(
+            withDuration: duration,
+            delay: 0,
+            options: [.curveEaseInOut, .beginFromCurrentState, .allowUserInteraction]
+        ) { [weak self] in
+            self?.applyTargetFrame()
+        }
     }
 }
 
 extension PaymentSheetPresentationController: UIGestureRecognizerDelegate {
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard gestureRecognizer == panGesture, let presentedView else { return true }
+        // A begun pan steals the drag from the details form even when handlePan only rubber-bands.
+        guard canDismiss() else { return false }
         let point = gestureRecognizer.location(in: presentedView)
         // Let nested scrollers (saved cards list) own the drag.
         if let scroll = scrollViewBlockingDismiss(at: point, in: presentedView) {
@@ -285,6 +352,7 @@ private final class PaymentSheetAnimator: NSObject, UIViewControllerAnimatedTran
             container.addSubview(controller.view)
             let finalFrame = transitionContext.finalFrame(for: controller)
             controller.view.frame = finalFrame.offsetBy(dx: 0, dy: finalFrame.height)
+            (controller.presentationController as? PaymentSheetPresentationController)?.layoutSheetShadow()
             UIView.animate(
                 withDuration: transitionDuration(using: transitionContext),
                 delay: 0,
@@ -293,6 +361,7 @@ private final class PaymentSheetAnimator: NSObject, UIViewControllerAnimatedTran
                 options: [.curveEaseOut]
             ) {
                 controller.view.frame = finalFrame
+                (controller.presentationController as? PaymentSheetPresentationController)?.layoutSheetShadow()
             } completion: { finished in
                 transitionContext.completeTransition(finished)
             }
@@ -300,6 +369,7 @@ private final class PaymentSheetAnimator: NSObject, UIViewControllerAnimatedTran
             let initialFrame = transitionContext.initialFrame(for: controller)
             UIView.animate(withDuration: transitionDuration(using: transitionContext), delay: 0, options: .curveEaseIn) {
                 controller.view.frame = initialFrame.offsetBy(dx: 0, dy: initialFrame.height)
+                (controller.presentationController as? PaymentSheetPresentationController)?.layoutSheetShadow()
             } completion: { finished in
                 transitionContext.completeTransition(finished)
             }

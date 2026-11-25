@@ -29,12 +29,11 @@ struct PaymentSheetSampleView: View {
 
     var body: some View {
         let style = exampleForcedStyle(theme.isDark)
-        let wallet = exampleWalletAppearance(isDark: theme.isDark)
         let configuration = PaymentConfig(
             publicKey: ExampleSecrets.publicKey,
             card: .init(savedCards: .init(enabled: true)),
-            paymentMethods: .init(applePay: .init(enabled: true, appearance: wallet)),
-            options: .init(style: style, appearance: exampleAppearance())
+            paymentMethods: .init(applePay: .init(enabled: true)),
+            options: .init(appearance: .init(colorScheme: style))
         )
 
         SampleScaffold(
