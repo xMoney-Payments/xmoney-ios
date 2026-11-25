@@ -215,6 +215,19 @@ package final class PersonalDetailsProgress {
         showsIncompleteError = false
     }
 
+    /// Refuses a Continue that does not satisfy the current field list.
+    @discardableResult
+    package func commit(_ values: PersonalDetailsValues, visibility: CustomerDetailsVisibility) -> Bool {
+        draft = values
+        guard CustomerDetailsValidator.validate(values, visibility: visibility).isEmpty else {
+            committed = nil
+            return false
+        }
+        committed = values
+        showsIncompleteError = false
+        return true
+    }
+
     /// Drops a previous Continue when those values no longer satisfy `visibility`. The draft stays.
     package func revalidate(visibility: CustomerDetailsVisibility) {
         guard let committed else { return }

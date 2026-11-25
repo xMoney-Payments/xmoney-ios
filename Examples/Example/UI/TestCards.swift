@@ -191,8 +191,8 @@ private struct TestCardRow: View {
                 TestCardCopyField(title: "Expiry", value: card.expiry) {
                     onCopy(card.expiry, "expiry")
                 }
-                TestCardCopyField(title: "CVV", value: card.cvv) {
-                    onCopy(card.cvv, "CVV")
+                TestCardCopyField(title: "CVC", value: card.cvv) {
+                    onCopy(card.cvv, "CVC")
                 }
                 TestCardCopyField(title: "3DS", value: card.threeDS) {
                     onCopy(card.threeDS, "3DS")

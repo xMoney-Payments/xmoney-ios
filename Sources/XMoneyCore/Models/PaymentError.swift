@@ -61,6 +61,7 @@ public enum PaymentError: Error, Equatable, LocalizedError {
     /// Thrown by `updateOrder` / `prepare` when a different order is requested
     /// while a charge is in flight. Compare with `==`.
     public static let paymentInProgress = PaymentError.payment("Payment in progress")
+    public static let invalidCustomerDetails = PaymentError.payment("Customer details are incomplete")
 
     public static let genericLoad = "Failed to load"
     public static let genericApplePay = "Apple Pay failed"
@@ -95,6 +96,8 @@ public enum PaymentError: Error, Equatable, LocalizedError {
         "Polling timed out",
         "Invalid public key",
         "Payment canceled",
+        "Customer details are incomplete",
+        "Payment in progress",
         "Missing currency for card holder verification",
         "Missing transaction id",
         genericNetwork,

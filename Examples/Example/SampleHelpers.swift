@@ -5,62 +5,36 @@ import XMoneyCore
 /// Default demo order: €19.99 (or `ExampleSecrets.currency`).
 let SAMPLE_AMOUNT_MINOR: Int64 = 1_999
 
-func exampleForcedStyle(_ isDark: Bool) -> PaymentConfig.UserInterfaceStyle {
-    isDark ? .alwaysDark : .alwaysLight
+func exampleForcedStyle(_ isDark: Bool) -> PaymentConfig.ColorSchemePreference {
+    isDark ? .dark : .light
 }
 
 func exampleWalletAppearance(isDark: Bool) -> PaymentConfig.WalletAppearance {
     PaymentConfig.WalletAppearance(color: isDark ? .white : .black)
 }
 
-/**
- * Example-app `AppearanceConfig` so Sheet / Element / Apple Pay match this
- * merchant chrome (especially dark). Copy this pattern in your app — SDK
- * defaults stay xMoney purple on a white card until you set `options.appearance`.
- *
- * `primary` is the interactive accent (Edit, selected marks, “Use other card”,
- * focused field outline). `borderRadius` is the card field and payment-methods
- * container radius (SDK default 16 pt fields / 20 pt container when omitted).
- * For a light brand fill, pass a dark readable `primary` and the fill as
- * `buttonBackground` so links stay above WCAG contrast on white.
- * `primaryDark` / `buttonBackground` default to `primary` (same as Android).
- */
+/// Example-app appearance. The pay button uses the example purple; surfaces follow the app chrome.
 func exampleAppearance(
     primary: Color = ExampleColors.purple,
     primaryDark: Color? = nil,
     buttonBackground: Color? = nil,
-    buttonText: Color = .white
-) -> PaymentConfig.AppearanceConfig {
-    let darkPrimary = primaryDark ?? primary
-    let fill = buttonBackground ?? primary
-    let pay = PaymentConfig.PrimaryButtonColors(
-        background: fill.toAppearanceHex(),
-        text: buttonText.toAppearanceHex()
+    buttonText: Color = .white,
+    isDark: Bool = false
+) -> PaymentConfig.Appearance {
+    let brand = PaymentConfig.ThemeColor(
+        light: PaymentConfig.SRGBColor(hex: (buttonBackground ?? primary).toAppearanceHex())!,
+        dark: PaymentConfig.SRGBColor(hex: (primaryDark ?? buttonBackground ?? primary).toAppearanceHex())!
     )
-    return PaymentConfig.AppearanceConfig(
-        colorsLight: exampleAppearanceColors(
-            primary: primary,
-            background: ExampleColors.lightBg,
-            component: ExampleColors.lightCard,
-            text: ExampleColors.lightText,
-            muted: ExampleColors.lightMuted,
-            hairline: ExampleColors.lightHairline
-        ),
-        colorsDark: exampleAppearanceColors(
-            primary: darkPrimary,
-            background: ExampleColors.darkBg,
-            component: ExampleColors.darkCard,
-            text: ExampleColors.darkText,
-            muted: ExampleColors.darkMuted,
-            hairline: ExampleColors.darkHairline
-        ),
-        borderRadius: 24,
-        primaryButton: PaymentConfig.PrimaryButtonConfig(
-            colorsLight: pay,
-            colorsDark: pay,
-            borderRadius: 9999,
-            borderWidth: 0
-        )
+    let background = PaymentConfig.ThemeColor(
+        light: PaymentConfig.SRGBColor(hex: ExampleColors.lightBg.toAppearanceHex())!,
+        dark: PaymentConfig.SRGBColor(hex: ExampleColors.darkBg.toAppearanceHex())!
+    )
+    return PaymentConfig.Appearance(
+        colorScheme: exampleForcedStyle(isDark),
+        brandColor: brand,
+        backgroundColor: background,
+        overrides: .init(onBrandColor: PaymentConfig.ThemeColor(hex: buttonText.toAppearanceHex())),
+        corners: .rounded
     )
 }
 
@@ -68,18 +42,17 @@ func defaultPaymentConfig(
     isDark: Bool,
     applePayEnabled: Bool = true,
     savedCardsEnabled: Bool = true,
-    appearance: PaymentConfig.AppearanceConfig = exampleAppearance()
+    appearance: PaymentConfig.Appearance = exampleAppearance()
 ) -> PaymentConfig {
-    PaymentConfig(
+    var theme = appearance
+    theme.colorScheme = exampleForcedStyle(isDark)
+    return PaymentConfig(
         publicKey: ExampleSecrets.publicKey,
         card: .init(savedCards: .init(enabled: savedCardsEnabled)),
         paymentMethods: .init(
             applePay: .init(enabled: applePayEnabled, appearance: exampleWalletAppearance(isDark: isDark))
         ),
-        options: .init(
-            style: exampleForcedStyle(isDark),
-            appearance: appearance
-        )
+        options: .init(appearance: theme)
     )
 }
 
@@ -109,30 +82,6 @@ func orderConsumed(_ result: PaymentResult, didProcess: Bool) -> Bool {
     case .complete, .failed: return true
     case .canceled: return didProcess
     }
-}
-
-private func exampleAppearanceColors(
-    primary: Color,
-    background: Color,
-    component: Color,
-    text: Color,
-    muted: Color,
-    hairline: Color
-) -> PaymentConfig.AppearanceColors {
-    PaymentConfig.AppearanceColors(
-        primary: primary.toAppearanceHex(),
-        background: background.toAppearanceHex(),
-        componentBackground: component.toAppearanceHex(),
-        componentBorder: hairline.toAppearanceHex(),
-        componentDivider: hairline.toAppearanceHex(),
-        primaryText: text.toAppearanceHex(),
-        secondaryText: muted.toAppearanceHex(),
-        componentText: text.toAppearanceHex(),
-        placeholderText: muted.toAppearanceHex(),
-        icon: muted.toAppearanceHex(),
-        error: ExampleColors.error.toAppearanceHex(),
-        containerBorder: hairline.toAppearanceHex()
-    )
 }
 
 extension Color {

@@ -144,7 +144,7 @@ final class PaymentMethodContainerView: UIView {
             attributes: theme.titleAttributes(
                 size: 14,
                 weight: .semibold,
-                color: theme.sectionLabelColor
+                color: isEditing ? theme.metaText : theme.sectionLabelColor
             )
         )
         if expanded {
@@ -190,8 +190,8 @@ final class PaymentMethodContainerView: UIView {
         case .none: targetState = .otherMethod
         case .saved: targetState = .expanded
         }
-        headerView.isHidden = targetState == .otherMethod
-        editButton.isHidden = targetState != .expanded
+        headerView.isHidden = targetState == .otherMethod || isEditing
+        editButton.isHidden = targetState != .expanded || isEditing
         updateHeaderTitle(expanded: targetState == .expanded)
 
         if builtState == targetState {
@@ -435,7 +435,7 @@ final class PaymentMethodContainerView: UIView {
             text: SavedCardFormatting.savedCardMeta(card, locale: locale),
             size: 14,
             weight: .medium,
-            color: theme.sectionLabelColor
+            color: theme.metaText
         )
 
         let textStack = UIStackView(arrangedSubviews: [titleRow, subtitleLabel])
@@ -520,7 +520,7 @@ final class PaymentMethodContainerView: UIView {
         button.translatesAutoresizingMaskIntoConstraints = false
         button.backgroundColor = theme.dangerTintStrong
         button.layer.cornerRadius = Self.trashSize / 2
-        button.tintColor = theme.errorText
+        button.tintColor = theme.isDark ? UIColor(hex: "#EF4444") : UIColor(hex: "#DC2626")
         let image = EmbeddedAssets.image(named: "trash")?.withRenderingMode(.alwaysTemplate)
         button.setImage(image, for: .normal)
         button.accessibilityLabel = Strings.text("sheet.delete", locale: locale)
@@ -680,7 +680,7 @@ final class PaymentMethodContainerView: UIView {
 
         let subtitle = UILabel()
         let subtitleText = card.map { SavedCardFormatting.savedCardMeta($0, locale: locale) } ?? ""
-        theme.style(subtitle, text: subtitleText, size: 14, weight: .medium, color: theme.sectionLabelColor)
+        theme.style(subtitle, text: subtitleText, size: 14, weight: .medium, color: theme.metaText)
         subtitle.isHidden = subtitleText.isEmpty
 
         let textStack = UIStackView(arrangedSubviews: [title, subtitle])

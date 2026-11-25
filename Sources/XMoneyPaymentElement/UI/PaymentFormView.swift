@@ -33,6 +33,7 @@ package final class PaymentFormView: UIView {
     package var onApplePay: (() -> Void)?
     package var onOpenPersonalDetails: (() -> Void)?
     package var onContentSizeChange: (() -> Void)?
+    package var onEditingSavedCardsChange: ((Bool) -> Void)?
 
     private var config: PaymentConfig
     private var state: SheetState
@@ -42,6 +43,8 @@ package final class PaymentFormView: UIView {
     private let payButton = PayCTAButton()
     private var cardForm: CardFormView?
     private var walletButton: PKPaymentButton?
+    private var orDivider: UIView?
+    private var savedCardsEditHeader: UIView?
     private var personalDetailsRow: PersonalDetailsEntryRow?
     private var methodContainer: PaymentMethodContainerView?
     private var cardPanel: PayWithCardPanelView?
@@ -63,7 +66,9 @@ package final class PaymentFormView: UIView {
     private var theme: CheckoutTheme {
         CheckoutTheme.resolve(
             config: config,
-            isDark: UIHelpers.isDarkMode(config: config, traitCollection: traitCollection)
+            isDark: UIHelpers.isDarkMode(config: config, traitCollection: traitCollection),
+            contentSizeScale: UIHelpers.contentSizeScale(traitCollection),
+            increasedContrast: UIHelpers.increasedContrast(traitCollection)
         )
     }
 
@@ -90,7 +95,7 @@ package final class PaymentFormView: UIView {
 
     package override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
-        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+        if UIHelpers.traitsAffectingThemeChanged(traitCollection, from: previousTraitCollection) {
             rebuild()
         }
     }
@@ -218,7 +223,7 @@ package final class PaymentFormView: UIView {
         methodContainer = nil
         cardPanel = nil
         cryptoPanel = nil
-        if selection == .crypto, !config.paymentMethods.showCryptoOption {
+        if selection == .crypto, !config.paymentMethods.crypto.enabled {
             selection = state.savedCards.first.map { .saved($0.id) } ?? .newCard
         }
         buildContent()
@@ -325,6 +330,8 @@ package final class PaymentFormView: UIView {
     private func buildContent() {
         let t = theme
         walletButton = nil
+        orDivider = nil
+        savedCardsEditHeader = nil
 
         if state.applePayAvailable, state.applePayReady {
             #if DEBUG
@@ -334,7 +341,7 @@ package final class PaymentFormView: UIView {
                 )
             }
             #endif
-            let isDark = UIHelpers.isDarkMode(config: config, traitCollection: traitCollection)
+            let isDark = theme.isDarkSurface
             let style = ApplePayButtonFactory.style(
                 appearance: config.paymentMethods.applePay.appearance,
                 isDarkBackground: isDark
@@ -361,9 +368,9 @@ package final class PaymentFormView: UIView {
             walletButton = applePayButton
             contentStack.addArrangedSubview(applePayButton)
             contentStack.setCustomSpacing(24, after: applePayButton)
-            contentStack.addArrangedSubview(
-                OrDividerView(theme: t, label: Strings.text("sheet.or", locale: config.options.locale))
-            )
+            let divider = OrDividerView(theme: t, label: Strings.text("sheet.or", locale: config.options.locale))
+            orDivider = divider
+            contentStack.addArrangedSubview(divider)
         }
 
         if collectsPersonalDetails {
@@ -429,7 +436,7 @@ package final class PaymentFormView: UIView {
             }
             methodContainer = container
             contentStack.addArrangedSubview(container)
-        } else if config.paymentMethods.showCryptoOption {
+        } else if config.paymentMethods.crypto.enabled {
             let panel = PayWithCardPanelView(theme: t, locale: config.options.locale, form: form)
             panel.onSelect = { [weak self] in self?.setSelection(.newCard, animated: true) }
             cardPanel = panel
@@ -438,7 +445,7 @@ package final class PaymentFormView: UIView {
             contentStack.addArrangedSubview(form)
         }
 
-        if config.paymentMethods.showCryptoOption {
+        if config.paymentMethods.crypto.enabled {
             let panel = CryptoOptionPanel(theme: t, locale: config.options.locale)
             panel.onSelect = { [weak self] in self?.setSelection(.crypto, animated: true) }
             cryptoPanel = panel
@@ -450,9 +457,13 @@ package final class PaymentFormView: UIView {
 
     private func applySelection(animated: Bool, reportHeightImmediately: Bool = false) {
         personalDetailsRow?.isHidden = isEditingSavedCards
+        walletButton?.isHidden = isEditingSavedCards
+        orDivider?.isHidden = isEditingSavedCards
         cardPanel?.applySelected(selection == .newCard)
         cryptoPanel?.applySelected(selection == .crypto)
         cryptoPanel?.isHidden = isEditingSavedCards
+        updateSavedCardsEditHeader()
+        onEditingSavedCardsChange?(isEditingSavedCards)
         if let container = methodContainer, let form = cardForm {
             container.apply(
                 selection: mapSelection(),
@@ -527,7 +538,12 @@ package final class PaymentFormView: UIView {
 
     private func updatePayButtonAppearance() {
         let t = theme
-        payButton.isHidden = hidesPayButton
+        payButton.isHidden = isEditingSavedCards ? false : hidesPayButton
+        if isEditingSavedCards {
+            let title = Strings.text("button.continue", locale: config.options.locale)
+            payButton.apply(theme: t, title: title, processing: false, enabled: interactionEnabled)
+            return
+        }
         if isProcessing {
             let processing = Strings.text("button.processing", locale: config.options.locale)
             payButton.apply(theme: t, title: processing, processing: true, enabled: false)
@@ -581,6 +597,10 @@ package final class PaymentFormView: UIView {
             }
             return true
         }
+        if isEditingSavedCards {
+            isEditingSavedCards = false
+            applySelection(animated: true, reportHeightImmediately: true)
+        }
         state.personalDetails.showsIncompleteError = true
         refreshPersonalDetailsRow()
         scrollIncompletePersonalDetailsIntoView()
@@ -633,8 +653,91 @@ package final class PaymentFormView: UIView {
         }
     }
 
+    package func exitSavedCardEditing() {
+        guard isEditingSavedCards else { return }
+        isEditingSavedCards = false
+        pendingDeleteId = nil
+        applySelection(animated: true)
+    }
+
+    private func updateSavedCardsEditHeader() {
+        let show = isEditingSavedCards && isEmbedded
+        if show {
+            if savedCardsEditHeader == nil {
+                let header = makeSavedCardsEditHeader()
+                savedCardsEditHeader = header
+                contentStack.insertArrangedSubview(header, at: 0)
+            }
+            return
+        }
+        guard let header = savedCardsEditHeader else { return }
+        contentStack.removeArrangedSubview(header)
+        header.removeFromSuperview()
+        savedCardsEditHeader = nil
+    }
+
+    private func makeSavedCardsEditHeader() -> UIView {
+        let t = theme
+        let header = UIView()
+        header.translatesAutoresizingMaskIntoConstraints = false
+
+        let back = UIButton(type: .system)
+        back.accessibilityLabel = Strings.text("personalDetails.back", locale: config.options.locale)
+        back.addAction(UIAction { [weak self] _ in
+            self?.exitSavedCardEditing()
+        }, for: .touchUpInside)
+        back.translatesAutoresizingMaskIntoConstraints = false
+        let backIcon = UIImageView(
+            image: EmbeddedAssets.image(named: "chevron-left")?.withRenderingMode(.alwaysTemplate)
+        )
+        backIcon.tintColor = t.sheetChromeText
+        backIcon.contentMode = .scaleAspectFit
+        backIcon.isUserInteractionEnabled = false
+        backIcon.translatesAutoresizingMaskIntoConstraints = false
+        back.addSubview(backIcon)
+
+        let titleLabel = UILabel()
+        titleLabel.attributedText = NSAttributedString(
+            string: Strings.text("sheet.savedCards", locale: config.options.locale),
+            attributes: [
+                .font: t.font(ofSize: 21, weight: .semibold),
+                .foregroundColor: t.primaryText,
+                .kern: -0.63,
+            ]
+        )
+        titleLabel.numberOfLines = 2
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        header.addSubview(back)
+        header.addSubview(titleLabel)
+        let headerFit = header.heightAnchor.constraint(equalToConstant: 44)
+        headerFit.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            header.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            headerFit,
+            back.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            back.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            back.widthAnchor.constraint(equalToConstant: 44),
+            back.heightAnchor.constraint(equalToConstant: 44),
+            backIcon.centerXAnchor.constraint(equalTo: back.centerXAnchor),
+            backIcon.centerYAnchor.constraint(equalTo: back.centerYAnchor),
+            backIcon.widthAnchor.constraint(equalToConstant: 20),
+            backIcon.heightAnchor.constraint(equalToConstant: 20),
+            titleLabel.leadingAnchor.constraint(equalTo: back.trailingAnchor, constant: 12),
+            titleLabel.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: back.centerYAnchor),
+            titleLabel.topAnchor.constraint(greaterThanOrEqualTo: header.topAnchor),
+            titleLabel.bottomAnchor.constraint(lessThanOrEqualTo: header.bottomAnchor),
+        ])
+        return header
+    }
+
     @objc private func payTapped() {
         guard !isProcessing, !isOrderConsumed, isUserInteractionEnabled else { return }
+        if isEditingSavedCards {
+            exitSavedCardEditing()
+            return
+        }
         switch selection {
         case let .saved(id):
             guard let card = state.savedCards.first(where: { $0.id == id }) else { return }

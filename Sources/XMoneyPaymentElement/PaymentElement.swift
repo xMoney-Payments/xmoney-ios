@@ -140,18 +140,13 @@ public final class PaymentElement: UIView {
     }
 
     @MainActor
-    public func updateAppearance(_ appearance: PaymentConfig.AppearanceConfig) {
+    public func updateAppearance(_ appearance: PaymentConfig.Appearance) {
         payment.updateAppearance(appearance)
     }
 
     @MainActor
     public func updateLocale(_ locale: String) {
         payment.updateLocale(locale)
-    }
-
-    @MainActor
-    public func updateStyle(_ style: PaymentConfig.UserInterfaceStyle) {
-        payment.updateStyle(style)
     }
 
     @MainActor
@@ -196,6 +191,15 @@ public final class PaymentElement: UIView {
     }
 
     private func orderBound(_ state: SheetState) {
+        if personalDetails != nil {
+            preserveOpenDetails()
+            detachPersonalDetails(refreshRow: false)
+            formView?.update(state: state)
+            if state.customerDetailsVisibility.isActive {
+                presentInlineDetails()
+            }
+            return
+        }
         if let formView {
             formView.update(state: state)
         } else if !loaderHost.isHidden {
@@ -368,13 +372,8 @@ public final class PaymentElement: UIView {
         label.adjustsFontForContentSizeCategory = true
         label.accessibilityTraits = .staticText
         label.text = Strings.text("element.loadFailed", locale: locale)
-        if let config {
-            let theme = CheckoutTheme.resolve(
-                config: config,
-                isDark: UIHelpers.isDarkMode(config: config, traitCollection: traitCollection)
-            )
-            label.textColor = theme.text
-            loaderHost.backgroundColor = theme.background
+        if controller.paymentConfig != nil {
+            applyFailureChrome(to: label)
         } else {
             label.textColor = .label
         }
@@ -389,6 +388,25 @@ public final class PaymentElement: UIView {
         if UIAccessibility.isVoiceOverRunning, window != nil {
             UIAccessibility.post(notification: .announcement, argument: label.text)
         }
+    }
+
+    public override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard let label = failureLabel,
+              UIHelpers.traitsAffectingThemeChanged(traitCollection, from: previousTraitCollection) else { return }
+        applyFailureChrome(to: label)
+    }
+
+    private func applyFailureChrome(to label: UILabel) {
+        guard let config = controller.paymentConfig else { return }
+        let theme = CheckoutTheme.resolve(
+            config: config,
+            isDark: UIHelpers.isDarkMode(config: config, traitCollection: traitCollection),
+            contentSizeScale: UIHelpers.contentSizeScale(traitCollection),
+            increasedContrast: UIHelpers.increasedContrast(traitCollection)
+        )
+        label.textColor = theme.sheetText
+        loaderHost.backgroundColor = theme.background
     }
 
     /// Mounts the form from the controller's current config and state. Tests use this with a preview state.

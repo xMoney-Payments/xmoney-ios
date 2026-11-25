@@ -9,7 +9,7 @@ import XCTest
 @MainActor
 final class CryptoPanelLayoutTests: XCTestCase {
     func testCardSelectedMatchesFrame06() {
-        let form = makeForm(savedCards: [], style: .alwaysLight)
+        let form = makeForm(savedCards: [], style: .light)
         layout(form)
         let gap = verticalGap(from: control(in: form, prefix: "Pay with card"), to: label(in: form, text: "Card details"))
         XCTAssertEqual(gap, 16, accuracy: 1)
@@ -24,7 +24,7 @@ final class CryptoPanelLayoutTests: XCTestCase {
     }
 
     func testCryptoSelectedNoticeSitsBelowTint() {
-        let form = makeForm(savedCards: [], style: .alwaysLight)
+        let form = makeForm(savedCards: [], style: .light)
         layout(form)
         control(in: form, prefix: "Pay with crypto").sendActions(for: .touchUpInside)
         resize(form)
@@ -50,7 +50,7 @@ final class CryptoPanelLayoutTests: XCTestCase {
     }
 
     func testSavedCardsCryptoIdleMatchesFrame01() {
-        let form = makeForm(savedCards: sampleCards(), style: .alwaysLight)
+        let form = makeForm(savedCards: sampleCards(), style: .light)
         layout(form)
         XCTAssertNotNil(label(in: form, text: "Saved cards"))
         XCTAssertNil(optionalLabel(in: form, text: "Card details"))
@@ -59,7 +59,7 @@ final class CryptoPanelLayoutTests: XCTestCase {
 
     func testSavedCardsCryptoSelectedCollapsesToPayWithCard() {
         let cards = sampleCards()
-        let form = makeForm(savedCards: cards, style: .alwaysLight)
+        let form = makeForm(savedCards: cards, style: .light)
         layout(form)
         control(in: form, prefix: "Pay with crypto").sendActions(for: .touchUpInside)
         resize(form)
@@ -76,7 +76,7 @@ final class CryptoPanelLayoutTests: XCTestCase {
 
     func testCryptoFromUseAnotherCardCollapsesToPayWithCard() {
         let cards = sampleCards()
-        let form = makeForm(savedCards: cards, style: .alwaysLight)
+        let form = makeForm(savedCards: cards, style: .light)
         layout(form)
         guard let useAnother = ancestorControl(of: label(in: form, text: "Use another card")) else {
             return XCTFail("missing Use another card control")
@@ -91,7 +91,7 @@ final class CryptoPanelLayoutTests: XCTestCase {
     }
 
     func testDarkModeDropsCardChipShadowAndKeepsNoticeOutsideTint() {
-        let form = makeForm(savedCards: [], style: .alwaysDark)
+        let form = makeForm(savedCards: [], style: .dark)
         layout(form)
         control(in: form, prefix: "Pay with crypto").sendActions(for: .touchUpInside)
         resize(form)
@@ -101,7 +101,7 @@ final class CryptoPanelLayoutTests: XCTestCase {
         XCTAssertFalse(notice.isDescendant(of: block))
     }
 
-    private func makeForm(savedCards: [SavedCard], style: PaymentConfig.UserInterfaceStyle) -> PaymentFormView {
+    private func makeForm(savedCards: [SavedCard], style: PaymentConfig.ColorSchemePreference) -> PaymentFormView {
         let state = SheetState(
             sessionToken: "tok",
             orderInfo: OrderPayloadInfo(
@@ -119,8 +119,8 @@ final class CryptoPanelLayoutTests: XCTestCase {
             config: PaymentConfig(
                 publicKey: "pk_test",
                 card: .init(savedCards: .init(enabled: true, optInVisible: true)),
-                paymentMethods: .init(showCryptoOption: true),
-                options: .init(locale: "en", style: style)
+                paymentMethods: .init(crypto: .init(enabled: true)),
+                options: .init(locale: "en", appearance: .init(colorScheme: style))
             ),
             state: state,
             contentInsets: .sheet

@@ -25,6 +25,8 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
     private var formView: PaymentFormView!
     private var personalDetails: PersonalDetailsViewController?
     private var closeButton: UIButton!
+    private var savedCardsBackButton: UIButton!
+    private var savedCardsTitleLabel: UILabel!
     private var lastReportedHeight: CGFloat = 0
     private var isInvalidatingHeight = false
     private var keyboardObservers: [NSObjectProtocol] = []
@@ -69,6 +71,8 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         formView.setProcessing(processing)
         closeButton?.isEnabled = !processing
         closeButton?.alpha = processing ? 0.4 : 1
+        savedCardsBackButton?.isEnabled = !processing
+        savedCardsBackButton?.alpha = processing ? 0.4 : 1
         isModalInPresentation = processing
         navigationController?.isModalInPresentation = processing
     }
@@ -125,8 +129,9 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
             // Grabber is 8 + 4 + 2. The details view fills the rest.
             return ceil(14 + personalDetails.contentHeight)
         }
-        // Grabber 14 (8+4+2) + 52 close row.
-        let headerChrome: CGFloat = 14 + 52
+        // Grabber 14 (8+4+2) plus the close / back row.
+        let headerHeight = isViewLoaded ? max(headerRow.bounds.height, 52) : 52
+        let headerChrome: CGFloat = 14 + headerHeight
         return ceil(headerChrome + (formView?.contentHeight ?? 280))
     }
 
@@ -165,14 +170,63 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         close.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
         closeButton = close
 
+        let back = UIButton(type: .system)
+        back.accessibilityLabel = Strings.text("personalDetails.back", locale: config.options.locale)
+        back.addTarget(self, action: #selector(savedCardsBackTapped), for: .touchUpInside)
+        back.translatesAutoresizingMaskIntoConstraints = false
+        back.isHidden = true
+        let backIcon = UIImageView(
+            image: EmbeddedAssets.image(named: "chevron-left")?.withRenderingMode(.alwaysTemplate)
+        )
+        backIcon.tintColor = t.sheetChromeText
+        backIcon.contentMode = .scaleAspectFit
+        backIcon.isUserInteractionEnabled = false
+        backIcon.translatesAutoresizingMaskIntoConstraints = false
+        back.addSubview(backIcon)
+        savedCardsBackButton = back
+
+        let titleLabel = UILabel()
+        titleLabel.attributedText = NSAttributedString(
+            string: Strings.text("sheet.savedCards", locale: config.options.locale),
+            attributes: [
+                .font: t.font(ofSize: 21, weight: .semibold),
+                .foregroundColor: t.primaryText,
+                .kern: -0.63,
+            ]
+        )
+        titleLabel.numberOfLines = 2
+        titleLabel.isHidden = true
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        savedCardsTitleLabel = titleLabel
+
         let header = UIView()
         header.translatesAutoresizingMaskIntoConstraints = false
         headerRow = header
         header.addSubview(close)
+        header.addSubview(back)
+        header.addSubview(titleLabel)
+        let headerHeight = header.heightAnchor.constraint(equalToConstant: 52)
+        headerHeight.priority = .defaultHigh
+        let titleCenter = titleLabel.centerYAnchor.constraint(equalTo: back.centerYAnchor)
+        titleCenter.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            header.heightAnchor.constraint(equalToConstant: 52),
+            header.heightAnchor.constraint(greaterThanOrEqualToConstant: 52),
+            headerHeight,
             close.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 8),
             close.topAnchor.constraint(equalTo: header.topAnchor, constant: 8),
+            back.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 8),
+            back.topAnchor.constraint(equalTo: header.topAnchor, constant: 8),
+            back.widthAnchor.constraint(equalToConstant: 44),
+            back.heightAnchor.constraint(equalToConstant: 44),
+            backIcon.centerXAnchor.constraint(equalTo: back.centerXAnchor),
+            backIcon.centerYAnchor.constraint(equalTo: back.centerYAnchor),
+            backIcon.widthAnchor.constraint(equalToConstant: 20),
+            backIcon.heightAnchor.constraint(equalToConstant: 20),
+            titleLabel.leadingAnchor.constraint(equalTo: back.trailingAnchor, constant: 12),
+            titleLabel.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -16),
+            titleCenter,
+            titleLabel.topAnchor.constraint(greaterThanOrEqualTo: header.topAnchor, constant: 8),
+            header.bottomAnchor.constraint(greaterThanOrEqualTo: titleLabel.bottomAnchor),
         ])
 
         formView = PaymentFormView(config: config, state: state, contentInsets: .sheet)
@@ -194,6 +248,9 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         formView.onApplePay = { [weak self] in self?.delegate?.sheetDidTapApplePay() }
         formView.onContentSizeChange = { [weak self] in
             self?.invalidateSheetHeight()
+        }
+        formView.onEditingSavedCardsChange = { [weak self] editing in
+            self?.setEditingSavedCards(editing)
         }
 
         scrollView.alwaysBounceVertical = false
@@ -255,6 +312,17 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         delegate?.sheetDidCancel()
     }
 
+    @objc private func savedCardsBackTapped() {
+        formView.exitSavedCardEditing()
+    }
+
+    private func setEditingSavedCards(_ editing: Bool) {
+        closeButton.isHidden = editing
+        savedCardsBackButton.isHidden = !editing
+        savedCardsTitleLabel.isHidden = !editing
+        invalidateSheetHeight()
+    }
+
     private func observeKeyboardForScrolling() {
         let center = NotificationCenter.default
         keyboardObservers = [
@@ -279,6 +347,7 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
     }
 
     private func scheduleFieldScroll(_ note: Notification) {
+        guard personalDetails == nil else { return }
         let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0.25
         let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect
         let hiding: Bool
@@ -299,6 +368,7 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
     }
 
     private func scrollFocusedField(animated: Bool) {
+        guard personalDetails == nil else { return }
         view.layoutIfNeeded()
         let overflows = scrollView.contentSize.height > scrollView.bounds.height + 1
         scrollView.isScrollEnabled = overflows

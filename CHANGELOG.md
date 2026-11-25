@@ -6,16 +6,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Appearance is now `PaymentConfig.Appearance`: `brandColor`, `accentColor`, `backgroundColor`, `neutralTint`, optional semantic overrides, `corners`, `pillButtons`, `fontFamily`, and `colorScheme`. The previous `colors`, `colorsLight`, `colorsDark`, `shapes`, `primaryButton`, `font.scale`, `options.style`, and `updateStyle` APIs are removed. An empty appearance is the built-in xMoney light and dark themes. The pay button uses `brandColor` as sent. Links, the focus ring, and radios are adjusted so they stay readable, and other unsent colors are derived. An empty appearance uses a 24pt methods container; the previous default was 20.
+- The save-card checkbox starts unchecked.
+- Embedded `PaymentElement` shows personal details in place. Its height follows that page, so apply `onContentSizeChange`.
+- Checkout copy comes from the Swift string catalogs. The old `en`, `el`, and `ro` `.lproj` files are no longer packaged.
+
 ### Added
 
-- `PaymentConfig.customerDetails.fields` replaces the account field list. Leave it unset to keep using `/inline-checkout/fields`. A flag left off is not collected.
+- `PaymentConfig.customerDetails` collects shopper details for card payments and Apple Pay. Which fields appear comes from your account. Card, saved-card, and crypto Pay stay blocked until the details page is valid when `customerDetails.card` is on and the field list is active. Apple Pay requests the matching contact fields and sends them with the payment.
+- `PaymentConfig.customerDetails.fields` replaces the account field list. Leave it unset to keep using `/inline-checkout/fields`. A flag left off is not collected. If that request fails while `customerDetails.card` is on, checkout shows the load failure and Pay stays disabled.
 - `PaymentConfig.customerDetails.defaultValues` prefills the card form. Blank text and values that are not in the country, region, or phone lists are ignored. Apple Pay does not use them.
+- `PaymentConfig.paymentMethods.crypto` adds a crypto payment method. It is off unless enabled. Continue opens the hosted page, and closing that page consumes the order.
+- Card, saved-card, and crypto submit reject a payload that is missing a required customer-details field (`PaymentError.invalidCustomerDetails`).
 
 ### Fixed
 
-- In dark mode, the "Keep it" button in the remove-card prompt shows its label again instead of white text on a white button. Its label now contrasts with `primaryText`, so a custom `background` no longer hides it.
-- Appearance colors apply again in light mode. `primary` tints the selected saved-card row and radio buttons, `secondaryText` colors saved-card details, section labels, the "or" divider label, and the powered-by footer, and `placeholderText` colors empty fields, including the personal-details form. The new default colors are used only when these are unset.
-- The remove-card prompt buttons and the Apple Pay button (when its own `radius` is unset) use `primaryButton.borderRadius`, so every button has the same shape.
+- In dark mode, the "Keep it" button in the remove-card prompt shows its label again instead of white text on a white button. The label contrasts with the text color, so a custom `backgroundColor` no longer hides it.
+- Appearance colors apply again in light mode. `brandColor` tints the pay button. Links and the focus ring are contrast-adjusted from the accent. `textColor` sets primary text only. Saved-card meta, section labels, the "or" label, the powered-by footer, and placeholders follow `neutralTint` and `backgroundColor`.
+- The remove-card prompt buttons and the Apple Pay button (when its own radius is unset) follow `corners` and `pillButtons`, so every button has the same shape. The sheet corner stays 32.
+- Embedded checkout rebuilds an open personal-details page when a new order brings a different field list. Continue will not save values that miss a newly required field.
 
 ## [1.1.1] - 2026-11-18
 
@@ -31,7 +42,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- `PaymentConfig.customerDetails` collects shopper details for card payments and Apple Pay. Which fields appear comes from your account. Card and saved-card Pay stay blocked until the details page is valid. Apple Pay requests the matching contact fields and sends them with the payment.
 - `ApplePayButton.onFirstDraw` and `ApplePayButtonView.onFirstDraw` run once the PassKit button has painted, or after a short wait if it never does. They run again after an appearance change rebuilds the button, or when the button moves to a new window.
 - `EmbeddedPayment.updateOrder { }`, `PaymentElement.updateOrder { }`, and `ApplePay.updateOrder { }` lock Pay while the closure creates the next order and until that order is bound. They return the bound `PaymentIntent` (`@discardableResult`), run the closure on the main actor, and cancel it when the calling task is cancelled.
 - `EmbeddedEvent.updateFailed(PaymentError)`: binding a new order failed after an order was already bound.
@@ -41,7 +51,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- Embedded `PaymentElement` shows personal details in place. Its height follows that page, so apply `onContentSizeChange`.
 - `EmbeddedPayment.prepare` and `EmbeddedPayment.updateOrder` no longer emit `.ready`. A mounted `PaymentElement` emits it once, after the surface first draws; later order updates do not emit it again. `isInteractionEnabled` still unlocks when the bind finishes.
 - The newest merchant `prepare` / `updateOrder` call always wins, including when it passes the order that is already bound. It cancels any in-flight order creation or bind. A superseded call throws `CancellationError`. `PaymentElementView` re-asserting the bound intent is a no-op that cancels nothing.
 - Order binding is two-phase: a superseded bind never changes the order that Pay charges.

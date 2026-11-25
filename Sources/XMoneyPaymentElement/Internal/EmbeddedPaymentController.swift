@@ -113,18 +113,13 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         submitHandler = handler
     }
 
-    func updateAppearance(_ appearance: PaymentConfig.AppearanceConfig) {
+    func updateAppearance(_ appearance: PaymentConfig.Appearance) {
         liveConfiguration.options.appearance = appearance
         publishLiveConfig()
     }
 
     func updateLocale(_ locale: String) {
         liveConfiguration.options.locale = locale
-        publishLiveConfig()
-    }
-
-    func updateStyle(_ style: PaymentConfig.UserInterfaceStyle) {
-        liveConfiguration.options.style = style
         publishLiveConfig()
     }
 

@@ -3,68 +3,51 @@ import XCTest
 @testable import XMoneyCore
 
 final class AppearanceConfigFromTests: XCTestCase {
-    func testFromNilReturnsEmptyConfig() {
-        let appearance = PaymentConfig.AppearanceConfig.from(nil)
+    func testFromNilReturnsEmptyAppearance() {
+        let appearance = PaymentConfig.Appearance.from(nil)
+        XCTAssertNil(appearance.brandColor)
         XCTAssertNil(appearance.fontFamily)
-        XCTAssertNil(appearance.fontScale)
-        XCTAssertNil(appearance.colors)
-        XCTAssertNil(appearance.borderRadius)
-        XCTAssertNil(appearance.primaryButton)
+        XCTAssertEqual(appearance.corners, .default)
+        XCTAssertTrue(appearance.pillButtons)
+        XCTAssertEqual(appearance.colorScheme, .automatic)
     }
 
-    func testFromIgnoresFlatFontAndShapeKeys() {
-        let appearance = PaymentConfig.AppearanceConfig.from([
-            "fontFamily": "Inter",
-            "fontScale": 1.5,
-            "borderRadius": 10,
-            "borderWidth": 2,
+    func testFromParsesSeedColorsCornersAndOverrides() {
+        let appearance = PaymentConfig.Appearance.from([
+            "colorScheme": "light",
+            "brandColor": ["light": "#1D4ED8", "dark": "#436CDF"],
+            "accentColor": "#0F766E",
+            "backgroundColor": "#FBF5EA",
+            "neutralTint": "#8A7560",
+            "corners": "rounded",
+            "pillButtons": false,
+            "fontFamily": "Georgia",
+            "overrides": [
+                "onBrandColor": "#16141A",
+                "textColor": "#111111",
+                "linkColor": "#0F766E",
+                "borderColor": "#E7D7C4",
+                "componentColor": "#FEFDFA",
+                "selectedColor": "#F4E6D4",
+                "secondaryButtonColor": "#E7D3C4",
+            ],
         ])
-        XCTAssertNil(appearance.fontFamily)
-        XCTAssertNil(appearance.fontScale)
-        XCTAssertNil(appearance.borderRadius)
-        XCTAssertNil(appearance.borderWidth)
+        XCTAssertEqual(appearance.colorScheme, .light)
+        XCTAssertEqual(appearance.brandColor?.light.hex, "#1D4ED8")
+        XCTAssertEqual(appearance.brandColor?.dark.hex, "#436CDF")
+        XCTAssertEqual(appearance.accentColor?.light.hex, "#0F766E")
+        XCTAssertEqual(appearance.backgroundColor?.light.hex, "#FBF5EA")
+        XCTAssertEqual(appearance.neutralTint?.light.hex, "#8A7560")
+        XCTAssertEqual(appearance.corners, .rounded)
+        XCTAssertFalse(appearance.pillButtons)
+        XCTAssertEqual(appearance.fontFamily, "Georgia")
+        XCTAssertEqual(appearance.overrides.onBrandColor?.light.hex, "#16141A")
+        XCTAssertEqual(appearance.overrides.componentColor?.light.hex, "#FEFDFA")
+        XCTAssertEqual(appearance.overrides.secondaryButtonColor?.light.hex, "#E7D3C4")
     }
 
-    func testFromNestedFontShapesAndPrimaryButton() {
-        let dict: [String: Any] = [
-            "font": [
-                "family": "Inter",
-                "scale": 1.25,
-            ],
-            "shapes": [
-                "borderRadius": 12,
-                "borderWidth": 2,
-            ],
-            "colors": [
-                "primary": "#0E7C66",
-            ],
-            "primaryButton": [
-                "font": [
-                    "family": "Roobert",
-                ],
-                "shapes": [
-                    "borderRadius": 8,
-                    "borderWidth": 1,
-                ],
-                "colors": [
-                    "background": "#111111",
-                    "text": "#FFFFFF",
-                    "border": "#222222",
-                ],
-            ],
-        ]
-
-        let appearance = PaymentConfig.AppearanceConfig.from(dict)
-        XCTAssertEqual(appearance.fontFamily, "Inter")
-        XCTAssertEqual(appearance.fontScale, 1.25)
-        XCTAssertEqual(appearance.borderRadius, 12)
-        XCTAssertEqual(appearance.borderWidth, 2)
-        XCTAssertEqual(appearance.colors?.primary, "#0E7C66")
-        XCTAssertEqual(appearance.primaryButton?.fontFamily, "Roobert")
-        XCTAssertEqual(appearance.primaryButton?.borderRadius, 8)
-        XCTAssertEqual(appearance.primaryButton?.borderWidth, 1)
-        XCTAssertEqual(appearance.primaryButton?.colors?.background, "#111111")
-        XCTAssertEqual(appearance.primaryButton?.colors?.text, "#FFFFFF")
-        XCTAssertEqual(appearance.primaryButton?.colors?.border, "#222222")
+    func testInvalidHexIsDropped() {
+        let appearance = PaymentConfig.Appearance.from(["brandColor": "not-a-color"])
+        XCTAssertNil(appearance.brandColor)
     }
 }

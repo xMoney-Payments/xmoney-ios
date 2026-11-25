@@ -33,7 +33,7 @@ package final class CircleCloseButton: UIButton {
     package init(theme: CheckoutTheme, locale: String = "en-US") {
         super.init(frame: .zero)
         let icon = UIImageView(image: EmbeddedAssets.image(named: "close")?.withRenderingMode(.alwaysTemplate))
-        icon.tintColor = theme.primaryText
+        icon.tintColor = theme.sheetChromeText
         icon.isUserInteractionEnabled = false
         icon.translatesAutoresizingMaskIntoConstraints = false
         addSubview(icon)
@@ -43,7 +43,7 @@ package final class CircleCloseButton: UIButton {
             icon.widthAnchor.constraint(equalToConstant: 24),
             icon.heightAnchor.constraint(equalToConstant: 24),
         ])
-        tintColor = theme.primaryText
+        tintColor = theme.sheetChromeText
         backgroundColor = .clear
         accessibilityLabel = Strings.text("sheet.cancel", locale: locale)
         translatesAutoresizingMaskIntoConstraints = false
@@ -99,14 +99,21 @@ final class OrDividerView: UIView {
 
 final class RadioIndicator: UIView {
     private let ring = CAShapeLayer()
+    private let outline = CAShapeLayer()
     private let dot = UIView()
+    private var theme: CheckoutTheme
+    private var showsOutline = false
 
     init(theme: CheckoutTheme) {
+        self.theme = theme
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = .clear
         ring.fillColor = UIColor.clear.cgColor
         ring.lineWidth = 2
+        outline.fillColor = UIColor.clear.cgColor
+        outline.lineWidth = 1
+        layer.addSublayer(outline)
         layer.addSublayer(ring)
         dot.layer.cornerRadius = 7
         dot.translatesAutoresizingMaskIntoConstraints = false
@@ -133,16 +140,24 @@ final class RadioIndicator: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         ring.frame = bounds
-        let inset = ring.lineWidth / 2
-        ring.path = UIBezierPath(ovalIn: bounds.insetBy(dx: inset, dy: inset)).cgPath
+        outline.frame = bounds
+        let outlineWidth: CGFloat = showsOutline ? 1 : 0
+        outline.lineWidth = outlineWidth
+        let ringInset = ring.lineWidth / 2 + outlineWidth
+        ring.path = UIBezierPath(ovalIn: bounds.insetBy(dx: ringInset, dy: ringInset)).cgPath
+        let outlineInset = max(outlineWidth / 2, 0.5)
+        outline.path = UIBezierPath(ovalIn: bounds.insetBy(dx: outlineInset, dy: outlineInset)).cgPath
     }
 
     func setSelected(_ selected: Bool, theme: CheckoutTheme, animated: Bool) {
+        self.theme = theme
         let updates = {
-            let stroke = (selected ? theme.primary : theme.radioIdle).cgColor
-            self.ring.strokeColor = stroke
+            self.showsOutline = selected && theme.filledBrandNeedsOutline
+            self.ring.strokeColor = (selected ? theme.primary : theme.radioIdle).cgColor
+            self.outline.strokeColor = (self.showsOutline ? theme.stateIndicatorBorder : UIColor.clear).cgColor
             self.dot.backgroundColor = theme.primary
             self.dot.alpha = selected ? 1 : 0
+            self.setNeedsLayout()
         }
         if animated {
             UIView.animate(withDuration: 0.2, animations: updates)
@@ -163,7 +178,7 @@ final class CheckboxControl: UIControl {
     init(theme: CheckoutTheme) {
         self.theme = theme
         super.init(frame: .zero)
-        box.layer.cornerRadius = 8
+        box.layer.cornerRadius = theme.checkboxRadius
         box.layer.borderWidth = 1.5
         box.isUserInteractionEnabled = false
         box.translatesAutoresizingMaskIntoConstraints = false
@@ -196,10 +211,11 @@ final class CheckboxControl: UIControl {
         let updates = {
             if checked {
                 self.box.backgroundColor = self.theme.primary
-                self.box.layer.borderColor = UIColor.clear.cgColor
+                let outline = self.theme.filledBrandNeedsOutline
+                self.box.layer.borderColor = (outline ? self.theme.stateIndicatorBorder : UIColor.clear).cgColor
                 self.checkView.image = EmbeddedAssets.image(named: "check")?
                     .withRenderingMode(.alwaysTemplate)
-                self.checkView.tintColor = .white
+                self.checkView.tintColor = self.theme.primaryButtonText
                 self.checkView.alpha = 1
             } else {
                 self.box.backgroundColor = .clear
@@ -295,7 +311,7 @@ final class BrandTileView: UIView {
             addCardIcon(theme: theme)
         case .payWithCard:
             backgroundColor = theme.accentIconBackground
-            if !theme.isDark {
+            if !theme.isDarkSurface {
                 clipsToBounds = false
                 layer.shadowColor = UIColor(hex: "#16141A")?.cgColor
                 layer.shadowOpacity = 0.04

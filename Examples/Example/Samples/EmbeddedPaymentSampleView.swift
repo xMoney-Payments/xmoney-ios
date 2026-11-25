@@ -26,13 +26,11 @@ struct EmbeddedPaymentSampleView: View {
 
     var body: some View {
         let style = exampleForcedStyle(theme.isDark)
-        let wallet = exampleWalletAppearance(isDark: theme.isDark)
-        let appearance = exampleAppearance()
         let configuration = PaymentConfig(
             publicKey: ExampleSecrets.publicKey,
             card: .init(savedCards: .init(enabled: true)),
-            paymentMethods: .init(applePay: .init(enabled: true, appearance: wallet)),
-            options: .init(style: style, appearance: appearance)
+            paymentMethods: .init(applePay: .init(enabled: true)),
+            options: .init(appearance: .init(colorScheme: style))
         )
 
         SampleScaffold(
@@ -95,8 +93,6 @@ struct EmbeddedPaymentSampleView: View {
     }
 
     private func applyLiveTheme(_ configuration: PaymentConfig) {
-        payment?.updateStyle(configuration.options.style)
-        payment?.updateWalletAppearance(configuration.paymentMethods.applePay.appearance)
         payment?.updateAppearance(configuration.options.appearance)
     }
 

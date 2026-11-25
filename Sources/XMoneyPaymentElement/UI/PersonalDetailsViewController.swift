@@ -132,7 +132,7 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
 
     package override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
-        guard traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) else { return }
+        guard UIHelpers.traitsAffectingThemeChanged(traitCollection, from: previousTraitCollection) else { return }
         rebuildForAppearanceChange()
     }
 
@@ -204,7 +204,9 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
     private func resolvedTheme() -> CheckoutTheme {
         CheckoutTheme.resolve(
             config: config,
-            isDark: UIHelpers.isDarkMode(config: config, traitCollection: traitCollection)
+            isDark: UIHelpers.isDarkMode(config: config, traitCollection: traitCollection),
+            contentSizeScale: UIHelpers.contentSizeScale(traitCollection),
+            increasedContrast: UIHelpers.increasedContrast(traitCollection)
         )
     }
 
@@ -221,7 +223,7 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
         let backIcon = UIImageView(
             image: EmbeddedAssets.image(named: "chevron-left")?.withRenderingMode(.alwaysTemplate)
         )
-        backIcon.tintColor = theme.primaryText
+        backIcon.tintColor = theme.sheetChromeText
         backIcon.contentMode = .scaleAspectFit
         backIcon.isUserInteractionEnabled = false
         backIcon.translatesAutoresizingMaskIntoConstraints = false
@@ -232,7 +234,7 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
             string: Strings.text("personalDetails.enterDetails", locale: config.options.locale),
             attributes: [
                 .font: theme.font(ofSize: 21, weight: .semibold),
-                .foregroundColor: theme.primaryText,
+                .foregroundColor: theme.sheetText,
                 .kern: -0.63,
             ]
         )

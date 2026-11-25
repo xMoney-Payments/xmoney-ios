@@ -125,6 +125,7 @@ package final class PaymentEngine {
         var savedCards: [SavedCard] = []
         var applePayParams: WalletParams?
         var customerFields: [String] = []
+        var fieldsUnavailable = false
         await withTaskGroup(of: LoadPart.self) { group in
             group.addTask {
                 do {
@@ -154,7 +155,7 @@ package final class PaymentEngine {
             group.addTask {
                 switch customerFieldsSource {
                 case .resolved(let fields):
-                    return .customerFields(fields)
+                    return .customerFields(InlineFieldsResult(fields: fields, unavailable: false))
                 case .inlineCheckout:
                     return .customerFields(await inlineFields.getFields(sessionToken: token))
                 }
@@ -164,9 +165,14 @@ package final class PaymentEngine {
                 case .siteConfig(let config): siteConfig = config
                 case .savedCards(let list): savedCards = list
                 case .applePayParams(let params): applePayParams = params
-                case .customerFields(let fields): customerFields = fields
+                case .customerFields(let result):
+                    customerFields = result.fields
+                    fieldsUnavailable = result.unavailable
                 }
             }
+        }
+        if fieldsUnavailable && configuration.customerDetails.card {
+            throw PaymentError.load(PaymentError.genericLoad)
         }
         nameCheckValidationEnabled = siteConfig.nameCheckValidationEnabled
         customerDetailsVisibility = CustomerDetailsVisibility.resolve(fields: customerFields)
@@ -200,6 +206,7 @@ package final class PaymentEngine {
         presenter: ThreeDSPresenter,
         customerDetails: CustomerDetails? = nil
     ) async throws -> EngineResult {
+        try requireCustomerDetails(customerDetails)
         if let verification = configuration.card.cardHolderVerification {
             if !nameCheckValidationEnabled {
                 throw PaymentError.cardHolderVerification(PaymentError.nameCheckNotEnabled)
@@ -238,6 +245,7 @@ package final class PaymentEngine {
         presenter: ThreeDSPresenter,
         customerDetails: CustomerDetails? = nil
     ) async throws -> EngineResult {
+        try requireCustomerDetails(customerDetails)
         let fields = payment.savedCardFields(
             cardId: cardId,
             orderPayload: intent.orderPayload,
@@ -267,6 +275,7 @@ package final class PaymentEngine {
         presenter: ThreeDSPresenter,
         customerDetails: CustomerDetails? = nil
     ) async throws -> EngineResult {
+        try requireCustomerDetails(customerDetails)
         let fields = payment.cryptoFields(
             orderPayload: intent.orderPayload,
             orderChecksum: intent.orderChecksum,
@@ -295,6 +304,26 @@ package final class PaymentEngine {
             && !orderInfo.isRecurring
         guard showSavedCards else { return [] }
         return try await cards.getCards(sessionToken: sessionToken)
+    }
+
+    private func requireCustomerDetails(_ details: CustomerDetails?) throws {
+        guard configuration.customerDetails.card, customerDetailsVisibility.isActive else { return }
+        guard let details else { throw PaymentError.invalidCustomerDetails }
+        func blank(_ value: String?) -> Bool {
+            value?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+        }
+        let visibility = customerDetailsVisibility
+        if visibility.showFullName && blank(details.fullName) { throw PaymentError.invalidCustomerDetails }
+        if visibility.showEmail && blank(details.email) { throw PaymentError.invalidCustomerDetails }
+        if visibility.showPhone && blank(details.phone) { throw PaymentError.invalidCustomerDetails }
+        if visibility.showAddressSection {
+            if blank(details.country) || blank(details.address) || blank(details.city) {
+                throw PaymentError.invalidCustomerDetails
+            }
+            let format = AddressFormats.format(countryCode: details.country ?? "")
+            if format.showRegion && blank(details.region) { throw PaymentError.invalidCustomerDetails }
+            if format.showPostal && blank(details.postalCode) { throw PaymentError.invalidCustomerDetails }
+        }
     }
 
     private func customerDetailFieldsSource() -> CustomerFieldsSource {
@@ -374,7 +403,7 @@ package final class PaymentEngine {
         case siteConfig(SiteConfig)
         case savedCards([SavedCard])
         case applePayParams(WalletParams?)
-        case customerFields([String])
+        case customerFields(InlineFieldsResult)
     }
 
     private enum CustomerFieldsSource {

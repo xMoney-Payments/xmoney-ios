@@ -646,9 +646,11 @@ struct ExampleSwitchRow: View {
                     Text(title)
                         .font(ExampleFont.titleMedium)
                         .foregroundColor((theme.isDark ? ExampleColors.darkText : ExampleColors.lightText).opacity(enabled ? 1 : 0.38))
-                    Text(subtitle)
-                        .font(ExampleFont.bodyMedium)
-                        .foregroundColor((theme.isDark ? ExampleColors.darkMuted : ExampleColors.lightMuted).opacity(enabled ? 1 : 0.38))
+                    if !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(ExampleFont.bodyMedium)
+                            .foregroundColor((theme.isDark ? ExampleColors.darkMuted : ExampleColors.lightMuted).opacity(enabled ? 1 : 0.38))
+                    }
                 }
                 Spacer()
                 Toggle("", isOn: $isOn)

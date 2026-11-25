@@ -13,8 +13,7 @@ package final class PersonalDetailsEntryRow: UIView {
     private let chevron = UIImageView()
     private let plusTile: BrandTileView
     private let personTile = UIView()
-    private let personIcon = UIImageView()
-    private let badge = UIImageView()
+    private let stepDone = UIImageView()
     private let errorRow = UIView()
 
     package init(theme: CheckoutTheme, locale: String) {
@@ -86,35 +85,16 @@ package final class PersonalDetailsEntryRow: UIView {
             personTile.widthAnchor.constraint(equalToConstant: 48),
             personTile.heightAnchor.constraint(equalToConstant: 34),
         ])
-        personIcon.image = EmbeddedAssets.image(named: "person")?.withRenderingMode(.alwaysTemplate)
-        personIcon.tintColor = theme.iconBrand
-        personIcon.translatesAutoresizingMaskIntoConstraints = false
-        personTile.addSubview(personIcon)
-        badge.backgroundColor = theme.primary
-        badge.layer.cornerRadius = 11
-        badge.layer.borderWidth = 1
-        badge.layer.borderColor = theme.componentBackground.cgColor
-        badge.clipsToBounds = true
-        badge.translatesAutoresizingMaskIntoConstraints = false
-        let check = UIImageView(image: EmbeddedAssets.image(named: "check")?.withRenderingMode(.alwaysTemplate))
-        check.tintColor = theme.primaryButtonText
-        check.contentMode = .scaleAspectFit
-        check.translatesAutoresizingMaskIntoConstraints = false
-        badge.addSubview(check)
-        personTile.addSubview(badge)
+        stepDone.image = EmbeddedAssets.image(named: "step-done")?.withRenderingMode(.alwaysTemplate)
+        stepDone.tintColor = theme.primary
+        stepDone.contentMode = .scaleAspectFit
+        stepDone.translatesAutoresizingMaskIntoConstraints = false
+        personTile.addSubview(stepDone)
         NSLayoutConstraint.activate([
-            personIcon.centerXAnchor.constraint(equalTo: personTile.centerXAnchor),
-            personIcon.centerYAnchor.constraint(equalTo: personTile.centerYAnchor),
-            personIcon.widthAnchor.constraint(equalToConstant: 16),
-            personIcon.heightAnchor.constraint(equalToConstant: 16),
-            badge.widthAnchor.constraint(equalToConstant: 22),
-            badge.heightAnchor.constraint(equalToConstant: 22),
-            badge.trailingAnchor.constraint(equalTo: personTile.trailingAnchor, constant: 4),
-            badge.bottomAnchor.constraint(equalTo: personTile.bottomAnchor, constant: 4),
-            check.centerXAnchor.constraint(equalTo: badge.centerXAnchor),
-            check.centerYAnchor.constraint(equalTo: badge.centerYAnchor),
-            check.widthAnchor.constraint(equalToConstant: 10),
-            check.heightAnchor.constraint(equalToConstant: 8),
+            stepDone.centerXAnchor.constraint(equalTo: personTile.centerXAnchor),
+            stepDone.centerYAnchor.constraint(equalTo: personTile.centerYAnchor),
+            stepDone.widthAnchor.constraint(equalToConstant: 24),
+            stepDone.heightAnchor.constraint(equalToConstant: 24),
         ])
 
         titleLabel.numberOfLines = 2

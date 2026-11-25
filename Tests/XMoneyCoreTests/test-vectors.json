@@ -67,26 +67,18 @@
   "themeResolution": [
     {
       "isDark": false,
-      "appearance": {
-        "colorsLight": { "primary": "#ff0000" },
-        "colors": { "primary": "#00ff00" }
-      },
-      "expected": { "primary": "#ff0000", "background": "#f7f6ff" }
+      "appearance": { "brandColor": "#ff0000" },
+      "expected": { "primary": "#ff0000", "background": "#fff0f0" }
     },
     {
       "isDark": true,
-      "appearance": {
-        "colorsDark": { "background": "#111111" },
-        "colors": { "background": "#222222" }
-      },
+      "appearance": { "backgroundColor": "#111111" },
       "expected": { "primary": "#7c4dff", "background": "#111111" }
     },
     {
       "isDark": false,
-      "appearance": {
-        "colors": { "error": "#123456" }
-      },
-      "expected": { "primary": "#7c4dff", "error": "#123456" }
+      "appearance": { "colorsLight": { "primary": "#ff0000" } },
+      "expected": { "primary": "#7c4dff", "background": "#f7f6ff" }
     }
   ],
   "orderPayload": [

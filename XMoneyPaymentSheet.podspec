@@ -23,7 +23,7 @@ Pod::Spec.new do |s|
   s.subspec 'Core' do |core|
     core.source_files = 'Sources/XMoneyCore/**/*.swift'
     core.resource_bundles = {
-      'XMoneyCore' => ['PrivacyInfo.xcprivacy', 'Resources/XMoneyCoreAssets.xcassets', 'Resources/*.lproj']
+      'XMoneyCore' => ['PrivacyInfo.xcprivacy', 'Resources/XMoneyCoreAssets.xcassets']
     }
     core.frameworks   = 'UIKit', 'SafariServices'
     core.pod_target_xcconfig = pod_swift_xcconfig

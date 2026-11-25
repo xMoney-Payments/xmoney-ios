@@ -197,6 +197,16 @@ final class CustomerDetailsTests: XCTestCase {
         XCTAssertEqual(Strings.text("personalDetails.back", locale: "pl"), "Wstecz")
     }
 
+    func testCommitRefusesValuesThatMissANewlyRequiredField() {
+        let emailOnly = CustomerDetailsVisibility.resolve(fields: ["email"])
+        let progress = PersonalDetailsProgress()
+        XCTAssertTrue(progress.commit(PersonalDetailsValues(email: "a@b.co"), visibility: emailOnly))
+        let withPhone = CustomerDetailsVisibility.resolve(fields: ["email", "phone"])
+        XCTAssertFalse(progress.commit(PersonalDetailsValues(email: "a@b.co"), visibility: withPhone))
+        XCTAssertNil(progress.committed)
+        XCTAssertFalse(progress.isComplete)
+    }
+
     func testLeaveKeepsValidEditsAsTheCommittedDetails() {
         let visibility = CustomerDetailsVisibility.resolve(fields: ["email"])
         let progress = PersonalDetailsProgress()

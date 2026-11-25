@@ -576,10 +576,10 @@ final class EmbeddedSmokeTests: XCTestCase {
         let embedded = EmbeddedPayment(configuration: PaymentConfig(publicKey: "pk_test_x")) { _ in }
         embedded.updateAppearance(.init())
         embedded.updateLocale("el-GR")
-        embedded.updateStyle(.alwaysDark)
+        embedded.updateAppearance(.init(colorScheme: .dark))
         embedded.updateWalletAppearance(.init(color: .white, radius: 12, type: .pay))
         XCTAssertEqual(embedded._controller.paymentConfig?.options.locale, "el-GR")
-        XCTAssertEqual(embedded._controller.paymentConfig?.options.style, .alwaysDark)
+        XCTAssertEqual(embedded._controller.paymentConfig?.options.appearance.colorScheme, .dark)
         XCTAssertEqual(embedded._controller.paymentConfig?.paymentMethods.applePay.appearance.color, .white)
         XCTAssertFalse(embedded.isInteractionEnabled)
         embedded.confirm()

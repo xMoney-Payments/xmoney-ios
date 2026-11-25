@@ -55,12 +55,7 @@ final class PayCTAVisibilityTests: XCTestCase {
         let config = PaymentConfig(
             publicKey: "pk_test",
             options: .init(
-                appearance: .init(
-                    primaryButton: .init(
-                        colorsLight: .init(background: "#7C4DFF", text: "#FFFFFF"),
-                        borderRadius: 9999
-                    )
-                )
+                appearance: .init(brandColor: .init(hex: "#7C4DFF"))
             )
         )
         let form = PaymentFormView(

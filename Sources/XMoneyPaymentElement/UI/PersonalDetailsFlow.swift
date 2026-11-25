@@ -24,7 +24,7 @@ package enum PersonalDetailsFlow {
             onFinished()
         }
         details.onCommit = { values in
-            progress.commit(values)
+            guard progress.commit(values, visibility: visibility) else { return }
             onFinished()
         }
         return details

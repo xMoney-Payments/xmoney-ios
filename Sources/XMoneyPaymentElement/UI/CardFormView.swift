@@ -195,7 +195,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             }
             let saveRow = UIControl()
             let checkbox = CheckboxControl(theme: theme)
-            checkbox.setChecked(true, animated: false)
+            checkbox.setChecked(false, animated: false)
             saveCheckbox = checkbox
 
             let label = UILabel()
@@ -651,7 +651,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
                     box.layer.borderColor = theme.errorBorder.cgColor
                 } else if focused {
                     box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
-                    box.layer.borderColor = theme.primary.cgColor
+                    box.layer.borderColor = theme.focusRing.cgColor
                 } else {
                     box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
                     box.layer.borderColor = theme.fieldBorder.cgColor
@@ -668,7 +668,7 @@ package final class CardFormView: UIView, UITextFieldDelegate {
             container.layer.borderColor = theme.errorBorder.cgColor
         } else if anyFocused {
             container.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
-            container.layer.borderColor = theme.primary.cgColor
+            container.layer.borderColor = theme.focusRing.cgColor
         } else {
             container.layer.borderWidth = 0
         }

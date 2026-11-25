@@ -131,7 +131,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
         return CustomerDetailsValidator.validate(values, visibility: visibility).isEmpty
     }
 
-    private let fieldHeight: CGFloat = 48
+    private var fieldHeight: CGFloat { max(theme.formFieldHeight, 48) }
     private let fieldInset: CGFloat = 16
 
     /// Below required so a hidden stack row can collapse while fitting. A visible row still lays out at this height.
@@ -208,7 +208,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
             string: text(key),
             attributes: isSpaced
                 ? theme.titleAttributes(size: 16, weight: .semibold, color: theme.primaryText)
-                : theme.titleAttributes(size: 14, weight: .semibold, color: theme.sectionLabelColor)
+                : theme.titleAttributes(size: 14, weight: .semibold, color: theme.metaText)
         )
         return isSpaced ? label : padded(label, top: 4)
     }
@@ -239,7 +239,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
             attributes: theme.titleAttributes(
                 size: 14,
                 weight: .semibold,
-                color: theme.sectionLabelColor
+                color: theme.metaText
             )
         )
     }
@@ -756,7 +756,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
                     box.layer.borderColor = theme.errorBorder.cgColor
                 } else if isFocused {
                     box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
-                    box.layer.borderColor = theme.primary.cgColor
+                    box.layer.borderColor = theme.focusRing.cgColor
                 } else {
                     box.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
                     box.layer.borderColor = restingFieldBorder.cgColor
@@ -776,7 +776,7 @@ package final class PersonalDetailsFormView: UIView, UITextFieldDelegate {
             group.layer.borderColor = theme.errorBorder.cgColor
         } else if isFocused {
             group.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
-            group.layer.borderColor = theme.primary.cgColor
+            group.layer.borderColor = theme.focusRing.cgColor
         } else {
             group.layer.borderWidth = theme.fieldStrokeWidth(hasError: false)
             group.layer.borderColor = restingFieldBorder.cgColor

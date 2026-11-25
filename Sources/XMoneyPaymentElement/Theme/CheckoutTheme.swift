@@ -34,9 +34,18 @@ package struct CheckoutTheme {
     private static let defaultErrorTextDark = UIColor(hex: "#EF4444")!
     package let primaryButtonBackground: UIColor
     package let primaryButtonText: UIColor
+    package let primaryButtonPressed: UIColor
+    package let primaryButtonDisabledBackground: UIColor
+    package let primaryButtonDisabledText: UIColor
     package let primaryButtonBorder: UIColor
     package let primaryButtonBorderRadius: CGFloat
     package let primaryButtonBorderWidth: CGFloat
+    package let secondaryButtonBackground: UIColor
+    package let secondaryButtonText: UIColor
+    package let focusRing: UIColor
+    package let stateIndicatorBorder: UIColor
+    package let checkboxRadius: CGFloat
+    package let brandShadow: UIColor
 
     package let isDark: Bool
     package let selectedBackground: UIColor
@@ -76,7 +85,7 @@ package struct CheckoutTheme {
     package let metaText: UIColor
     /// Muted copy: saved-card header and meta, crypto subtitle, personal-details headings.
     package let sectionLabelColor: UIColor
-    /// Unselected radio stroke. Checked radios use a `primary` ring and dot.
+    /// Unselected radio and checkbox stroke. Translucent, so it composites on the card.
     package let radioIdle: UIColor
     /// Brand-coloured labels such as Edit and "Use another card".
     package let textBrand: UIColor
@@ -90,6 +99,16 @@ package struct CheckoutTheme {
     package let dangerTintStrong: UIColor
     /// Text on the "Keep it" pill. The KYC inverse token, unless the merchant sets `primaryText`.
     package let inverseText: UIColor
+    /// Text drawn on the sheet. Stays readable when field text follows a flipped card.
+    package let sheetText: UIColor
+    /// The resolved sheet is dark, independent of the color-scheme flag.
+    package let isDarkSurface: Bool
+
+    /** Low-contrast brands stay the brand color. The ink outline is not drawn. */
+    package var filledBrandNeedsOutline: Bool { false }
+
+    /// Close and back icons sit on the sheet. Field text can follow a lighter card.
+    package var sheetChromeText: UIColor { sheetText }
 
     package var containerBorderWidth: CGFloat {
         var a: CGFloat = 0
@@ -119,10 +138,13 @@ package struct CheckoutTheme {
         weight: UIFont.Weight = .regular,
         family: String? = nil
     ) -> UIFont {
-        let scaled = size * fontScale
+        let scaled = UIFontMetrics(forTextStyle: .body).scaledValue(for: size)
         let name = family ?? fontFamily
-        if let name, let custom = UIFont(name: name, size: scaled) {
-            return custom
+        if let name {
+            if let custom = Self.font(inFamily: name, size: scaled, weight: weight) {
+                return custom
+            }
+            AppearanceLog.warn("font family '\(name)' is not registered")
         }
         if PaymentFontFamily.isAvailable {
             return PaymentFontFamily.font(weight: weight, size: scaled)
@@ -158,10 +180,10 @@ package struct CheckoutTheme {
         let font = self.font(ofSize: size, weight: weight, family: family)
         var attrs: [NSAttributedString.Key: Any] = [
             .font: font,
-            .kern: -0.01 * size * fontScale,
+            .kern: fontFamily == nil ? -0.01 * size : 0,
         ]
         if let lineHeight = lineHeight ?? Self.lineHeight(forSize: size) {
-            let scaled = lineHeight * fontScale
+            let scaled = UIFontMetrics(forTextStyle: .body).scaledValue(for: lineHeight)
             let paragraph = NSMutableParagraphStyle()
             paragraph.minimumLineHeight = scaled
             paragraph.maximumLineHeight = scaled
@@ -187,6 +209,7 @@ package struct CheckoutTheme {
         alignment: NSTextAlignment = .natural,
         lineHeight: CGFloat? = nil
     ) {
+        label.adjustsFontForContentSizeCategory = true
         label.numberOfLines = multiline ? 0 : 1
         label.attributedText = NSAttributedString(
             string: text,
@@ -206,208 +229,118 @@ package struct CheckoutTheme {
     package var border: UIColor { componentBorder }
     package var cornerRadius: CGFloat { borderRadius }
 
-    package static func resolve(config: PaymentConfig, isDark: Bool) -> CheckoutTheme {
-        let appearance = config.options.appearance
-        let defaults = isDark ? DefaultColors.dark : DefaultColors.light
-        let modeColors = isDark ? appearance.colorsDark : appearance.colorsLight
-        let sharedColors = appearance.colors
+    package static func font(inFamily family: String, size: CGFloat, weight: UIFont.Weight) -> UIFont? {
+        let descriptor = UIFontDescriptor(fontAttributes: [
+            .family: family,
+            .traits: [UIFontDescriptor.TraitKey.weight: weight],
+        ])
+        let font = UIFont(descriptor: descriptor, size: size)
+        let matches = font.familyName.caseInsensitiveCompare(family) == .orderedSame
+            || font.fontName.caseInsensitiveCompare(family) == .orderedSame
+        if matches { return font }
+        return UIFont(name: family, size: size)
+    }
 
-        func color(
-            _ key: (PaymentConfig.AppearanceColors) -> String?,
-            fallback: UIColor
-        ) -> UIColor {
-            if let hex = modeColors.flatMap({ key($0) }) ?? sharedColors.flatMap({ key($0) }) {
-                return UIColor(hex: hex) ?? fallback
+    private static func contrast(_ color: UIColor, against other: UIColor) -> CGFloat {
+        func luminance(_ color: UIColor) -> CGFloat {
+            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+            guard color.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else { return 0 }
+            func linear(_ channel: CGFloat) -> CGFloat {
+                channel <= 0.04045 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
             }
-            return fallback
+            return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
         }
+        let lighter = max(luminance(color), luminance(other))
+        let darker = min(luminance(color), luminance(other))
+        return (lighter + 0.05) / (darker + 0.05)
+    }
 
-        func isSet(_ key: (PaymentConfig.AppearanceColors) -> String?) -> Bool {
-            let hex = modeColors.flatMap({ key($0) }) ?? sharedColors.flatMap({ key($0) })
-            return UIColor(hex: hex) != nil
-        }
-
-        func optionalColor(
-            _ key: (PaymentConfig.AppearanceColors) -> String?,
-            fallback: UIColor
-        ) -> UIColor {
-            let raw = modeColors.flatMap({ key($0) }) ?? sharedColors.flatMap({ key($0) })
-            guard let raw else { return fallback }
-            let token = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            if token == "none" || token == "transparent" {
-                return .clear
-            }
-            return UIColor(hex: raw) ?? fallback
-        }
-
-        let ink = isDark ? Ink.dark : Ink.light
-        func inkAlpha(_ alphaByte: Int) -> UIColor {
-            ink.withAlphaComponent(CGFloat(alphaByte) / 255.0)
-        }
-        func chromeAlpha(_ alphaByte: Int) -> UIColor {
-            (isDark ? Ink.darkChrome : ink).withAlphaComponent(CGFloat(alphaByte) / 255.0)
-        }
-
-        let pbMode = isDark ? appearance.primaryButton?.colorsDark : appearance.primaryButton?.colorsLight
-        let pbShared = appearance.primaryButton?.colors
-        let pbShapes = appearance.primaryButton
-
-        let primary = color(\.primary, fallback: defaults.primary)
-        let icon = color(\.icon, fallback: defaults.icon)
-        let background = color(\.background, fallback: defaults.background)
-        let componentBackground = color(\.componentBackground, fallback: defaults.componentBackground)
-        let primaryText = color(\.primaryText, fallback: defaults.primaryText)
-        let secondaryText = color(\.secondaryText, fallback: defaults.secondaryText)
-        let footerBorder = chromeAlpha(isDark ? 0x14 : 0x0F)
-        let placeholderText = color(\.placeholderText, fallback: defaults.placeholderText)
-        let unselectedRing = isDark ? chromeAlpha(0x33) : inkAlpha(0x29)
-        // Explicit kyc tokens until the merchant sets the source color. Dark no longer
-        // pretends every surface is an alpha wash of primary.
-        let derivesFromPrimary = isSet(\.primary)
-        let derivesFromSecondary = isSet(\.secondaryText)
-        let derivesFromPlaceholder = isSet(\.placeholderText)
-        let textTertiary = isDark ? UIColor(hex: "#95959D")! : UIColor(hex: "#63606D")!
-        let textMuted = isDark ? UIColor(hex: "#85858D")! : UIColor(hex: "#6B6779")!
-        let placeholder = isDark ? UIColor(hex: "#69696F")! : UIColor(hex: "#9691A3")!
-        let poweredBy = isDark ? UIColor(hex: "#605C70")! : UIColor(hex: "#9691A3")!
-        let danger = isDark ? Self.defaultErrorTextDark : Self.defaultErrorTextLight
-        let dangerWash = UIColor(hex: "#EF4444")!
-        let inverseText = isSet(\.primaryText)
-            ? (primaryText.resolvedLuminance > 0.5 ? Ink.light : Ink.dark)
-            : UIColor(hex: isDark ? "#09090B" : "#F7F6FF")!
-        let borderDefault = isDark ? chromeAlpha(0x1A) : UIColor(hex: "#E3E1E8")!
-        let fieldBorderColor = color(\.componentBorder, fallback: borderDefault)
-
-        return CheckoutTheme(
-            primary: primary,
-            background: background,
-            componentBackground: componentBackground,
-            componentBorder: color(\.componentBorder, fallback: defaults.componentBorder),
-            componentDivider: color(\.componentDivider, fallback: defaults.componentDivider),
-            primaryText: primaryText,
-            secondaryText: secondaryText,
-            componentText: color(\.componentText, fallback: defaults.componentText),
-            placeholderText: placeholderText,
-            icon: icon,
-            error: color(\.error, fallback: defaults.error),
-            borderRadius: CGFloat(appearance.borderRadius ?? Double(Self.defaultFormFieldRadius)),
-            borderWidth: CGFloat(appearance.borderWidth ?? 1),
-            fontScale: CGFloat(appearance.fontScale ?? 1),
-            fontFamily: appearance.fontFamily,
-            primaryButtonFontFamily: appearance.primaryButton?.fontFamily ?? appearance.fontFamily,
-            primaryButtonBackground: UIColor(hex: pbMode?.background ?? pbShared?.background)
-                ?? primary,
-            primaryButtonText: UIColor(hex: pbMode?.text ?? pbShared?.text) ?? .white,
-            primaryButtonBorder: UIColor(hex: pbMode?.border ?? pbShared?.border)
-                ?? primary,
-            primaryButtonBorderRadius: CGFloat(pbShapes?.borderRadius ?? Self.defaultPrimaryButtonRadius),
-            primaryButtonBorderWidth: CGFloat(pbShapes?.borderWidth ?? 0),
+    package static func resolve(
+        config: PaymentConfig,
+        isDark: Bool,
+        contentSizeScale: CGFloat = 1,
+        increasedContrast: Bool = false
+    ) -> CheckoutTheme {
+        let tokens = ThemeDerivation.resolve(
+            appearance: config.options.appearance,
             isDark: isDark,
-            selectedBackground: derivesFromPrimary
-                ? primary.withAlphaComponent(CGFloat(isDark ? 0x2E : 0x0F) / 255.0)
-                : UIColor(hex: isDark ? "#2A2A2F" : "#F7F6FF")!,
-            accentIconBackground: derivesFromPrimary
-                ? primary.withAlphaComponent(CGFloat(isDark ? 0x3D : 0x1F) / 255.0)
-                : UIColor(hex: isDark ? "#24124C" : "#ECE5FF")!,
-            containerBorder: optionalColor(\.containerBorder, fallback: isDark ? inkAlpha(0x17) : .clear),
-            neutralChip: inkAlpha(0x0D),
-            fieldBorder: fieldBorderColor,
-            fieldDivider: color(\.componentDivider, fallback: borderDefault),
-            mutedIcon: isSet(\.icon) ? icon : (derivesFromPlaceholder ? placeholderText : placeholder),
-            unselectedRing: unselectedRing,
-            checkboxRing: chromeAlpha(isDark ? 0x3D : 0x33),
-            errorBorder: isSet(\.error) ? color(\.error, fallback: danger) : danger,
-            errorText: isSet(\.error) ? color(\.error, fallback: danger) : danger,
-            footerBorder: footerBorder,
-            grabber: borderDefault,
-            brandTileBackground: componentBackground,
-            brandTileBorder: fieldBorderColor,
-            visaTint: isDark ? .white : nil,
-            orDivider: borderDefault,
-            orLabel: derivesFromSecondary ? secondaryText.withAlphaComponent(0.40) : textTertiary,
-            poweredByText: derivesFromSecondary ? secondaryText.withAlphaComponent(0.30) : poweredBy,
-            poweredByLogo: derivesFromSecondary ? secondaryText.withAlphaComponent(0.42) : poweredBy,
-            scrim: isDark
-                ? UIColor.black.withAlphaComponent(0.60)
-                : Ink.light.withAlphaComponent(0.40),
-            sheetCornerRadius: 32,
-            paymentContainerRadius: Self.defaultPaymentContainerRadius,
-            rowRadius: Self.defaultRowRadius,
-            formFieldRadius: CGFloat(
-                appearance.borderRadius ?? Double(Self.defaultFormFieldRadius)
-            ),
-            brandTileRadius: Self.defaultBrandTileRadius,
-            walletButtonHeight: 52,
-            formFieldHeight: 48,
-            payButtonHeight: 52,
-            inputPlaceholder: derivesFromPlaceholder ? placeholderText : placeholder,
-            metaText: derivesFromSecondary ? secondaryText : textTertiary,
-            sectionLabelColor: derivesFromSecondary ? secondaryText : textMuted,
-            radioIdle: derivesFromPrimary
-                ? unselectedRing
-                : (isDark
-                    ? UIColor(hex: "#A180FF")!.withAlphaComponent(CGFloat(0xA1) / 255.0)
-                    : UIColor(hex: "#7C4DFF")!.withAlphaComponent(CGFloat(0xCC) / 255.0)),
-            textBrand: derivesFromPrimary
-                ? primary
-                : UIColor(hex: isDark ? "#926BFF" : "#7A4BFB")!,
-            iconBrand: derivesFromPrimary
-                ? primary
-                : UIColor(hex: isDark ? "#926BFF" : "#7C4DFF")!,
-            errorBadge: isSet(\.error) ? color(\.error, fallback: Self.defaultErrorBadge) : Self.defaultErrorBadge,
-            dangerTint: dangerWash.withAlphaComponent(isDark ? 0.15 : 0.08),
-            dangerTintStrong: dangerWash.withAlphaComponent(isDark ? 0.30 : 0.09),
-            inverseText: inverseText
+            contentSizeScale: contentSizeScale,
+            increasedContrast: increasedContrast
         )
-    }
-
-    private enum Ink {
-        static let light = UIColor(hex: "#16141A")!
-        static let dark = UIColor(hex: "#F7F6F9")!
-        static let darkChrome = UIColor.white
-    }
-
-    private enum DefaultColors {
-        static let light = Palette(
-            primary: UIColor(hex: "#7C4DFF")!,
-            background: UIColor(hex: "#F7F6FF")!,
-            componentBackground: UIColor(hex: "#FFFFFF")!,
-            componentBorder: UIColor(hex: "#D1CDDB")!,
-            componentDivider: UIColor(hex: "#D1CDDB")!,
-            primaryText: UIColor(hex: "#16141A")!,
-            secondaryText: UIColor(hex: "#4A4653")!,
-            componentText: UIColor(hex: "#4A4653")!,
-            placeholderText: UIColor(hex: "#797585")!,
-            icon: UIColor(hex: "#797585")!,
-            error: UIColor(hex: "#FF6B6B")!
+        return CheckoutTheme(
+            primary: tokens.primary,
+            background: tokens.background,
+            componentBackground: tokens.componentBackground,
+            componentBorder: tokens.componentBorder,
+            componentDivider: tokens.componentDivider,
+            primaryText: tokens.primaryText,
+            secondaryText: tokens.secondaryText,
+            componentText: tokens.componentText,
+            placeholderText: tokens.placeholderText,
+            icon: tokens.icon,
+            error: tokens.error,
+            borderRadius: tokens.borderRadius,
+            borderWidth: tokens.borderWidth,
+            fontScale: contentSizeScale,
+            fontFamily: tokens.fontFamily,
+            primaryButtonFontFamily: tokens.fontFamily,
+            primaryButtonBackground: tokens.primaryButtonBackground,
+            primaryButtonText: tokens.primaryButtonText,
+            primaryButtonPressed: tokens.primaryButtonPressed,
+            primaryButtonDisabledBackground: tokens.primaryButtonDisabledBackground,
+            primaryButtonDisabledText: tokens.primaryButtonDisabledText,
+            primaryButtonBorder: tokens.primaryButtonBorder,
+            primaryButtonBorderRadius: tokens.primaryButtonBorderRadius,
+            primaryButtonBorderWidth: 0,
+            secondaryButtonBackground: tokens.secondaryButtonBackground,
+            secondaryButtonText: tokens.secondaryButtonText,
+            focusRing: tokens.focusRing,
+            stateIndicatorBorder: tokens.stateIndicatorBorder,
+            checkboxRadius: tokens.checkboxRadius,
+            brandShadow: tokens.brandShadow,
+            isDark: isDark,
+            selectedBackground: tokens.selectedBackground,
+            accentIconBackground: tokens.accentIconBackground,
+            containerBorder: tokens.containerBorder,
+            neutralChip: tokens.neutralChip,
+            fieldBorder: tokens.fieldBorder,
+            fieldDivider: tokens.fieldDivider,
+            mutedIcon: tokens.mutedIcon,
+            unselectedRing: tokens.unselectedRing,
+            checkboxRing: tokens.checkboxRing,
+            errorBorder: tokens.errorBorder,
+            errorText: tokens.errorText,
+            footerBorder: tokens.footerBorder,
+            grabber: tokens.grabber,
+            brandTileBackground: tokens.brandTileBackground,
+            brandTileBorder: tokens.brandTileBorder,
+            visaTint: tokens.visaTint,
+            orDivider: tokens.orDivider,
+            orLabel: tokens.orLabel,
+            poweredByText: tokens.poweredByText,
+            poweredByLogo: tokens.poweredByLogo,
+            scrim: tokens.scrim,
+            sheetCornerRadius: tokens.sheetCornerRadius,
+            paymentContainerRadius: tokens.paymentContainerRadius,
+            rowRadius: tokens.rowRadius,
+            formFieldRadius: tokens.formFieldRadius,
+            brandTileRadius: tokens.brandTileRadius,
+            walletButtonHeight: tokens.walletButtonHeight,
+            formFieldHeight: tokens.formFieldHeight,
+            payButtonHeight: tokens.payButtonHeight,
+            inputPlaceholder: tokens.inputPlaceholder,
+            metaText: tokens.metaText,
+            sectionLabelColor: tokens.sectionLabelColor,
+            radioIdle: tokens.radioIdle,
+            textBrand: tokens.textBrand,
+            iconBrand: tokens.iconBrand,
+            errorBadge: tokens.errorBadge,
+            dangerTint: tokens.dangerTint,
+            dangerTintStrong: tokens.dangerTintStrong,
+            inverseText: tokens.inverseText,
+            sheetText: tokens.sheetText,
+            isDarkSurface: tokens.isDarkSurface
         )
-        static let dark = Palette(
-            primary: UIColor(hex: "#7C4DFF")!,
-            background: UIColor(hex: "#18181B")!,
-            componentBackground: UIColor(hex: "#1F1F23")!,
-            componentBorder: UIColor(hex: "#3F3B48")!,
-            componentDivider: UIColor(hex: "#3F3B48")!,
-            primaryText: UIColor(hex: "#FAFAFA")!,
-            secondaryText: UIColor(hex: "#D1CDDB")!,
-            componentText: UIColor(hex: "#D1CDDB")!,
-            placeholderText: UIColor(hex: "#797585")!,
-            icon: UIColor(hex: "#797585")!,
-            error: UIColor(hex: "#FF6B6B")!
-        )
-    }
-
-    private struct Palette {
-        let primary: UIColor
-        let background: UIColor
-        let componentBackground: UIColor
-        let componentBorder: UIColor
-        let componentDivider: UIColor
-        let primaryText: UIColor
-        let secondaryText: UIColor
-        let componentText: UIColor
-        let placeholderText: UIColor
-        let icon: UIColor
-        let error: UIColor
     }
 }
 
