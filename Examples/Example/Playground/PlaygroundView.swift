@@ -816,10 +816,13 @@ private struct PlaygroundSegmentRow: View {
             Text(title)
                 .exampleLabelMedium()
                 .foregroundColor(theme.isDark ? ExampleColors.darkMuted : ExampleColors.lightMuted)
-            Picker(title, selection: $selection) {
+            Picker(selection: $selection) {
                 ForEach(options, id: \.self) { Text($0.label).tag($0) }
+            } label: {
+                Text(title)
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 8)
@@ -839,7 +842,11 @@ private struct PlaygroundMenuRow: View {
         } label: {
             PlaygroundValueLabel(title: title, value: selection.label)
                 .frame(maxWidth: .infinity)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
         }
+        .buttonStyle(.plain)
+        .menuStyle(.borderlessButton)
     }
 }
 
@@ -858,7 +865,11 @@ private struct PlaygroundFontMenu: View {
         } label: {
             PlaygroundValueLabel(title: "Font", value: label)
                 .frame(maxWidth: .infinity)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 8)
         }
+        .buttonStyle(.plain)
+        .menuStyle(.borderlessButton)
     }
 }
 
@@ -872,10 +883,12 @@ private struct PlaygroundValueLabel: View {
             Text(title)
                 .font(ExampleFont.titleMedium)
                 .foregroundColor(theme.isDark ? ExampleColors.darkText : ExampleColors.lightText)
+                .lineLimit(1)
             Spacer()
             Text(value)
                 .font(ExampleFont.bodyMedium)
                 .foregroundColor(theme.isDark ? ExampleColors.darkMuted : ExampleColors.lightMuted)
+                .lineLimit(1)
             Image(systemName: "chevron.up.chevron.down")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(theme.isDark ? ExampleColors.darkMuted : ExampleColors.lightMuted)
@@ -899,12 +912,19 @@ private struct PlaygroundPresetSwatches: View {
                         onSelect(preset)
                     } label: {
                         VStack(spacing: 6) {
-                            Circle()
-                                .fill(swatch(preset))
-                                .frame(width: 36, height: 36)
-                                .overlay(
-                                    Circle().stroke(selected ? ExampleColors.purple : semantics.hairline, lineWidth: selected ? 2.5 : 1)
-                                )
+                            let colors = swatchColors(preset)
+                            ZStack {
+                                Circle().fill(colors.field)
+                                Circle()
+                                    .fill(colors.brand)
+                                    .frame(width: 27, height: 27)
+                                    .offset(x: 8, y: 9)
+                            }
+                            .frame(width: 36, height: 36)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle().stroke(selected ? ExampleColors.purple : semantics.hairline, lineWidth: selected ? 2.5 : 1)
+                            )
                             Text(preset.label)
                                 .font(ExampleFont.bodyMedium)
                                 .foregroundColor(theme.isDark ? ExampleColors.darkText : ExampleColors.lightText)
@@ -919,10 +939,23 @@ private struct PlaygroundPresetSwatches: View {
         }
     }
 
-    private func swatch(_ preset: AppearancePreset) -> Color {
-        guard let brand = preset.appearance.brandColor else { return ExampleColors.purple }
-        let channel = brand.light
-        return Color(red: channel.red, green: channel.green, blue: channel.blue).opacity(channel.alpha)
+    private func swatchColors(_ preset: AppearancePreset) -> (field: Color, brand: Color) {
+        let brand = preset.appearance.brandColor?.light ?? PaymentConfig.SRGBColor(hex: "#7C4DFF")!
+        let field = preset.appearance.backgroundColor?.light ?? mixedOverWhite(brand, weight: 0.18)
+        return (chipColor(field), chipColor(brand))
+    }
+
+    private func mixedOverWhite(_ color: PaymentConfig.SRGBColor, weight: Double) -> PaymentConfig.SRGBColor {
+        let t = min(max(weight, 0), 1)
+        return PaymentConfig.SRGBColor(
+            red: color.red * t + (1 - t),
+            green: color.green * t + (1 - t),
+            blue: color.blue * t + (1 - t)
+        )
+    }
+
+    private func chipColor(_ color: PaymentConfig.SRGBColor) -> Color {
+        Color(red: color.red, green: color.green, blue: color.blue).opacity(color.alpha)
     }
 }
 

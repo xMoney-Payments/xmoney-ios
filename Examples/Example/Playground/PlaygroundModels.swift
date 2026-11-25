@@ -124,37 +124,29 @@ enum AppearancePresets {
             appearance: .init(brandColor: themePair("#0F766E", "#0F766E"), shape: .init(corners: .rounded))
         ),
         AppearancePreset(
-            id: "black_brand",
-            label: "Black brand",
-            description: "Near-black brand, light scheme",
-            appearance: .init(colorScheme: .light, brandColor: themePair("#16141A", "#16141A"))
-        ),
-        AppearancePreset(
             id: "yellow",
             label: "Yellow",
             description: "Yellow brand in both modes",
             appearance: .init(brandColor: themePair("#FACC15", "#FACC15"))
         ),
         AppearancePreset(
-            id: "xportal",
-            label: "xPortal",
-            description: "White brand on the lifted sheet",
+            id: "black",
+            label: "Black",
+            description: "Black on a light sheet, white on the lifted black sheet",
             appearance: .init(
-                colorScheme: .dark,
-                brandColor: themePair("#FFFFFF", "#FFFFFF"),
-                backgroundColor: themePair("#000000", "#000000"),
-                neutralTint: themePair("#7B909A", "#7B909A")
+                brandColor: themePair("#111111", "#FFFFFF"),
+                backgroundColor: themePair("#F4F4F5", "#000000"),
+                neutralTint: themePair("#6B7280", "#7B909A")
             )
         ),
         AppearancePreset(
             id: "warm_cream",
             label: "Warm cream",
-            description: "Terracotta on cream",
+            description: "Terracotta on cream, warm brown in dark",
             appearance: .init(
-                colorScheme: .light,
-                brandColor: themePair("#B4532A", "#B4532A"),
-                backgroundColor: themePair("#FBF5EA", "#FBF5EA"),
-                neutralTint: themePair("#8A7560", "#8A7560")
+                brandColor: themePair("#B4532A", "#F0B090"),
+                backgroundColor: themePair("#FBF5EA", "#140E0A"),
+                neutralTint: themePair("#8A7560", "#CDB59A")
             )
         ),
     ]

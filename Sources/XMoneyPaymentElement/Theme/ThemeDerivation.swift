@@ -404,6 +404,8 @@ enum ThemeDerivation {
             row = min(control, container)
         }
         let button = appearance.shape.pillButtons ? CheckoutTheme.defaultPrimaryButtonRadius : control
+        // The chip is 48×34. A radius past half its height (17) draws a stadium, so stop at the 12pt chip.
+        let tile = min(control, CheckoutTheme.defaultBrandTileRadius)
         return Radii(
             button: button,
             field: field,
@@ -411,7 +413,7 @@ enum ThemeDerivation {
             container: container,
             sheet: sheet,
             checkbox: checkbox,
-            tile: control
+            tile: tile
         )
     }
 

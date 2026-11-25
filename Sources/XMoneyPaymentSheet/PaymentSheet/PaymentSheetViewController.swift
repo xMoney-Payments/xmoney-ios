@@ -20,7 +20,6 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
     private let config: PaymentConfig
     private var state: SheetState
     private let chromeStack = UIStackView()
-    private let scrollView = UIScrollView()
     private var headerRow: UIView!
     private var formView: PaymentFormView!
     private var personalDetails: PersonalDetailsViewController?
@@ -77,6 +76,11 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         navigationController?.isModalInPresentation = processing
     }
 
+    /// Pay stays locked. The title changes for the status check after the shopper leaves 3DS.
+    package func setAwaitingCancelCheck(_ waiting: Bool) {
+        formView.setAwaitingCancelCheck(waiting)
+    }
+
     package var customerDetailsVisibility: CustomerDetailsVisibility { state.customerDetailsVisibility }
 
     package var personalDetailsProgress: PersonalDetailsProgress { state.personalDetails }
@@ -91,7 +95,7 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         chromeStack.addArrangedSubview(details.view)
         details.didMove(toParent: self)
         headerRow.isHidden = true
-        scrollView.isHidden = true
+        formView.isHidden = true
         personalDetails = details
         details.onContentSizeChange = { [weak self] in
             self?.invalidateSheetHeight()
@@ -111,7 +115,7 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         details.removeFromParent()
         personalDetails = nil
         headerRow.isHidden = false
-        scrollView.isHidden = false
+        formView.isHidden = false
         if refreshRow {
             formView?.refreshPersonalDetailsRow()
         }
@@ -126,13 +130,24 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
 
     package var preferredSheetHeight: CGFloat {
         if let personalDetails {
-            // Grabber is 8 + 4 + 2. The details view fills the rest.
+            // Grabber is 8 + 4 + 2. The details view already includes its top safe area and 16pt footer inset.
             return ceil(14 + personalDetails.contentHeight)
         }
-        // Grabber 14 (8+4+2) plus the close / back row.
-        let headerHeight = isViewLoaded ? max(headerRow.bounds.height, 52) : 52
-        let headerChrome: CGFloat = 14 + headerHeight
+        // Grabber 14 (8+4+2) plus the close / back row's compressed height.
+        // bounds.height includes stretch from a too-tall sheet and would lock that height in.
+        // The form height already includes the 16pt footer inset.
+        let headerChrome: CGFloat = 14 + headerFittingHeight()
         return ceil(headerChrome + (formView?.contentHeight ?? 280))
+    }
+
+    /// Compressed header height, at least the 52 pt close row. Ignores a stretched frame.
+    private func headerFittingHeight() -> CGFloat {
+        guard isViewLoaded, !savedCardsTitleLabel.isHidden else { return 52 }
+        let width = max((view.bounds.width > 1 ? view.bounds.width : 320) - 80, 1)
+        let titleHeight = savedCardsTitleLabel.sizeThatFits(
+            CGSize(width: width, height: .greatestFiniteMagnitude)
+        ).height
+        return max(ceil(titleHeight + 8), 52)
     }
 
     /// Card form and Apple Pay button (when offered) have drawn under the loading cover.
@@ -252,29 +267,19 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         formView.onEditingSavedCardsChange = { [weak self] editing in
             self?.setEditingSavedCards(editing)
         }
-
-        scrollView.alwaysBounceVertical = false
-        scrollView.bounces = false
-        scrollView.isScrollEnabled = false
-        scrollView.showsVerticalScrollIndicator = false
-        scrollView.contentInsetAdjustmentBehavior = .never
-        scrollView.addSubview(formView)
         formView.translatesAutoresizingMaskIntoConstraints = false
-        // Form owns the 16pt horizontal inset — do not add a second margin here.
-        NSLayoutConstraint.activate([
-            formView.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
-            formView.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
-            formView.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
-            formView.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
-            formView.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
-        ])
+        // Shrink the form before the grabber or the close row when the sheet is capped.
+        formView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        formView.setContentHuggingPriority(.defaultHigh, for: .vertical)
 
         chromeStack.axis = .vertical
         chromeStack.spacing = 0
         chromeStack.addArrangedSubview(grabber)
         chromeStack.setCustomSpacing(0, after: grabber)
         chromeStack.addArrangedSubview(header)
-        chromeStack.addArrangedSubview(scrollView)
+        chromeStack.addArrangedSubview(formView)
+        header.setContentCompressionResistancePriority(.required, for: .vertical)
+        grabber.setContentCompressionResistancePriority(.required, for: .vertical)
         chromeStack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(chromeStack)
         NSLayoutConstraint.activate([
@@ -287,15 +292,7 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
 
     package override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        formView?.applyBottomSafeArea(view.safeAreaInsets.bottom)
-        // Only allow the outer sheet to scroll when content actually overflows;
-        // otherwise it steals pans from the nested saved-cards list.
-        let contentH = scrollView.contentSize.height
-        let frameH = scrollView.bounds.height
-        let overflows = contentH > frameH + 1
-        scrollView.isScrollEnabled = overflows
-        scrollView.bounces = overflows
-        scrollView.alwaysBounceVertical = overflows
+        formView?.applyBottomSafeArea()
 
         guard !isInvalidatingHeight else { return }
         // Prefer cached content height; avoid nested systemLayoutSizeFitting mid-layout.
@@ -360,7 +357,7 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
             guard let self else { return }
             if hiding {
-                self.scrollView.setContentOffset(.zero, animated: true)
+                self.formView?.contentScrollView?.setContentOffset(.zero, animated: true)
             } else {
                 self.scrollFocusedField(animated: true)
             }
@@ -370,6 +367,7 @@ package final class PaymentSheetViewController: UIViewController, PaymentSheetHe
     private func scrollFocusedField(animated: Bool) {
         guard personalDetails == nil else { return }
         view.layoutIfNeeded()
+        guard let scrollView = formView?.contentScrollView else { return }
         let overflows = scrollView.contentSize.height > scrollView.bounds.height + 1
         scrollView.isScrollEnabled = overflows
         scrollView.bounces = overflows

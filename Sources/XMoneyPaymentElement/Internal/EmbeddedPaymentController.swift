@@ -32,6 +32,7 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
     private var onLiveConfigChange: (() -> Void)?
     private var onOrderLockChange: ((Bool) -> Void)?
     private var onOrderBound: ((SheetState) -> Void)?
+    private var onAwaitingCancelCheck: (() -> Void)?
     private var initialFailureReported = false
     private(set) var isUpdatingOrder = false {
         didSet { publishOrderLock(oldValue: oldValue || isStaleOrder) }
@@ -105,6 +106,10 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
 
     func setOnOrderBound(_ handler: ((SheetState) -> Void)?) {
         onOrderBound = handler
+    }
+
+    func setOnAwaitingCancelCheck(_ handler: (() -> Void)?) {
+        onAwaitingCancelCheck = handler
     }
 
     func emit(_ event: EmbeddedEvent) {
@@ -344,7 +349,11 @@ final class EmbeddedPaymentController: NSObject, ThreeDSPresenter {
         let locale = paymentConfig?.options.locale ?? liveConfiguration.options.locale
         let session = ThreeDSSafariController(locale: locale)
         threeDSSession = session
-        return await session.present(url: url, from: topViewController())
+        let end = await session.present(url: url, from: topViewController())
+        if case .userCanceled = end {
+            onAwaitingCancelCheck?()
+        }
+        return end
     }
 
     func dismissThreeDS() {

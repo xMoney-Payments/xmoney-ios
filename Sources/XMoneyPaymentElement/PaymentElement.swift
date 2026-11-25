@@ -45,6 +45,9 @@ public final class PaymentElement: UIView {
         payment._controller.setOnOrderBound { [weak self] state in
             self?.orderBound(state)
         }
+        payment._controller.setOnAwaitingCancelCheck { [weak self] in
+            self?.formView?.setAwaitingCancelCheck(true)
+        }
         setupLoader()
     }
 
@@ -618,7 +621,7 @@ public final class PaymentElement: UIView {
         }
         personalDetails = details
         let width = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width
-        details.prepareForPresentation(width: width, safeAreaBottom: 0)
+        details.prepareForPresentation(width: width)
         invalidateIntrinsicContentSize()
         onContentSizeChange?()
     }

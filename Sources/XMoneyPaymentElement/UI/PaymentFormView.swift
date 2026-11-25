@@ -51,12 +51,15 @@ package final class PaymentFormView: UIView {
     private var cryptoPanel: CryptoOptionPanel?
     private var selection: MethodSelection
     private var isProcessing = false
+    /// Shopper left the challenge. The button stays locked while the status check runs.
+    private var awaitingCancelCheck = false
     private var isUpdatingOrder = false
     private var isOrderConsumed = false
     private var isEditingSavedCards = false
     private var pendingDeleteId: String?
     private var isDeletingSavedCard = false
     private var poweredFooter: PoweredByFooterView?
+    private var sheetScrollView: UIScrollView?
     private var rootBottomConstraint: NSLayoutConstraint?
     /// Cached content height — never measure via `systemLayoutSizeFitting` inside
     /// `intrinsicContentSize` (re-entrant Auto Layout → EXC_BAD_ACCESS).
@@ -128,8 +131,18 @@ package final class PaymentFormView: UIView {
     }
 
     package func setProcessing(_ processing: Bool) {
+        let starting = processing && !isProcessing
         isProcessing = processing
+        if !processing || starting {
+            awaitingCancelCheck = false
+        }
         syncInteractionEnabled()
+        updatePayButtonAppearance()
+    }
+
+    /// Switches the locked pay button from “Processing...” to “Please wait...”.
+    package func setAwaitingCancelCheck(_ waiting: Bool) {
+        awaitingCancelCheck = waiting
         updatePayButtonAppearance()
     }
 
@@ -161,6 +174,9 @@ package final class PaymentFormView: UIView {
     }
 
     package var contentHeight: CGFloat { cachedContentHeight }
+
+    /// Fields scroller used by the payment sheet. Nil for the embedded element.
+    package var contentScrollView: UIScrollView? { sheetScrollView }
 
     /// Card form has a real size, and the Apple Pay button has drawn when the
     /// order offers it. Returns after a short cap if PassKit never paints.
@@ -202,12 +218,23 @@ package final class PaymentFormView: UIView {
         isMeasuringHeight = true
         defer { isMeasuringHeight = false }
 
-        let rootHeight = rootStack.systemLayoutSizeFitting(
-            CGSize(width: max(width, 1), height: UIView.layoutFittingCompressedSize.height),
+        // Fit the content stack and the footer on their own. Fitting rootStack follows
+        // the scroll view, and that view's height is the current sheet frame, so a tall
+        // pass would cache the cap and the sheet would never shrink back to the content.
+        let targetWidth = max(width, 1)
+        let fieldsWidth = max(width - contentInsets.horizontal * 2, 1)
+        let fieldsHeight = contentStack.systemLayoutSizeFitting(
+            CGSize(width: fieldsWidth, height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel
         ).height
-        cachedContentHeight = max(ceil(rootHeight + contentInsets.top + contentInsets.bottom), 160)
+        let footer = rootStack.arrangedSubviews.last
+        let footerHeight = footer?.systemLayoutSizeFitting(
+            CGSize(width: targetWidth, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel
+        ).height ?? 0
+        cachedContentHeight = max(ceil(fieldsHeight + footerHeight + contentInsets.top + contentInsets.bottom), 160)
     }
 
     private func rebuild() {
@@ -293,10 +320,44 @@ package final class PaymentFormView: UIView {
         )
         NSLayoutConstraint.activate(footerConstraints)
 
+        if !isEmbedded {
+            footerWrap.backgroundColor = t.background
+            footerWrap.setContentCompressionResistancePriority(.required, for: .vertical)
+            footerWrap.setContentHuggingPriority(.required, for: .vertical)
+            let scroll = SheetFieldScrollView()
+            scroll.alwaysBounceVertical = false
+            scroll.bounces = false
+            scroll.isScrollEnabled = false
+            scroll.showsVerticalScrollIndicator = false
+            scroll.showsHorizontalScrollIndicator = false
+            scroll.contentInsetAdjustmentBehavior = .never
+            scroll.translatesAutoresizingMaskIntoConstraints = false
+            scroll.onLayout = { [weak self] in
+                self?.updateSheetScrollability()
+            }
+            scroll.addSubview(contentWrap)
+            let heightMatch = scroll.heightAnchor.constraint(equalTo: contentWrap.heightAnchor)
+            // Below the footer's required resistance, so a capped sheet shrinks the fields
+            // and leaves the pay button pinned. Still above fittingSizeLevel, so the
+            // uncapped sheet reports the full content height.
+            heightMatch.priority = .defaultHigh
+            NSLayoutConstraint.activate([
+                contentWrap.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
+                contentWrap.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
+                contentWrap.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
+                contentWrap.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+                contentWrap.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
+                heightMatch,
+            ])
+            scroll.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+            scroll.setContentHuggingPriority(.defaultLow, for: .vertical)
+            sheetScrollView = scroll
+        }
+
         rootStack.axis = .vertical
         rootStack.spacing = 0
         rootStack.alignment = .fill
-        rootStack.addArrangedSubview(contentWrap)
+        rootStack.addArrangedSubview(sheetScrollView ?? contentWrap)
         rootStack.addArrangedSubview(footerWrap)
         rootStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(rootStack)
@@ -319,12 +380,21 @@ package final class PaymentFormView: UIView {
         buildContent()
     }
 
-    package func applyBottomSafeArea(_ safeAreaBottom: CGFloat) {
-        let inset = contentInsets.bottom + safeAreaBottom
-        let constant = -inset
+    /// Pins the footer 16pt above the sheet edge. The home indicator is not added on top.
+    package func applyBottomSafeArea() {
+        let constant = -contentInsets.bottom
         guard rootBottomConstraint?.constant != constant else { return }
         rootBottomConstraint?.constant = constant
         setNeedsLayout()
+    }
+
+    private func updateSheetScrollability() {
+        guard let scroll = sheetScrollView else { return }
+        let overflows = scroll.contentSize.height > scroll.bounds.height + 1
+        guard scroll.isScrollEnabled != overflows else { return }
+        scroll.isScrollEnabled = overflows
+        scroll.bounces = overflows
+        scroll.alwaysBounceVertical = overflows
     }
 
     private func buildContent() {
@@ -545,7 +615,8 @@ package final class PaymentFormView: UIView {
             return
         }
         if isProcessing {
-            let processing = Strings.text("button.processing", locale: config.options.locale)
+            let key = awaitingCancelCheck ? "button.pleaseWait" : "button.processing"
+            let processing = Strings.text(key, locale: config.options.locale)
             payButton.apply(theme: t, title: processing, processing: true, enabled: false)
             return
         }
@@ -760,4 +831,14 @@ package final class PaymentFormView: UIView {
         onApplePay?()
     }
 
+}
+
+/// Enables scrolling only after `contentSize` has been resolved from the content layout guide.
+private final class SheetFieldScrollView: UIScrollView {
+    var onLayout: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout?()
+    }
 }

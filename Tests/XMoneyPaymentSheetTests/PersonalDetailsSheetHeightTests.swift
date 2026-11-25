@@ -53,14 +53,11 @@ final class PersonalDetailsSheetHeightTests: XCTestCase {
             onFinished: {}
         )
         details.showsFooterHairline = true
-        details.prepareForPresentation(
-            width: sheet.view.bounds.width,
-            safeAreaBottom: sheet.view.safeAreaInsets.bottom
-        )
+        details.prepareForPresentation(width: sheet.view.bounds.width)
         sheet.showPersonalDetails(details)
         height.constant = sheet.preferredSheetHeight
         host.view.layoutIfNeeded()
-        // The page learns the home-indicator inset during layout and asks the sheet to grow.
+        // A tall page can learn its status-bar inset during layout and ask the sheet to grow.
         height.constant = sheet.preferredSheetHeight
         host.view.layoutIfNeeded()
 
@@ -88,8 +85,7 @@ final class PersonalDetailsSheetHeightTests: XCTestCase {
         XCTAssertNotNil(powered)
         if let powered {
             let poweredBottom = powered.convert(powered.bounds, to: details.view).maxY
-            let safeBottom = details.view.bounds.maxY - details.view.safeAreaInsets.bottom
-            XCTAssertEqual(safeBottom - poweredBottom, 8, accuracy: 1)
+            XCTAssertEqual(details.view.bounds.maxY - poweredBottom, 16, accuracy: 1)
         }
     }
 }

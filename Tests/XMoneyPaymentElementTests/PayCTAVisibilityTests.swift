@@ -154,10 +154,18 @@ final class PayCTAVisibilityTests: XCTestCase {
         XCTAssertEqual(pay.accessibilityLabel, "Processing...")
         XCTAssertFalse(pay.isEnabled)
 
+        form.setAwaitingCancelCheck(true)
+        XCTAssertEqual(pay.accessibilityLabel, "Please wait...")
+        XCTAssertFalse(pay.isEnabled)
+
         form.setProcessing(false)
         let title = pay.accessibilityLabel ?? pay.titleLabel.text ?? ""
         XCTAssertTrue(title.contains("Pay"), "after charge, title returns to Pay, got \(title)")
         XCTAssertFalse(title.contains("Processing"))
+        XCTAssertFalse(title.contains("Please wait"))
+
+        form.setProcessing(true)
+        XCTAssertEqual(pay.accessibilityLabel, "Processing...")
     }
 
     @MainActor

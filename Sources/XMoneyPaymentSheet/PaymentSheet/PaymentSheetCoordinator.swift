@@ -231,7 +231,7 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
         )
         details.showsFooterHairline = true
         let width = sheetVC.view.bounds.width > 0 ? sheetVC.view.bounds.width : UIScreen.main.bounds.width
-        details.prepareForPresentation(width: width, safeAreaBottom: sheetVC.view.safeAreaInsets.bottom)
+        details.prepareForPresentation(width: width)
         sheetVC.showPersonalDetails(details)
     }
 
@@ -255,7 +255,11 @@ package final class PaymentSheetCoordinator: NSObject, PaymentSheetViewControlle
     package func presentThreeDS(url: URL) async -> ThreeDSChallengeEnd {
         let session = ThreeDSSafariController(locale: config.options.locale)
         threeDSSession = session
-        return await session.present(url: url, from: sheetVC)
+        let end = await session.present(url: url, from: sheetVC)
+        if case .userCanceled = end {
+            sheetVC?.setAwaitingCancelCheck(true)
+        }
+        return end
     }
 
     package func dismissThreeDS() {

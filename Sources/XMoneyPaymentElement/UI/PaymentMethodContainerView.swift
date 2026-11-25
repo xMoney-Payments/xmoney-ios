@@ -289,7 +289,10 @@ final class PaymentMethodContainerView: UIView {
         }
 
         let scroll = PreferSelfScrollView()
-        let needsScroll = cards.count > Self.maxVisibleSavedCards || pendingDeleteId != nil
+        // 3.35 rows when another card exists, so the next row peeks. Fewer cards
+        // size to the real count and do not show an empty sliver.
+        let overflows = cards.count > 3
+        let needsScroll = overflows || pendingDeleteId != nil
         scroll.isScrollEnabled = needsScroll
         scroll.alwaysBounceVertical = false
         scroll.bounces = needsScroll
@@ -302,9 +305,9 @@ final class PaymentMethodContainerView: UIView {
         cardsStack.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(cardsStack)
 
-        let visibleRows = min(cards.count, Self.maxVisibleSavedCards)
+        let visibleRows: CGFloat = overflows ? Self.maxVisibleSavedCards : CGFloat(max(cards.count, 1))
         let extra = pendingDeleteId == nil ? 0 : Self.confirmPanelHeight
-        let viewportHeight = Self.savedCardRowHeight * CGFloat(max(visibleRows, 1)) + extra
+        let viewportHeight = Self.savedCardRowHeight * visibleRows + extra
         let heightConstraint = scroll.heightAnchor.constraint(equalToConstant: viewportHeight)
         heightConstraint.priority = .required
 
@@ -336,7 +339,7 @@ final class PaymentMethodContainerView: UIView {
 
     private static let savedCardRowHeight: CGFloat = 64
     private static let confirmPanelHeight: CGFloat = 104
-    private static let maxVisibleSavedCards = 3
+    private static let maxVisibleSavedCards: CGFloat = 3.35
     private static let expandedHeaderHeight: CGFloat = 44
     private static let trashSize: CGFloat = 32
 

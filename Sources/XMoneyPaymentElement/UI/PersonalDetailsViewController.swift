@@ -30,10 +30,8 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
     private var picker: SelectionListViewController?
     private var pickerField: PersonalDetailsField?
     private var measuredHeight: CGFloat = 560
-    private var preparedSafeBottom: CGFloat = 0
     private var lastMeasuredWidth: CGFloat = 0
     private var lastMeasuredSafeTop: CGFloat = -1
-    private var lastMeasuredSafeBottom: CGFloat = -1
     private var contentSizeNotifyScheduled = false
     private weak var focusedFieldView: UIView?
     private var keyboardObserver: NSObjectProtocol?
@@ -81,8 +79,7 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
     }
 
     /// Lays the form out at the sheet width so `contentHeight` is ready before the first frame.
-    package func prepareForPresentation(width: CGFloat, safeAreaBottom: CGFloat) {
-        preparedSafeBottom = safeAreaBottom
+    package func prepareForPresentation(width: CGFloat) {
         loadViewIfNeeded()
         view.bounds.size.width = max(width, 1)
         view.setNeedsLayout()
@@ -110,7 +107,7 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
 
     package override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // The home-indicator inset is often still 0 before this page is in the sheet.
+        // The status-bar inset can still be 0 before this page is in a tall sheet.
         // Measuring again here keeps the sheet tall enough that a short form does not scroll.
         updateMeasuredHeightForSafeArea()
         updateScrollability()
@@ -119,13 +116,10 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
     private func updateMeasuredHeightForSafeArea() {
         guard presentation == .sheet, view.window != nil, view.bounds.width > 1 else { return }
         let safeTop = view.safeAreaInsets.top
-        let safeBottom = view.safeAreaInsets.bottom
         let width = view.bounds.width
         guard abs(safeTop - lastMeasuredSafeTop) > 0.5
-            || abs(safeBottom - lastMeasuredSafeBottom) > 0.5
             || abs(width - lastMeasuredWidth) > 0.5 else { return }
         lastMeasuredSafeTop = safeTop
-        lastMeasuredSafeBottom = safeBottom
         lastMeasuredWidth = width
         remeasure(notify: true)
     }
@@ -314,9 +308,9 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
         view.addSubview(stack)
         let horizontal = horizontalInset
         let topInset: CGFloat = presentation == .inline ? 0 : 8
-        let bottomInset: CGFloat = presentation == .inline ? 0 : 8
+        let bottomInset: CGFloat = presentation == .inline ? 0 : 16
         let top = presentation == .inline ? view.topAnchor : view.safeAreaLayoutGuide.topAnchor
-        let bottom = presentation == .inline ? view.bottomAnchor : view.safeAreaLayoutGuide.bottomAnchor
+        let bottom = view.bottomAnchor
         activate([
             stack.topAnchor.constraint(equalTo: top, constant: topInset),
             stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: horizontal),
@@ -455,21 +449,11 @@ package final class PersonalDetailsViewController: UIViewController, UIAdaptiveP
             withHorizontalFittingPriority: .required,
             verticalFittingPriority: .fittingSizeLevel
         ).height
-        let safeTop: CGFloat
-        let safeBottom: CGFloat
-        if presentation == .inline {
-            safeTop = 0
-            safeBottom = 0
-        } else if view.window == nil {
-            safeTop = view.safeAreaInsets.top
-            safeBottom = max(view.safeAreaInsets.bottom, preparedSafeBottom)
-        } else {
-            safeTop = view.safeAreaInsets.top
-            safeBottom = view.safeAreaInsets.bottom
-        }
-        let verticalPad: CGFloat = presentation == .inline ? 0 : 8
+        let safeTop: CGFloat = presentation == .inline ? 0 : view.safeAreaInsets.top
+        let topPad: CGFloat = presentation == .inline ? 0 : 8
+        let bottomPad: CGFloat = presentation == .inline ? 0 : 16
         let formToFooter: CGFloat = showsFooterHairline ? 0 : 12
-        let next = ceil(safeTop + verticalPad + headerHeight + formHeight + formToFooter + footerHeight + verticalPad + safeBottom)
+        let next = ceil(safeTop + topPad + headerHeight + formHeight + formToFooter + footerHeight + bottomPad)
         guard abs(next - measuredHeight) > 1 else { return }
         measuredHeight = next
         guard notify, !contentSizeNotifyScheduled else { return }

@@ -41,6 +41,8 @@ final class ThemeResolutionTests: XCTestCase {
         XCTAssertNil(dark.visaTint)
         XCTAssertEqual(light.rowRadius, 16, accuracy: 0.001)
         XCTAssertEqual(dark.rowRadius, 16, accuracy: 0.001)
+        XCTAssertEqual(light.brandTileRadius, 12, accuracy: 0.001)
+        XCTAssertEqual(dark.brandTileRadius, 12, accuracy: 0.001)
         var borderAlpha: CGFloat = 1
         light.containerBorder.getRed(nil, green: nil, blue: nil, alpha: &borderAlpha)
         XCTAssertEqual(borderAlpha, 0, accuracy: 0.001)
@@ -76,9 +78,23 @@ final class ThemeResolutionTests: XCTestCase {
         XCTAssertEqual(theme.background.hexString, "#fbf5ea")
         XCTAssertEqual(theme.primary.hexString, "#b4532a")
         XCTAssertEqual(theme.componentBackground.hexString, "#fefdfa")
+
+        let dark = resolve(
+            .init(
+                brandColor: PaymentConfig.ThemeColor(light: "#B4532A", dark: "#F0B090"),
+                backgroundColor: PaymentConfig.ThemeColor(light: "#FBF5EA", dark: "#140E0A"),
+                neutralTint: PaymentConfig.ThemeColor(light: "#8A7560", dark: "#CDB59A")
+            ),
+            isDark: true
+        )
+        XCTAssertEqual(dark.background.hexString, "#40362d")
+        XCTAssertEqual(dark.componentBackground.hexString, "#53473b")
+        XCTAssertEqual(dark.selectedBackground.hexString, "#695b4c")
+        XCTAssertEqual(dark.primary.hexString, "#f0b090")
+        XCTAssertEqual(dark.primaryButtonText.hexString, "#16141a")
     }
 
-    func testXPortalSheetLiftsOffTheBackdrop() {
+    func testBlackSheetLiftsOffTheBackdrop() {
         let theme = resolve(
             .init(
                 brandColor: .init(hex: "#FFFFFF"),
@@ -282,6 +298,8 @@ final class ThemeResolutionTests: XCTestCase {
     func testSheetRadiusStaysAtTheDefault() {
         XCTAssertEqual(resolve(.init(shape: .init(corners: .sharp)), isDark: false).sheetCornerRadius, 32, accuracy: 0.001)
         XCTAssertEqual(resolve(.init(shape: .init(corners: .rounded)), isDark: true).sheetCornerRadius, 32, accuracy: 0.001)
+        XCTAssertEqual(resolve(.init(shape: .init(corners: .sharp)), isDark: false).brandTileRadius, 0, accuracy: 0.001)
+        XCTAssertEqual(resolve(.init(shape: .init(corners: .rounded)), isDark: true).brandTileRadius, CheckoutTheme.defaultBrandTileRadius, accuracy: 0.001)
     }
 
     func testBackgroundAloneDoesNotStrokeMethodCards() {
